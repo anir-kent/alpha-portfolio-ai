@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.db import SessionRow, User
 from app.rbac import PERMISSIONS
 from app.security import token_digest
+from app.timeutil import as_utc
 
 COOKIE = "session"
 
@@ -15,19 +16,26 @@ def get_db(request: Request):
         yield db
 
 
-def current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    token = request.cookies.get(COOKIE)
-    if not token:
-        raise HTTPException(401, "Not authenticated")
-    row = db.get(SessionRow, token_digest(token))
+def session_token(request: Request) -> str | None:
+    return request.cookies.get(COOKIE)
+
+
+def find_session(db: Session, request: Request) -> SessionRow | None:
+    """The live (unexpired) session for this request, if any. Expired rows are purged."""
+    token = session_token(request)
+    row = db.get(SessionRow, token_digest(token)) if token else None
     if row is None:
-        raise HTTPException(401, "Not authenticated")
-    expires = row.expires_at if row.expires_at.tzinfo else row.expires_at.replace(tzinfo=timezone.utc)
-    if expires < datetime.now(timezone.utc):
+        return None
+    if as_utc(row.expires_at) < datetime.now(timezone.utc):
         db.delete(row)
         db.commit()
-        raise HTTPException(401, "Session expired")
-    user = db.get(User, row.user_id)
+        return None
+    return row
+
+
+def current_user(request: Request, db: Session = Depends(get_db)) -> User:
+    row = find_session(db, request)
+    user = db.get(User, row.user_id) if row else None
     if user is None:
         raise HTTPException(401, "Not authenticated")
     return user

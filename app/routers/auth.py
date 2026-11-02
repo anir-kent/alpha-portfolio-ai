@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import SessionRow, User
-from app.deps import COOKIE, current_user, get_db
+from app.deps import COOKIE, current_user, find_session, get_db
 from app.rbac import PERMISSIONS
 from app.security import new_token, token_digest, verify_password
 
@@ -47,8 +47,7 @@ def login(body: LoginRequest, request: Request, response: Response, db: Session 
 
 @router.post("/logout", status_code=204, operation_id="logout")
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
-    token = request.cookies.get(COOKIE)
-    if token and (row := db.get(SessionRow, token_digest(token))):
+    if row := find_session(db, request):
         db.delete(row)
         db.commit()
     response.delete_cookie(COOKIE, path="/")

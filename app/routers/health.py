@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.deps import get_db, require
+from app.timeutil import as_utc
 
 router = APIRouter(prefix="/api/health", tags=["health"])
 
@@ -39,12 +40,17 @@ def _market_data(path: str) -> MarketDataHealth:
     try:
         with open(path) as f:
             as_of = datetime.fromisoformat(json.load(f)["as_of"])
-        if as_of.tzinfo is None:
-            as_of = as_of.replace(tzinfo=timezone.utc)
+        as_of = as_utc(as_of)
         age = (datetime.now(timezone.utc) - as_of).total_seconds() / 3600
         return MarketDataHealth(status="ok", snapshot_age_hours=round(age, 2))
     except (OSError, ValueError, KeyError, TypeError):
         return MarketDataHealth(status="error", snapshot_age_hours=None)
+
+
+@router.get("/live", operation_id="getLiveness")
+def live() -> dict[str, str]:
+    """Unauthenticated liveness probe for process monitors; exposes no system detail."""
+    return {"status": "ok"}
 
 
 @router.get("", response_model=Health, operation_id="getHealth", dependencies=[Depends(require("health:read"))])

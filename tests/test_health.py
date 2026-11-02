@@ -21,3 +21,9 @@ def test_health_reports_snapshot_age(settings, login):
 
 def test_health_requires_permission(login):
     assert login("advisor").get("/api/health").status_code == 403
+
+
+def test_liveness_probe_is_unauthenticated_and_leaks_nothing(client):
+    r = client.get("/api/health/live")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
