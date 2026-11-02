@@ -1,0 +1,555 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Alpha Portfolio AI",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout",
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Me",
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/config": {
+      "get": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Read",
+        "operationId": "getConfig",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Config"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Write",
+        "operationId": "updateConfig",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Config"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApprovalThresholds": {
+        "properties": {
+          "turnover_pct": {
+            "type": "number",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Turnover Pct"
+          },
+          "trade_line_pct": {
+            "type": "number",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Trade Line Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "turnover_pct",
+          "trade_line_pct"
+        ],
+        "title": "ApprovalThresholds"
+      },
+      "Band": {
+        "properties": {
+          "warn": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Warn"
+          },
+          "breach": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Breach"
+          }
+        },
+        "type": "object",
+        "required": [
+          "warn",
+          "breach"
+        ],
+        "title": "Band"
+      },
+      "Config": {
+        "properties": {
+          "tolerance_bands": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Band"
+            },
+            "type": "object",
+            "title": "Tolerance Bands",
+            "default": {
+              "conservative": {
+                "breach": 4.0,
+                "warn": 2.0
+              },
+              "moderate": {
+                "breach": 5.0,
+                "warn": 3.0
+              },
+              "growth": {
+                "breach": 6.0,
+                "warn": 4.0
+              },
+              "aggressive": {
+                "breach": 8.0,
+                "warn": 5.0
+              }
+            }
+          },
+          "priority_weights": {
+            "$ref": "#/components/schemas/PriorityWeights",
+            "default": {
+              "drift": 0.4,
+              "risk": 0.3,
+              "opportunity": 0.2,
+              "urgency": 0.1
+            }
+          },
+          "tilt_bound_pp": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Tilt Bound Pp",
+            "default": 2.0
+          },
+          "sla_days": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Sla Days",
+            "default": 30
+          },
+          "approval_thresholds": {
+            "$ref": "#/components/schemas/ApprovalThresholds",
+            "default": {
+              "turnover_pct": 15.0,
+              "trade_line_pct": 10.0
+            }
+          }
+        },
+        "type": "object",
+        "title": "Config",
+        "description": "Single configuration surface read by later engines."
+      },
+      "ConfigUpdate": {
+        "properties": {
+          "tolerance_bands": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/Band"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tolerance Bands"
+          },
+          "priority_weights": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriorityWeights"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tilt_bound_pp": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tilt Bound Pp"
+          },
+          "sla_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Days"
+          },
+          "approval_thresholds": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalThresholds"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ConfigUpdate",
+        "description": "Partial update: only supplied top-level keys change."
+      },
+      "DatabaseHealth": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "DatabaseHealth"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Health": {
+        "properties": {
+          "database": {
+            "$ref": "#/components/schemas/DatabaseHealth"
+          },
+          "market_data": {
+            "$ref": "#/components/schemas/MarketDataHealth"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/LlmHealth"
+          }
+        },
+        "type": "object",
+        "required": [
+          "database",
+          "market_data",
+          "llm"
+        ],
+        "title": "Health"
+      },
+      "LlmHealth": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "mode"
+        ],
+        "title": "LlmHealth"
+      },
+      "LoginRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginRequest"
+      },
+      "MarketDataHealth": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "missing",
+              "error"
+            ],
+            "title": "Status"
+          },
+          "snapshot_age_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Age Hours"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "snapshot_age_hours"
+        ],
+        "title": "MarketDataHealth"
+      },
+      "Me": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Permissions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "role",
+          "permissions"
+        ],
+        "title": "Me"
+      },
+      "PriorityWeights": {
+        "properties": {
+          "drift": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Drift"
+          },
+          "risk": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Risk"
+          },
+          "opportunity": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Opportunity"
+          },
+          "urgency": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Urgency"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drift",
+          "risk",
+          "opportunity",
+          "urgency"
+        ],
+        "title": "PriorityWeights"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

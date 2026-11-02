@@ -10,3 +10,8 @@ wheels/
 .venv
 
 scratch_pad.md
+.env
+data/
+node_modules/
+frontend/dist/
+frontend/src/api/schema.d.ts

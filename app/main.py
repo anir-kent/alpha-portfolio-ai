@@ -1,0 +1,35 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select
+
+from app.db import User, make_session_factory
+from app.rbac import ROLES
+from app.routers import auth, config, health
+from app.security import hash_password
+from app.settings import Settings
+
+
+def seed_users(session_factory, password: str) -> None:
+    if not password:
+        raise RuntimeError("APP_SEED_USER_PASSWORD must be set (see .env.example)")
+    with session_factory() as db:
+        existing = set(db.scalars(select(User.username)))
+        for role in ROLES:
+            if role not in existing:
+                db.add(User(username=role, role=role, password_hash=hash_password(password)))
+        db.commit()
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or Settings()
+    app = FastAPI(title="Alpha Portfolio AI", version="0.1.0")
+    app.state.settings = settings
+    app.state.session_factory = make_session_factory(settings.database_url)
+    seed_users(app.state.session_factory, settings.seed_user_password)
+    app.add_middleware(
+        CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,
+        allow_methods=["*"], allow_headers=["*"],
+    )
+    for r in (auth.router, config.router, health.router):
+        app.include_router(r)
+    return app
