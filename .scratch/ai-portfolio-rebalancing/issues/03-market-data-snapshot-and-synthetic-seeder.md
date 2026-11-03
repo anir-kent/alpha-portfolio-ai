@@ -4,11 +4,11 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Universe covers the 11 GICS sectors via equities and sector ETFs, plus bond ETFs and a cash proxy
-- [ ] App runs fully offline from the committed snapshot; refresh script is the only network user
-- [ ] Re-seeding with the same seed produces identical Clients and Holdings
-- [ ] Planted scenarios exist: heavy tech, overweight energy, cash drag, restricted-instrument breach, clean Portfolio
-- [ ] Look-through sector weights exist for every fund and ETF in the universe
-- [ ] Seeder and refresh script documented in the README section on data stance
+- [x] Universe covers the 11 GICS sectors via equities and sector ETFs, plus bond ETFs and a cash proxy
+- [x] App runs fully offline from the committed snapshot; refresh script is the only network user
+- [x] Re-seeding with the same seed produces identical Clients and Holdings
+- [x] Planted scenarios exist: heavy tech, overweight energy, cash drag, restricted-instrument breach, clean Portfolio
+- [x] Look-through sector weights exist for every fund and ETF in the universe
+- [x] Seeder and refresh script documented in the README section on data stance
