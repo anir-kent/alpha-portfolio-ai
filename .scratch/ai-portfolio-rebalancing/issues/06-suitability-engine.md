@@ -6,6 +6,8 @@
 
 **Status:** ready-for-agent
 
+**Carry-forward from 04:** planted scenarios C001 (heavy tech) and C004 (restricted instrument) have no Asset-Class Drift and rank low in the queue; once suitability feeds the risk component, add ranking assertions for them. The risk component is currently worst Asset-Class Drift / breach threshold (`app/priority.py`).
+
 - [ ] Each rule has tests with exact numbers on the planted scenarios
 - [ ] Restricted-instrument scenario returns a breach naming the rule and Instrument
 - [ ] Clean Portfolio passes all rules

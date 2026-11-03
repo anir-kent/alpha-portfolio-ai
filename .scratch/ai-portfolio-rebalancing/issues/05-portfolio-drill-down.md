@@ -6,6 +6,8 @@
 
 **Status:** ready-for-agent
 
+**Carry-forward from 04:** Portfolio Manager lost `queue:read` and currently has no way to read Portfolio or drift data; spec story 51 expects a read-only route. Add it here (`portfolio:read`). Per-class drift and status are already computed in `app/analysis.py` and stored per run.
+
 - [ ] Look-through exposure matches the reference weights on the planted scenarios
 - [ ] Allocation chart and drift display agree with API values
 - [ ] Relationship Manager role sees masked sensitive fields; roles without access are denied and audited
