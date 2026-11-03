@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 import { api } from "./api/client";
 import { AuditPage } from "./AuditPage";
+import { PortfolioPage } from "./PortfolioPage";
 import { QueuePage } from "./QueuePage";
 import { visibleNav } from "./nav";
 import "./index.css";
@@ -50,6 +51,7 @@ function Shell({ username, role, permissions }: { username: string; role: string
       <main className="flex-1 p-6">
         <Routes>
           {permissions.includes("queue:read") && <Route path="/queue" element={<QueuePage />} />}
+          {permissions.includes("portfolio:read") && <Route path="/portfolios/:id" element={<PortfolioPage />} />}
           {permissions.includes("audit:read") && <Route path="/audit" element={<AuditPage />} />}
           <Route path="*" element={<p className="text-slate-600">Select a section. Screens arrive in later tickets.</p>} />
         </Routes>

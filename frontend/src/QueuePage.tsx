@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "./api/client";
+import { Link } from "react-router-dom";
 import type { operations } from "./api/schema";
 
 type Params = NonNullable<operations["getQueue"]["parameters"]["query"]>;
@@ -77,7 +78,7 @@ export function QueuePage() {
               const worst = [...r.asset_class_drift].sort((a, b) => b.drift_pp - a.drift_pp)[0];
               return (
                 <tr key={r.portfolio_id} className="border-b align-top">
-                  <td className="p-2">{r.client_name ?? "Hidden"}<br /><span className="text-slate-500">{r.client_id}</span></td>
+                  <td className="p-2"><Link className="underline" to={`/portfolios/${r.portfolio_id}`}>{r.client_name ?? "Hidden"}</Link><br /><span className="text-slate-500">{r.client_id}</span></td>
                   <td>{r.risk_profile}</td>
                   <td><span className={`rounded px-2 py-0.5 ${LABEL_STYLE[r.label]}`}>{r.label}</span> <strong>{r.score.toFixed(1)}</strong></td>
                   <td>

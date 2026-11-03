@@ -588,6 +588,48 @@
           }
         }
       }
+    },
+    "/api/portfolios/{portfolio_id}": {
+      "get": {
+        "tags": [
+          "portfolios"
+        ],
+        "summary": "Portfolio",
+        "operationId": "getPortfolio",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -855,6 +897,68 @@
         ],
         "title": "ClassDriftOut"
       },
+      "ClientOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "risk_profile": {
+            "type": "string",
+            "title": "Risk Profile"
+          },
+          "objective": {
+            "type": "string",
+            "title": "Objective"
+          },
+          "horizon_years": {
+            "type": "integer",
+            "title": "Horizon Years"
+          },
+          "liquidity_needs_pct": {
+            "type": "number",
+            "title": "Liquidity Needs Pct"
+          },
+          "review_due": {
+            "type": "string",
+            "title": "Review Due"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "email",
+          "risk_profile",
+          "objective",
+          "horizon_years",
+          "liquidity_needs_pct",
+          "review_due"
+        ],
+        "title": "ClientOut"
+      },
       "ComponentOut": {
         "properties": {
           "name": {
@@ -1031,6 +1135,41 @@
         ],
         "title": "DatabaseHealth"
       },
+      "DriftOut": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "as_of": {
+            "type": "string",
+            "title": "As Of"
+          },
+          "portfolio_drift_pp": {
+            "type": "number",
+            "title": "Portfolio Drift Pp"
+          },
+          "tolerance_band": {
+            "$ref": "#/components/schemas/Band"
+          },
+          "asset_classes": {
+            "items": {
+              "$ref": "#/components/schemas/ClassDriftOut"
+            },
+            "type": "array",
+            "title": "Asset Classes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "as_of",
+          "portfolio_drift_pp",
+          "tolerance_band",
+          "asset_classes"
+        ],
+        "title": "DriftOut"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1063,6 +1202,94 @@
           "llm"
         ],
         "title": "Health"
+      },
+      "HistoryOut": {
+        "properties": {
+          "versions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Versions",
+            "default": []
+          },
+          "decisions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Decisions",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "HistoryOut",
+        "description": "Recommendation versions and Decisions; empty until the recommendation tickets land."
+      },
+      "HoldingOut": {
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "title": "Symbol"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "asset_class": {
+            "type": "string",
+            "title": "Asset Class"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "account_id": {
+            "type": "string",
+            "title": "Account Id"
+          },
+          "tax_status": {
+            "type": "string",
+            "title": "Tax Status"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "price": {
+            "type": "number",
+            "title": "Price"
+          },
+          "market_value": {
+            "type": "number",
+            "title": "Market Value"
+          },
+          "weight_pct": {
+            "type": "number",
+            "title": "Weight Pct"
+          },
+          "cost_basis_per_unit": {
+            "type": "number",
+            "title": "Cost Basis Per Unit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "symbol",
+          "name",
+          "asset_class",
+          "kind",
+          "account_id",
+          "tax_status",
+          "quantity",
+          "price",
+          "market_value",
+          "weight_pct",
+          "cost_basis_per_unit"
+        ],
+        "title": "HoldingOut"
       },
       "LlmHealth": {
         "properties": {
@@ -1159,6 +1386,72 @@
           "permissions"
         ],
         "title": "Me"
+      },
+      "PortfolioDetail": {
+        "properties": {
+          "portfolio_id": {
+            "type": "string",
+            "title": "Portfolio Id"
+          },
+          "client": {
+            "$ref": "#/components/schemas/ClientOut"
+          },
+          "restrictions": {
+            "items": {
+              "$ref": "#/components/schemas/RestrictionOut"
+            },
+            "type": "array",
+            "title": "Restrictions"
+          },
+          "as_of": {
+            "type": "string",
+            "title": "As Of"
+          },
+          "total_value": {
+            "type": "number",
+            "title": "Total Value"
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingOut"
+            },
+            "type": "array",
+            "title": "Holdings"
+          },
+          "drift": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriftOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sector_exposure": {
+            "items": {
+              "$ref": "#/components/schemas/SectorExposureOut"
+            },
+            "type": "array",
+            "title": "Sector Exposure"
+          },
+          "history": {
+            "$ref": "#/components/schemas/HistoryOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "portfolio_id",
+          "client",
+          "restrictions",
+          "as_of",
+          "total_value",
+          "holdings",
+          "drift",
+          "sector_exposure",
+          "history"
+        ],
+        "title": "PortfolioDetail"
       },
       "PriorityWeights": {
         "properties": {
@@ -1323,6 +1616,24 @@
         ],
         "title": "QueueRow"
       },
+      "RestrictionOut": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "value"
+        ],
+        "title": "RestrictionOut"
+      },
       "RunOut": {
         "properties": {
           "run_id": {
@@ -1340,6 +1651,34 @@
           "portfolios_scored"
         ],
         "title": "RunOut"
+      },
+      "SectorExposureOut": {
+        "properties": {
+          "sector": {
+            "type": "string",
+            "title": "Sector"
+          },
+          "weight_pct": {
+            "type": "number",
+            "title": "Weight Pct"
+          },
+          "direct_pct": {
+            "type": "number",
+            "title": "Direct Pct"
+          },
+          "via_funds_pct": {
+            "type": "number",
+            "title": "Via Funds Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sector",
+          "weight_pct",
+          "direct_pct",
+          "via_funds_pct"
+        ],
+        "title": "SectorExposureOut"
       },
       "ValidationError": {
         "properties": {
