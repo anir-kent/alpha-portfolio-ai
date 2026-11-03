@@ -1,0 +1,21 @@
+{
+  "report_id": "RPT-FID-Q2-2026",
+  "page": 3,
+  "human_verified": true,
+  "transcribed_from": "Page 3 'Scorecard' table of the Fidelity Q2 2026 research update (as of 3/31/2026); the shaded cells and view markers are not machine-readable, so this table was transcribed by hand",
+  "legend": {"view": "overweight | neutral | underweight (strategist view)", "signals": "+ = green-shaded, - = sand-shaded, null = unshaded (no clear pattern)"},
+  "confidence_rule": "net = signals aligned with the strategist view minus signals opposing it; net >= 2 high, net 1 medium, otherwise low",
+  "rows": [
+    {"sector": "Financials", "view": "overweight", "fundamentals": null, "valuations": "+", "relative_strength": "-", "comment": "Relative valuation may limit downside."},
+    {"sector": "Real Estate", "view": "overweight", "fundamentals": null, "valuations": "+", "relative_strength": null, "comment": "High valuation spreads suggest attractive risk-reward."},
+    {"sector": "Consumer Discretionary", "view": "overweight", "fundamentals": null, "valuations": "-", "relative_strength": "-", "comment": "Forward valuation measures show positive risk-reward."},
+    {"sector": "Information Technology", "view": "overweight", "fundamentals": "+", "valuations": null, "relative_strength": "-", "comment": "Solid fundamentals and compelling valuations after a sell-off."},
+    {"sector": "Industrials", "view": "overweight", "fundamentals": null, "valuations": "-", "relative_strength": "+", "comment": "Predictive valuation indicators still compelling."},
+    {"sector": "Materials", "view": "underweight", "fundamentals": "-", "valuations": null, "relative_strength": "+", "comment": "Higher capital expenditures may weigh on the sector."},
+    {"sector": "Consumer Staples", "view": "underweight", "fundamentals": null, "valuations": null, "relative_strength": null, "comment": "Poor fundamentals suggest sector may be a value trap."},
+    {"sector": "Health Care", "view": "neutral", "fundamentals": "+", "valuations": "+", "relative_strength": null, "comment": "Data suggests more neutral risk-reward."},
+    {"sector": "Energy", "view": "underweight", "fundamentals": "-", "valuations": null, "relative_strength": "+", "comment": "Indicators suggest negative risk-reward."},
+    {"sector": "Communication Services", "view": "underweight", "fundamentals": "+", "valuations": null, "relative_strength": null, "comment": "Tech-like industries have positive risk-reward, defensive industries do not."},
+    {"sector": "Utilities", "view": "underweight", "fundamentals": "-", "valuations": "-", "relative_strength": null, "comment": "Valuation levels are not attractive."}
+  ]
+}

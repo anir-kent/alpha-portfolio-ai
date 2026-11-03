@@ -21,6 +21,7 @@ EVENT_TYPES = (
     "report_ingested",
     "insight_extracted",
     "insight_approved",
+    "insight_rejected",
     "analysis_run_started",
     "priority_scored",
     "suitability_evaluated",

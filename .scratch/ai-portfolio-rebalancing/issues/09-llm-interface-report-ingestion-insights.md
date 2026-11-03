@@ -4,11 +4,11 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Tests run entirely on recorded responses; live smoke tests run only on demand
-- [ ] Every LLM call logs model and prompt version to the audit chain
-- [ ] Uploaded Reports produce pending Insights; only approved Insights are retrievable for tilt use
-- [ ] Insights carry citations to Report page and passage
-- [ ] Seeded items are marked human-verified in the audit trail
-- [ ] Research Analyst role can upload and approve through the API; other roles are denied and audited
+- [x] Tests run entirely on recorded responses; live smoke tests run only on demand
+- [x] Every LLM call logs model and prompt version to the audit chain
+- [x] Uploaded Reports produce pending Insights; only approved Insights are retrievable for tilt use
+- [x] Insights carry citations to Report page and passage
+- [x] Seeded items are marked human-verified in the audit trail
+- [x] Research Analyst role can upload and approve through the API; other roles are denied and audited

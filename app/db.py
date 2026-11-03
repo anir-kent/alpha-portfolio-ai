@@ -174,6 +174,50 @@ class DecisionRow(Base):
     resulting_recommendation_id: Mapped[int | None] = mapped_column(nullable=True)  # the new version, on modify
 
 
+class ReportRow(Base):
+    """A source document. Pages are stored so Insight citations can be checked and shown."""
+
+    __tablename__ = "reports"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    title: Mapped[str] = mapped_column(String)
+    filename: Mapped[str] = mapped_column(String)
+    kind: Mapped[str] = mapped_column(String)  # pdf | text
+    uploaded_by: Mapped[str] = mapped_column(String)
+    uploaded_at: Mapped[str] = mapped_column(String)
+    page_count: Mapped[int] = mapped_column()
+    human_verified: Mapped[bool] = mapped_column(default=False)  # seeded, not machine-extracted
+    extraction_status: Mapped[str] = mapped_column(String)  # complete | failed | seeded
+    extraction_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ReportPageRow(Base):
+    __tablename__ = "report_pages"
+    report_id: Mapped[str] = mapped_column(ForeignKey("reports.id"), primary_key=True)
+    page: Mapped[int] = mapped_column(primary_key=True)  # 1-based
+    text: Mapped[str] = mapped_column(Text)
+
+
+class InsightRow(Base):
+    """A cited claim from a Report. Pending until a Research Analyst approves; only approved ones are usable."""
+
+    __tablename__ = "insights"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    report_id: Mapped[str] = mapped_column(ForeignKey("reports.id"), index=True)
+    subject_kind: Mapped[str] = mapped_column(String)  # sector | asset_class
+    subject: Mapped[str] = mapped_column(String, index=True)
+    direction: Mapped[str] = mapped_column(String)  # positive | neutral | negative
+    confidence: Mapped[str] = mapped_column(String)  # low | medium | high
+    page: Mapped[int] = mapped_column()
+    passage: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String, index=True)  # pending | approved | rejected
+    human_verified: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[str] = mapped_column(String)
+    decided_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    decided_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    decision_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extract_event_id: Mapped[int] = mapped_column()  # the audit event that produced it
+
+
 def make_session_factory(url: str) -> sessionmaker:
     kwargs = {}
     if url.startswith("sqlite"):

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -25,6 +27,7 @@ def settings(tmp_path):
         seed_user_password=SEED_PASSWORD,
         market_data_snapshot_path=str(tmp_path / "snapshot.json"),
         llm_mode="recorded",
+        llm_recordings_dir=str(Path(__file__).parent / "fixtures" / "llm"),
     )
 
 

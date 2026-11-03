@@ -68,3 +68,7 @@ def get_market(request: Request) -> MarketData:
         except FileNotFoundError as e:
             raise HTTPException(503, str(e))
     return state.market
+
+
+def get_llm(request: Request):
+    return request.app.state.llm

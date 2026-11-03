@@ -1,0 +1,7 @@
+[
+  {"id": "RPT-FID-Q2-2026", "title": "Fidelity Quarterly Sector and Investment Research Update, Q2 2026", "file": "specs/Quarterly-Sector-And-Investment-Research-Update-Second-Quarter-2026.pdf"},
+  {"id": "RPT-UBS-GIRY-2026", "title": "UBS Global Investment Returns Yearbook 2026 (public summary)", "file": "specs/giry2026-summary-public.pdf"},
+  {"id": "RPT-HV-NORTHWIND-Q4-2026", "title": "Northwind Private Wealth House View, Q4 2026 (synthetic)", "file": "data/seed/reports/northwind_house_view_q4_2026.txt"},
+  {"id": "RPT-HV-HARBOR-Q4-2026", "title": "Harbor Capital Strategy Outlook Note, Q4 2026 (synthetic)", "file": "data/seed/reports/harbor_outlook_q4_2026.txt"},
+  {"id": "RPT-HV-MERIDIAN-Q4-2026", "title": "Meridian Research Tactical View, Q4 2026 (synthetic)", "file": "data/seed/reports/meridian_tactical_view_q4_2026.txt"}
+]
