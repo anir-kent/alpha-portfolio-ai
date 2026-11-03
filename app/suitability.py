@@ -131,7 +131,7 @@ def evaluate(rows: list[dict], client: ClientContext, limits: SuitabilityLimits,
     held: dict[str, float] = defaultdict(float)
     for r in rows:
         held[r["symbol"]] += pct(r["market_value"])
-    sector_of = {r["symbol"]: market.instrument(r["symbol"]).sector for r in rows if r["kind"] == "equity"}
+    sector_of = {r["symbol"]: market.instrument(r["symbol"]).sector for r in rows}  # single names and sector ETFs
     sector_exp = {e["sector"]: e for e in exposure}
     for kind, value in sorted(set(client.restrictions)):
         if kind == "instrument":
@@ -164,12 +164,13 @@ def evaluate(rows: list[dict], client: ClientContext, limits: SuitabilityLimits,
     ))
 
     # SR-07 taxable-gain warning (warning only; no tax-lot optimisation)
-    gain = sum((r["price"] - r["cost_basis_per_unit"]) * r["quantity"] for r in rows if r["tax_status"] == "taxable")
-    gain_pct = max(0.0, pct(gain))
+    # Gains only: selling the winners realises them whatever losses sit elsewhere, so losses do not offset.
+    gain = sum(max(0.0, r["price"] - r["cost_basis_per_unit"]) * r["quantity"] for r in rows if r["tax_status"] == "taxable")
+    gain_pct = pct(gain)
     g_status: Status = "warning" if gain_pct >= limits.taxable_gain_pct else "pass"
     results.append(RuleResult(
         "SR-07", "Taxable-gain warning", g_status,
-        f"Unrealised gains in taxable accounts are {_r(gain_pct)}% of the Portfolio against a "
+        f"Unrealised gains (not netted against losses) in taxable accounts are {_r(gain_pct)}% of the Portfolio against a "
         f"{limits.taxable_gain_pct:g}% warning line ({g_status})",
         [Finding("taxable gains", _r(gain_pct), limits.taxable_gain_pct, g_status)],
     ))
