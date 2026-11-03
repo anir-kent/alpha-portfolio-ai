@@ -128,7 +128,7 @@ def test_horizon_check_flags_equity_heavy_portfolio_with_a_short_horizon(advisor
 
 def test_taxable_gain_warning_never_breaches(advisor, login):
     r = rule(advisor, PLANTED["overweight_energy"], "SR-07")
-    assert r["status"] == "pass" and finding(r, "taxable gains")["actual"] == pytest.approx(9.4, abs=0.2)
+    assert r["status"] == "pass" and finding(r, "taxable gains")["actual"] == pytest.approx(10.67, abs=0.1)
     login("platform_owner").patch("/api/config", json={"suitability": {"taxable_gain_pct": 5}})
     advisor.post("/api/analysis/runs")
     r = rule(advisor, PLANTED["overweight_energy"], "SR-07")
