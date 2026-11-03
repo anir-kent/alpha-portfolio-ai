@@ -196,3 +196,33 @@ def test_suitability_driven_portfolios_outrank_the_clean_one(advisor):
 def test_suitability_is_readable_by_compliance_and_denied_to_roles_without_portfolio_read(login, advisor):
     assert login("compliance_officer").get(url("C001")).json()["suitability"]["status"] == "breach"
     assert login("research_analyst").get(url("C001")).status_code == 403
+
+
+def test_taxable_gain_counts_gains_only_and_is_not_offset_by_losses(advisor, app):
+    from app.db import AccountRow, HoldingRow
+
+    cid = PLANTED["overweight_energy"]
+    with app.state.session_factory() as db:  # taxable equity at a 50% gain, every other taxable holding at a 50% loss
+        acct = {a.id for a in db.scalars(select(AccountRow).where(AccountRow.client_id == cid, AccountRow.tax_status == "taxable"))}
+        for h in db.scalars(select(HoldingRow).where(HoldingRow.account_id.in_(acct))):
+            price = next(x["price"] for x in advisor.get(url(cid)).json()["holdings"] if x["symbol"] == h.symbol)
+            h.cost_basis_per_unit = price * (0.5 if h.symbol in ("XOM", "XLE", "SPY", "JNJ", "PG") else 2.0)
+        db.commit()
+    body = advisor.get(url(cid)).json()
+    taxable_equity_weight = sum(
+        h["weight_pct"] for h in body["holdings"] if h["tax_status"] == "taxable" and h["symbol"] in ("XOM", "XLE", "SPY", "JNJ", "PG")
+    )
+    advisor.post("/api/analysis/runs")
+    f = finding(rule(advisor, cid, "SR-07"), "taxable gains")
+    assert f["actual"] == pytest.approx(taxable_equity_weight / 2, abs=0.05)  # basis at half price: gain is half the value
+
+
+def test_sector_etf_in_a_restricted_sector_is_a_direct_breach(advisor, app):
+    from app.db import RestrictionRow
+
+    with app.state.session_factory() as db:
+        db.add(RestrictionRow(client_id=PLANTED["overweight_energy"], kind="sector", value="Energy"))
+        db.commit()
+    advisor.post("/api/analysis/runs")
+    r = rule(advisor, PLANTED["overweight_energy"], "SR-05")
+    assert finding(r, "XLE")["status"] == "breach" and finding(r, "XLE")["actual"] == pytest.approx(15.0, abs=0.1)
