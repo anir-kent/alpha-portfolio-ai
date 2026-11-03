@@ -125,6 +125,16 @@ class PriorityResultRow(Base):
     drift_json: Mapped[str] = mapped_column(Text)
 
 
+class SuitabilityResultRow(Base):
+    """Suitability Rule results for one Portfolio in one analysis run."""
+
+    __tablename__ = "suitability_results"
+    run_id: Mapped[int] = mapped_column(ForeignKey("analysis_runs.id"), primary_key=True)
+    client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), primary_key=True)
+    status: Mapped[str] = mapped_column(String, index=True)  # worst rule status
+    results_json: Mapped[str] = mapped_column(Text)
+
+
 def make_session_factory(url: str) -> sessionmaker:
     kwargs = {}
     if url.startswith("sqlite"):

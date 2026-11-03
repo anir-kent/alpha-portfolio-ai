@@ -2,7 +2,8 @@
 
 Each component is normalised to 0-100, then weighted (weights from config):
 - drift: Portfolio Drift, saturating at DRIFT_FULL_PP points.
-- risk: the worst Asset-Class Drift as a share of the Risk Profile's breach threshold.
+- risk: the larger of the worst Asset-Class Drift as a share of the Risk Profile's breach threshold and the
+  Suitability Rule points (50 per breach, 15 per warning, capped at 100).
 - opportunity: supplied by the caller (0 until Insights exist).
 - urgency: days past review-due as a share of the SLA; the SLA is breached once they reach it.
 """
@@ -45,11 +46,11 @@ def _pct(x: float) -> float:
 
 def score_portfolio(
     drift: PortfolioDrift, band: Band, weights: PriorityWeights, *, days_past_due: int, sla_days: int,
-    opportunity: float = 0.0,
+    opportunity: float = 0.0, suitability_risk: float = 0.0,
 ) -> PriorityScore:
     raws = {
         "drift": _pct(100 * drift.portfolio_drift_pp / DRIFT_FULL_PP),
-        "risk": _pct(100 * drift.max_class_drift_pp / band.breach),
+        "risk": _pct(max(100 * drift.max_class_drift_pp / band.breach, suitability_risk)),
         "opportunity": _pct(opportunity),
         "urgency": _pct(100 * days_past_due / sla_days),
     }

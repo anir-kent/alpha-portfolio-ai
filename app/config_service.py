@@ -6,6 +6,9 @@ from sqlalchemy.orm import Session
 from app.db import ConfigRow
 
 
+PROFILES = ("conservative", "moderate", "growth", "aggressive")
+
+
 class Band(BaseModel):
     warn: float = Field(gt=0)
     breach: float = Field(gt=0)
@@ -35,6 +38,39 @@ class ApprovalThresholds(BaseModel):
     trade_line_pct: float = Field(gt=0, le=100)
 
 
+class SuitabilityLimits(BaseModel):
+    """Limits for the seven Suitability Rules. Percentages are of Portfolio value."""
+
+    max_equity_pct: dict[str, float] = {"conservative": 30, "moderate": 55, "growth": 80, "aggressive": 95}  # SR-01
+    single_position_pct: float = Field(default=10, gt=0, le=100)  # SR-02, single names only
+    sector_pct: float = Field(default=30, gt=0, le=100)  # SR-03, look-through
+    min_cash_pct: dict[str, float] = {"conservative": 5, "moderate": 3, "growth": 2, "aggressive": 1}  # SR-04 floor
+    horizon_short_years: int = Field(default=5, ge=0)  # SR-06: a horizon below this is short
+    horizon_short_equity_max_pct: float = Field(default=40, ge=0, le=100)  # SR-06
+    taxable_gain_pct: float = Field(default=15, gt=0)  # SR-07 warning line, unrealised gains in taxable accounts
+    warn_ratio: float = Field(default=0.9, gt=0, lt=1)  # SR-01..03: warning from this share of the limit
+
+    @model_validator(mode="after")
+    def _profiles_complete(self):
+        for name in ("max_equity_pct", "min_cash_pct"):
+            if set(getattr(self, name)) != set(PROFILES):
+                raise ValueError(f"{name} must have exactly the Risk Profiles {sorted(PROFILES)}")
+        return self
+
+
+class SuitabilityUpdate(BaseModel):
+    """Partial update of SuitabilityLimits: only supplied fields change; per-profile maps merge by profile."""
+
+    max_equity_pct: dict[str, float] | None = None
+    single_position_pct: float | None = Field(default=None, gt=0, le=100)
+    sector_pct: float | None = Field(default=None, gt=0, le=100)
+    min_cash_pct: dict[str, float] | None = None
+    horizon_short_years: int | None = Field(default=None, ge=0)
+    horizon_short_equity_max_pct: float | None = Field(default=None, ge=0, le=100)
+    taxable_gain_pct: float | None = Field(default=None, gt=0)
+    warn_ratio: float | None = Field(default=None, gt=0, lt=1)
+
+
 class Config(BaseModel):
     """Single configuration surface read by later engines."""
 
@@ -48,6 +84,7 @@ class Config(BaseModel):
     tilt_bound_pp: float = Field(default=2.0, ge=0)
     sla_days: int = Field(default=30, gt=0)
     approval_thresholds: ApprovalThresholds = ApprovalThresholds(turnover_pct=15.0, trade_line_pct=10.0)
+    suitability: SuitabilityLimits = SuitabilityLimits()
 
 
 class ConfigUpdate(BaseModel):
@@ -58,6 +95,7 @@ class ConfigUpdate(BaseModel):
     tilt_bound_pp: float | None = Field(default=None, ge=0)
     sla_days: int | None = Field(default=None, gt=0)
     approval_thresholds: ApprovalThresholds | None = None
+    suitability: SuitabilityUpdate | None = None
 
 
 def get_config(db: Session) -> Config:
@@ -71,6 +109,11 @@ def update_config(db: Session, update: ConfigUpdate) -> Config:
     for key, value in changes.items():
         if key == "tolerance_bands":  # merge per risk profile
             value = {**{k: b.model_dump() for k, b in current.tolerance_bands.items()}, **value}
+        if key == "suitability":  # merge per field, and per profile within the maps
+            merged = current.suitability.model_dump()
+            for field, v in value.items():
+                merged[field] = {**merged[field], **v} if isinstance(v, dict) else v
+            value = SuitabilityLimits.model_validate(merged).model_dump()
         row = db.get(ConfigRow, key)
         if row:
             row.value_json = json.dumps(value)

@@ -10,9 +10,9 @@ from datetime import date, datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import audit
+from app import audit, portfolio_view, suitability
 from app.config_service import get_config
-from app.db import AccountRow, AnalysisRunRow, ClientRow, HoldingRow, PriorityResultRow, TargetRow
+from app.db import AnalysisRunRow, ClientRow, PriorityResultRow, RestrictionRow, SuitabilityResultRow, TargetRow
 from app.drift import compute_drift
 from app.market_data import MarketData
 from app.priority import score_portfolio
@@ -20,20 +20,13 @@ from app.priority import score_portfolio
 SYSTEM = audit.Actor.system("priority-engine")
 
 
-def _values_by_client(db: Session, market: MarketData) -> dict[str, dict[str, float]]:
-    """client_id -> asset class -> market value."""
-    out: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-    for h, a in db.execute(select(HoldingRow, AccountRow).join(AccountRow, HoldingRow.account_id == AccountRow.id)):
-        inst = market.instrument(h.symbol)
-        out[a.client_id][inst.asset_class] += h.quantity * inst.price
-    return out
-
-
 def run_analysis(db: Session, market: MarketData, actor: audit.Actor) -> tuple[int, int]:
     """Score every Portfolio. Returns (run_id, portfolios scored)."""
     cfg = get_config(db)
     as_of = date.fromisoformat(market.as_of[:10])
-    values = _values_by_client(db, market)
+    restrictions: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for r in db.scalars(select(RestrictionRow)):
+        restrictions[r.client_id].append((r.kind, r.value))
     targets: dict[str, dict[str, float]] = defaultdict(dict)
     for t in db.scalars(select(TargetRow)):
         targets[t.client_id][t.asset_class] = t.weight
@@ -47,13 +40,23 @@ def run_analysis(db: Session, market: MarketData, actor: audit.Actor) -> tuple[i
     db.flush()
     scored = []
     for c in clients:
-        by_class = values.get(c.id, {})
+        rows = portfolio_view.holdings(db, market, c.id)
+        by_class: dict[str, float] = defaultdict(float)
+        for h in rows:
+            by_class[h["asset_class"]] += h["market_value"]
         total = sum(by_class.values())
         actual = {k: v / total for k, v in by_class.items()} if total else {}
         band = cfg.tolerance_bands[c.risk_profile]
         drift = compute_drift(actual, targets[c.id], band)
         days_past_due = (as_of - date.fromisoformat(c.review_due)).days
-        s = score_portfolio(drift, band, cfg.priority_weights, days_past_due=days_past_due, sla_days=cfg.sla_days)
+        suit = suitability.evaluate(
+            rows, suitability.ClientContext(c.risk_profile, c.horizon_years, c.liquidity_needs_pct, restrictions[c.id]),
+            cfg.suitability, market,
+        )
+        s = score_portfolio(
+            drift, band, cfg.priority_weights, days_past_due=days_past_due, sla_days=cfg.sla_days,
+            suitability_risk=suitability.risk_points(suit),
+        )
         components = [{"name": x.name, "raw": round(x.raw, 2), "weight": x.weight, "points": round(x.points, 2)} for x in s.components]
         drift_out = [
             {"asset_class": d.asset_class, "actual_pct": round(d.actual_pct, 2), "target_pct": round(d.target_pct, 2),
@@ -66,19 +69,27 @@ def run_analysis(db: Session, market: MarketData, actor: audit.Actor) -> tuple[i
             portfolio_drift_pp=round(drift.portfolio_drift_pp, 2), total_value=round(total, 2),
             components_json=json.dumps(components), drift_json=json.dumps(drift_out),
         ))
-        scored.append((c, s, components, drift.portfolio_drift_pp))
+        suit_out = suitability.to_dicts(suit)
+        db.add(SuitabilityResultRow(
+            run_id=run.id, client_id=c.id, status=suitability.overall(suit), results_json=json.dumps(suit_out),
+        ))
+        scored.append((c, s, components, drift.portfolio_drift_pp, suitability.overall(suit), suit_out))
     db.flush()
 
     started = audit.record(
         db, "analysis_run_started", actor,
         {"run_id": run.id, "as_of": run.as_of, "portfolios": len(clients), "config": json.loads(run.config_json)},
     )
-    for c, s, components, pd in scored:
+    for c, s, components, pd, suit_status, suit_out in scored:
+        evaluated = audit.record(
+            db, "suitability_evaluated", SYSTEM, {"run_id": run.id, "status": suit_status, "rules": suit_out},
+            parents=[started], portfolio_id=c.id, client_id=c.id,
+        )
         audit.record(
             db, "priority_scored", SYSTEM,
             {"run_id": run.id, "score": round(s.score, 2), "label": s.label, "components": components,
              "portfolio_drift_pp": round(pd, 2), "days_past_due": s.days_past_due, "sla_breached": s.sla_breached},
-            parents=[started], portfolio_id=c.id, client_id=c.id,
+            parents=[started, evaluated], portfolio_id=c.id, client_id=c.id,
         )
     run.completed = True
     db.commit()
