@@ -50,6 +50,53 @@ class AuditEventRow(Base):
     hash: Mapped[str] = mapped_column(String)
 
 
+class ClientRow(Base):
+    """Synthetic Client (ADR-0003). name and email are the sensitive fields masked by role."""
+
+    __tablename__ = "clients"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    email: Mapped[str] = mapped_column(String)
+    risk_profile: Mapped[str] = mapped_column(String, index=True)
+    objective: Mapped[str] = mapped_column(String)
+    horizon_years: Mapped[int] = mapped_column()
+    liquidity_needs_pct: Mapped[float] = mapped_column()
+    review_due: Mapped[str] = mapped_column(String)  # ISO date
+
+
+class AccountRow(Base):
+    __tablename__ = "accounts"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), index=True)
+    tax_status: Mapped[str] = mapped_column(String)  # taxable | tax_advantaged
+
+
+class HoldingRow(Base):
+    __tablename__ = "holdings"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("accounts.id"), index=True)
+    symbol: Mapped[str] = mapped_column(String)
+    quantity: Mapped[int] = mapped_column()
+    cost_basis_per_unit: Mapped[float] = mapped_column()
+
+
+class TargetRow(Base):
+    """Target Allocation: intended weight (0-1) of one Asset Class for one Client."""
+
+    __tablename__ = "target_allocations"
+    client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), primary_key=True)
+    asset_class: Mapped[str] = mapped_column(String, primary_key=True)
+    weight: Mapped[float] = mapped_column()
+
+
+class RestrictionRow(Base):
+    __tablename__ = "restrictions"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), index=True)
+    kind: Mapped[str] = mapped_column(String)  # instrument | sector
+    value: Mapped[str] = mapped_column(String)
+
+
 def make_session_factory(url: str) -> sessionmaker:
     kwargs = {}
     if url.startswith("sqlite"):

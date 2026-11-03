@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     session_ttl_hours: int = 12
     cookie_secure: bool = False
     market_data_snapshot_path: str = "data/market_snapshot.json"
+    fund_lookthrough_path: str = "data/fund_lookthrough.json"
     llm_mode: str = "recorded"  # recorded | live
     llm_api_key: str = ""
     cors_origins: list[str] = ["http://localhost:5173"]

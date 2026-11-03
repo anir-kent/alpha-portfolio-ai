@@ -11,7 +11,9 @@ wheels/
 
 scratch_pad.md
 .env
-data/
+data/*
+!data/market_snapshot.json
+!data/fund_lookthrough.json
 node_modules/
 frontend/dist/
 frontend/src/api/schema.d.ts

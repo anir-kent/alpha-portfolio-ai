@@ -1,0 +1,396 @@
+{
+  "as_of": "2026-11-02T21:00:00+00:00",
+  "source": "bootstrap-estimate: approximate placeholder prices, NOT fetched market data; run `uv run python -m app.market_refresh` to replace",
+  "instruments": {
+    "GOOGL": {
+      "name": "Alphabet Inc",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 310,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 310
+        }
+      ]
+    },
+    "AMZN": {
+      "name": "Amazon.com Inc",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 235,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 235
+        }
+      ]
+    },
+    "PG": {
+      "name": "Procter & Gamble Co",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 155,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 155
+        }
+      ]
+    },
+    "XOM": {
+      "name": "Exxon Mobil Corp",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 115,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 115
+        }
+      ]
+    },
+    "JPM": {
+      "name": "JPMorgan Chase & Co",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 300,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 300
+        }
+      ]
+    },
+    "JNJ": {
+      "name": "Johnson & Johnson",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 190,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 190
+        }
+      ]
+    },
+    "CAT": {
+      "name": "Caterpillar Inc",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 520,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 520
+        }
+      ]
+    },
+    "AAPL": {
+      "name": "Apple Inc",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 270,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 270
+        }
+      ]
+    },
+    "MSFT": {
+      "name": "Microsoft Corp",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 510,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 510
+        }
+      ]
+    },
+    "NVDA": {
+      "name": "NVIDIA Corp",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 190,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 190
+        }
+      ]
+    },
+    "LIN": {
+      "name": "Linde plc",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 440,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 440
+        }
+      ]
+    },
+    "PLD": {
+      "name": "Prologis Inc",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 120,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 120
+        }
+      ]
+    },
+    "NEE": {
+      "name": "NextEra Energy Inc",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 80,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 80
+        }
+      ]
+    },
+    "XLC": {
+      "name": "Communication Services Select Sector SPDR Fund",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 115,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 115
+        }
+      ]
+    },
+    "XLY": {
+      "name": "Consumer Discretionary Select Sector SPDR Fund",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 235,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 235
+        }
+      ]
+    },
+    "XLP": {
+      "name": "Consumer Staples Select Sector SPDR Fund",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 80,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 80
+        }
+      ]
+    },
+    "XLE": {
+      "name": "Energy Select Sector SPDR Fund",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 90,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 90
+        }
+      ]
+    },
+    "XLF": {
+      "name": "Financial Select Sector SPDR Fund",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 52,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 52
+        }
+      ]
+    },
+    "XLV": {
+      "name": "Health Care Select Sector SPDR Fund",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 150,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 150
+        }
+      ]
+    },
+    "XLI": {
+      "name": "Industrial Select Sector SPDR Fund",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 155,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 155
+        }
+      ]
+    },
+    "XLK": {
+      "name": "Technology Select Sector SPDR Fund",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 290,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 290
+        }
+      ]
+    },
+    "XLB": {
+      "name": "Materials Select Sector SPDR Fund",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 90,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 90
+        }
+      ]
+    },
+    "XLRE": {
+      "name": "Real Estate Select Sector SPDR Fund",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 42,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 42
+        }
+      ]
+    },
+    "XLU": {
+      "name": "Utilities Select Sector SPDR Fund",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 88,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 88
+        }
+      ]
+    },
+    "SPY": {
+      "name": "SPDR S&P 500 ETF Trust",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 680,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 680
+        }
+      ]
+    },
+    "AGG": {
+      "name": "iShares Core US Aggregate Bond ETF",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 100,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 100
+        }
+      ]
+    },
+    "TLT": {
+      "name": "iShares 20+ Year Treasury Bond ETF",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 90,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 90
+        }
+      ]
+    },
+    "LQD": {
+      "name": "iShares iBoxx $ Investment Grade Corporate Bond ETF",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 110,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 110
+        }
+      ]
+    },
+    "SHY": {
+      "name": "iShares 1-3 Year Treasury Bond ETF",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 83,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 83
+        }
+      ]
+    },
+    "SGOV": {
+      "name": "iShares 0-3 Month Treasury Bond ETF",
+      "exchange": "NYSE/NASDAQ",
+      "currency": "USD",
+      "price": 100.5,
+      "price_date": "2026-11-02",
+      "history": [
+        {
+          "date": "2026-11-02",
+          "close": 100.5
+        }
+      ]
+    }
+  }
+}

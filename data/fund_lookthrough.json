@@ -1,0 +1,66 @@
+{
+  "note": "Hand-built approximate sector look-through for funds and ETFs (ADR-0003); the free data tier provides none. Sector ETFs are treated as 100% their sector; bond funds as 'Fixed Income'; the cash proxy as 'Cash'. SPY weights are rounded approximations of S&P 500 sector weights.",
+  "funds": {
+    "XLC": {
+      "Communication Services": 1.0
+    },
+    "XLY": {
+      "Consumer Discretionary": 1.0
+    },
+    "XLP": {
+      "Consumer Staples": 1.0
+    },
+    "XLE": {
+      "Energy": 1.0
+    },
+    "XLF": {
+      "Financials": 1.0
+    },
+    "XLV": {
+      "Health Care": 1.0
+    },
+    "XLI": {
+      "Industrials": 1.0
+    },
+    "XLK": {
+      "Information Technology": 1.0
+    },
+    "XLB": {
+      "Materials": 1.0
+    },
+    "XLRE": {
+      "Real Estate": 1.0
+    },
+    "XLU": {
+      "Utilities": 1.0
+    },
+    "SPY": {
+      "Communication Services": 0.095,
+      "Consumer Discretionary": 0.105,
+      "Consumer Staples": 0.055,
+      "Energy": 0.03,
+      "Financials": 0.135,
+      "Health Care": 0.095,
+      "Industrials": 0.085,
+      "Information Technology": 0.31,
+      "Materials": 0.02,
+      "Real Estate": 0.02,
+      "Utilities": 0.05
+    },
+    "AGG": {
+      "Fixed Income": 1.0
+    },
+    "TLT": {
+      "Fixed Income": 1.0
+    },
+    "LQD": {
+      "Fixed Income": 1.0
+    },
+    "SHY": {
+      "Fixed Income": 1.0
+    },
+    "SGOV": {
+      "Cash": 1.0
+    }
+  }
+}
