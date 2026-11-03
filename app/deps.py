@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from app import audit
 from app.db import SessionRow, User
 from app.rbac import PERMISSIONS
 from app.security import token_digest
@@ -44,9 +45,12 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User:
 def require(permission: str):
     """Dependency factory: the server rejects roles lacking `permission`."""
 
-    def check(user: User = Depends(current_user)) -> User:
+    def check(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)) -> User:
         if permission not in PERMISSIONS[user.role]:
-            # Ticket 02 (audit chain) records this as an "access denied" event.
+            audit.record(
+                db, "access_denied", audit.Actor.user(user.username, user.role),
+                {"permission": permission, "method": request.method, "path": request.url.path},
+            )
             raise HTTPException(403, f"Role '{user.role}' lacks permission '{permission}'")
         return user
 

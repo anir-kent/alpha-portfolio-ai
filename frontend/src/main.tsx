@@ -3,6 +3,7 @@ import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 import { api } from "./api/client";
+import { AuditPage } from "./AuditPage";
 import { visibleNav } from "./nav";
 import "./index.css";
 
@@ -47,6 +48,7 @@ function Shell({ username, role, permissions }: { username: string; role: string
       </nav>
       <main className="flex-1 p-6">
         <Routes>
+          {permissions.includes("audit:read") && <Route path="/audit" element={<AuditPage />} />}
           <Route path="*" element={<p className="text-slate-600">Select a section. Screens arrive in later tickets.</p>} />
         </Routes>
       </main>

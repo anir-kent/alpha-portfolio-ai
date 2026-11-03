@@ -28,6 +28,28 @@ class ConfigRow(Base):
     value_json: Mapped[str] = mapped_column(Text)
 
 
+class AuditEventRow(Base):
+    """Append-only, hash-chained audit event (ADR-0002). Never updated or deleted."""
+
+    __tablename__ = "audit_events"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    type: Mapped[str] = mapped_column(String, index=True)
+    actor_kind: Mapped[str] = mapped_column(String)
+    actor_name: Mapped[str] = mapped_column(String, index=True)
+    actor_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    timestamp: Mapped[str] = mapped_column(String, index=True)  # fixed-format UTC ISO, hashed as stored
+    payload_json: Mapped[str] = mapped_column(Text)
+    parent_ids_json: Mapped[str] = mapped_column(Text)
+    portfolio_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    client_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    recommendation_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    report_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    previous_hash: Mapped[str] = mapped_column(String, unique=True)  # one successor per link
+    hash: Mapped[str] = mapped_column(String)
+
+
 def make_session_factory(url: str) -> sessionmaker:
     kwargs = {}
     if url.startswith("sqlite"):
