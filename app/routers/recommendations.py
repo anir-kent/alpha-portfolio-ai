@@ -6,8 +6,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import audit, recommendations
-from app.config_service import get_config
+from app import approvals, audit, recommendations
+from app.config_service import Config, get_config
 from app.db import DecisionRow, RecommendationRow, User
 from app.deps import get_db, get_market, require
 from app.market_data import MarketData
@@ -16,7 +16,8 @@ from app.routers.analysis import ClassDriftOut, RuleOut
 
 router = APIRouter(prefix="/api", tags=["recommendations"])
 
-Status = Literal["pending_advisor", "pending_compliance", "approved", "rejected", "superseded"]
+Status = Literal["pending_advisor", "pending_compliance", "pending_committee", "approved", "rejected", "superseded"]
+Step = Literal["advisor", "compliance", "committee"]
 Rule = Literal["pass", "warning", "breach"]
 
 
@@ -37,6 +38,21 @@ class PostTradeSuitability(BaseModel):
     rules: list[RuleOut]
 
 
+class ThresholdsOut(BaseModel):
+    turnover_pct: float
+    trade_line_pct: float
+
+
+class ApprovalOut(BaseModel):
+    """Which approval steps this Recommendation needs, and why (thresholds are those currently configured)."""
+
+    required_steps: list[Step]
+    needs_compliance: bool  # a Suitability Rule is in breach
+    high_impact: bool  # turnover or a single Trade Line is at or above a threshold
+    thresholds: ThresholdsOut
+    reasons: list[str]  # why it is high-impact
+
+
 class RecommendationOut(BaseModel):
     id: int
     portfolio_id: str
@@ -53,6 +69,7 @@ class RecommendationOut(BaseModel):
     trade_lines: list[TradeLineOut]
     suitability: PostTradeSuitability
     post_trade_drift: list[ClassDriftOut]
+    approval: ApprovalOut
 
 
 class VersionOut(BaseModel):
@@ -69,7 +86,7 @@ class VersionOut(BaseModel):
 class DecisionOut(BaseModel):
     id: int
     recommendation_id: int
-    action: Literal["accept", "reject", "modify"]
+    action: Literal["accept", "reject", "modify", "approve_exception", "block", "committee_approve", "committee_reject"]
     rationale: str | None
     actor_name: str
     actor_role: str
@@ -104,13 +121,18 @@ class DecisionResult(BaseModel):
     new_breaches: list[RuleOut]  # rules in breach on a modified version that were not before
 
 
-def to_out(r: RecommendationRow) -> RecommendationOut:
+def to_out(r: RecommendationRow, cfg: Config) -> RecommendationOut:
+    p = approvals.plan(r, cfg)
     return RecommendationOut(
         id=r.id, portfolio_id=r.client_id, version=r.version, parent_id=r.parent_id, root_id=r.root_id, run_id=r.run_id,
         status=r.status, created_at=r.created_at, created_by=r.created_by, summary=r.summary, total_value=r.total_value,
         turnover_pct=r.turnover_pct, trade_lines=json.loads(r.trade_lines_json),
         suitability=PostTradeSuitability(status=r.suitability_status, rules=json.loads(r.suitability_json)),
         post_trade_drift=json.loads(r.post_trade_drift_json),
+        approval=ApprovalOut(
+            required_steps=p.required_steps, needs_compliance=p.needs_compliance, high_impact=p.high_impact,
+            thresholds=ThresholdsOut(**p.thresholds.model_dump()), reasons=p.reasons,
+        ),
     )
 
 
@@ -139,7 +161,7 @@ def get_recommendation(recommendation_id: int, user: User = Depends(require("rec
     r = db.get(RecommendationRow, recommendation_id)
     if r is None:
         raise HTTPException(404, "Recommendation not found")
-    return to_out(r)
+    return to_out(r, get_config(db))
 
 
 @router.post("/recommendations/{recommendation_id}/decision", response_model=DecisionResult, operation_id="decideRecommendation")
@@ -150,12 +172,53 @@ def decide(
     db: Session = Depends(get_db),
     market: MarketData = Depends(get_market),
 ):
+    cfg = get_config(db)
     lines = [TradeLine(l.account_id, l.symbol, l.side, l.quantity) for l in body.trade_lines] if body.trade_lines is not None else None
     try:
         rec, decision, new_breaches = recommendations.decide(
-            db, market, get_config(db), recommendation_id, body.action, body.rationale, lines,
+            db, market, cfg, recommendation_id, body.action, body.rationale, lines,
             audit.Actor.user(user.username, user.role),
         )
     except recommendations.DecisionError as e:
         raise HTTPException(e.status, str(e))
-    return DecisionResult(decision=_decision_out(decision), recommendation=to_out(rec), new_breaches=new_breaches)
+    return DecisionResult(decision=_decision_out(decision), recommendation=to_out(rec, cfg), new_breaches=new_breaches)
+
+
+class ComplianceIn(BaseModel):
+    action: Literal["approve", "block"]  # approve the Suitability Exception, or block the Recommendation
+    rationale: str | None = None  # required
+
+
+class CommitteeIn(BaseModel):
+    action: Literal["approve", "reject"]
+    rationale: str | None = None  # required
+
+
+class StepResult(BaseModel):
+    decision: DecisionOut
+    recommendation: RecommendationOut
+
+
+def _step(db: Session, recommendation_id: int, step: str, action: str, rationale: str | None, user: User) -> StepResult:
+    cfg = get_config(db)
+    try:
+        rec, decision = recommendations.decide_step(
+            db, cfg, recommendation_id, step, action, rationale, audit.Actor.user(user.username, user.role),
+        )
+    except recommendations.DecisionError as e:
+        raise HTTPException(e.status, str(e))
+    return StepResult(decision=_decision_out(decision), recommendation=to_out(rec, cfg))
+
+
+@router.post("/recommendations/{recommendation_id}/compliance", response_model=StepResult, operation_id="decideCompliance")
+def decide_compliance(
+    recommendation_id: int, body: ComplianceIn, user: User = Depends(require("compliance:decide")), db: Session = Depends(get_db),
+):
+    return _step(db, recommendation_id, "compliance", body.action, body.rationale, user)
+
+
+@router.post("/recommendations/{recommendation_id}/committee", response_model=StepResult, operation_id="decideCommittee")
+def decide_committee(
+    recommendation_id: int, body: CommitteeIn, user: User = Depends(require("committee:decide")), db: Session = Depends(get_db),
+):
+    return _step(db, recommendation_id, "committee", body.action, body.rationale, user)

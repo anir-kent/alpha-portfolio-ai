@@ -4,7 +4,9 @@ A Recommendation is a set of Trade Lines for one Portfolio. Its numbers and post
 deterministic engines (ADR-0001). Modifying creates a new linked version; nothing is ever executed, and "approved"
 means cleared to act outside this system.
 
-Status: pending_advisor -> approved | pending_compliance (accepted with a rule breach) | rejected | superseded.
+Status: pending_advisor -> pending_compliance (rule breach) -> pending_committee (high-impact) -> approved, with
+rejected at any step and superseded when replaced. Which steps apply is app.approvals; Approved needs a human Decision
+at every required step.
 """
 import json
 from dataclasses import dataclass
@@ -13,7 +15,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import audit, portfolio_view, rebalance, suitability
+from app import approvals, audit, portfolio_view, rebalance, suitability
 from app.config_service import Config
 from app.db import AccountRow, AuditEventRow, ClientRow, DecisionRow, RecommendationRow, RestrictionRow, TargetRow
 from app.drift import compute_drift
@@ -21,7 +23,7 @@ from app.market_data import MarketData
 from app.rebalance import TradeLine
 
 ENGINE = audit.Actor.system("rebalancing-engine")
-OPEN = ("pending_advisor", "pending_compliance")  # a new analysis run supersedes these
+OPEN = ("pending_advisor", "pending_compliance", "pending_committee")  # a new analysis run supersedes these
 
 
 class DecisionError(Exception):
@@ -201,7 +203,7 @@ def decide(
         new.summary = f"Modified by {actor.name} from version {rec.version}: {rationale}"
         resulting = "superseded"
     elif action == "accept":
-        resulting = "pending_compliance" if rec.suitability_status == "breach" else "approved"
+        resulting = approvals.next_status(approvals.plan(rec, cfg), "advisor")
     else:
         resulting = "rejected"
 
@@ -238,3 +240,47 @@ def decide(
         _audit_suitability(db, new, modified)
     db.commit()
     return (new or rec), decision, new_breaches
+
+
+# (step, action) -> (stored Decision action, approves?, audit event type)
+STEP_ACTIONS = {
+    ("compliance", "approve"): ("approve_exception", True, "exception_approved"),
+    ("compliance", "block"): ("block", False, "exception_blocked"),
+    ("committee", "approve"): ("committee_approve", True, "decision_recorded"),
+    ("committee", "reject"): ("committee_reject", False, "decision_recorded"),
+}
+
+
+def decide_step(
+    db: Session, cfg: Config, rec_id: int, step: str, action: str, rationale: str | None, actor: audit.Actor,
+) -> tuple[RecommendationRow, DecisionRow]:
+    """Record a Compliance or Investment Committee Decision. Only a Recommendation waiting at exactly that step can
+    be decided, so the order cannot be skipped; a rationale is mandatory and the Decision is audited."""
+    rec = db.get(RecommendationRow, rec_id)
+    if rec is None:
+        raise DecisionError(404, "Recommendation not found")
+    stored, approves, event_type = STEP_ACTIONS[(step, action)]
+    if rec.status != approvals.PENDING_FOR[step]:
+        waiting = rec.status.replace("_", " ")
+        raise DecisionError(409, f"Recommendation is {waiting}; it is not waiting for a {step} Decision")
+    rationale = (rationale or "").strip() or None
+    if not rationale:
+        raise DecisionError(422, f"A rationale is required to {action} at the {step} step")
+
+    resulting = approvals.next_status(approvals.plan(rec, cfg), step) if approves else "rejected"
+    rec.status = resulting
+    decision = DecisionRow(
+        recommendation_id=rec.id, client_id=rec.client_id, action=stored, rationale=rationale, actor_name=actor.name,
+        actor_role=actor.role or "", created_at=_now(), resulting_status=resulting,
+    )
+    db.add(decision)
+    db.flush()
+    payload = {"action": stored, "rationale": rationale, "version": rec.version, "resulting_status": resulting}
+    if event_type == "decision_recorded":
+        payload["resulting_recommendation_id"] = None
+    audit.record(
+        db, event_type, actor, payload, parents=[p for p in [last_event_id(db, rec.id)] if p], portfolio_id=rec.client_id,
+        client_id=rec.client_id, recommendation_id=str(rec.id),
+    )
+    db.commit()
+    return rec, decision

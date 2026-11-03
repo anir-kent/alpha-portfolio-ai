@@ -146,7 +146,7 @@ class RecommendationRow(Base):
     parent_id: Mapped[int | None] = mapped_column(nullable=True)
     version: Mapped[int] = mapped_column()
     run_id: Mapped[int] = mapped_column(ForeignKey("analysis_runs.id"))
-    status: Mapped[str] = mapped_column(String, index=True)  # pending_advisor | pending_compliance | approved | rejected | superseded
+    status: Mapped[str] = mapped_column(String, index=True)  # pending_advisor | pending_compliance | pending_committee | approved | rejected | superseded
     created_at: Mapped[str] = mapped_column(String)
     created_by: Mapped[str] = mapped_column(String)
     summary: Mapped[str] = mapped_column(Text)

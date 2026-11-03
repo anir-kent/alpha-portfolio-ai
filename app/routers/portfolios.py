@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import portfolio_view
-from app.config_service import Band
+from app.config_service import Band, get_config
 from app.db import AnalysisRunRow, ClientRow, PriorityResultRow, RecommendationRow, RestrictionRow, SuitabilityResultRow, User
 from app.deps import get_db, get_market, require
 from app.market_data import MarketData
@@ -127,5 +127,5 @@ def portfolio(
         restrictions=[RestrictionOut(kind=r.kind, value=r.value) for r in restrictions],
         as_of=market.as_of, total_value=total, holdings=rows, drift=drift,
         sector_exposure=portfolio_view.sector_exposure(rows, market), suitability=suit,
-        recommendation=to_out(latest) if latest and latest.status != "superseded" else None, history=history_for(db, c.id),
+        recommendation=to_out(latest, get_config(db)) if latest and latest.status != "superseded" else None, history=history_for(db, c.id),
     )

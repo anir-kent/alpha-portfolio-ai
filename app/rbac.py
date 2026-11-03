@@ -19,9 +19,9 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "portfolio_manager": frozenset({"portfolio:read", "recommendation:read", "config:read"}),
     "research_analyst": frozenset({"report:upload", "insight:approve", "insight:read"}),
     "compliance_officer": frozenset(
-        {"portfolio:read", "recommendation:read", "compliance:decide", "config:read", "client:pii"}
+        {"portfolio:read", "recommendation:read", "compliance:decide", "approvals:read", "config:read", "client:pii"}
     ),
-    "investment_committee": frozenset({"recommendation:read", "committee:decide"}),
+    "investment_committee": frozenset({"recommendation:read", "committee:decide", "approvals:read"}),
     "auditor": frozenset(
         {"audit:read", "audit:verify", "governance:read", "recommendation:read", "portfolio:read", "config:read"}
     ),

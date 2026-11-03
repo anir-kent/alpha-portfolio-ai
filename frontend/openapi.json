@@ -260,6 +260,27 @@
         }
       }
     },
+    "/api/approvals": {
+      "get": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "Pending Approvals",
+        "operationId": "listApprovals",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalsOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/audit/events": {
       "get": {
         "tags": [
@@ -725,6 +746,110 @@
           }
         }
       }
+    },
+    "/api/recommendations/{recommendation_id}/compliance": {
+      "post": {
+        "tags": [
+          "recommendations"
+        ],
+        "summary": "Decide Compliance",
+        "operationId": "decideCompliance",
+        "parameters": [
+          {
+            "name": "recommendation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Recommendation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComplianceIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recommendations/{recommendation_id}/committee": {
+      "post": {
+        "tags": [
+          "recommendations"
+        ],
+        "summary": "Decide Committee",
+        "operationId": "decideCommittee",
+        "parameters": [
+          {
+            "name": "recommendation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Recommendation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommitteeIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -787,6 +912,123 @@
         ],
         "title": "ActorOut"
       },
+      "ApprovalItem": {
+        "properties": {
+          "step": {
+            "type": "string",
+            "enum": [
+              "advisor",
+              "compliance",
+              "committee"
+            ],
+            "title": "Step"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_advisor",
+              "pending_compliance",
+              "pending_committee",
+              "approved",
+              "rejected",
+              "superseded"
+            ],
+            "title": "Status"
+          },
+          "portfolio_id": {
+            "type": "string",
+            "title": "Portfolio Id"
+          },
+          "client_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Name"
+          },
+          "risk_profile": {
+            "type": "string",
+            "title": "Risk Profile"
+          },
+          "recommendation": {
+            "$ref": "#/components/schemas/RecommendationOut"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/FlaggedRuleOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          },
+          "restrictions": {
+            "items": {
+              "$ref": "#/components/schemas/RestrictionOut"
+            },
+            "type": "array",
+            "title": "Restrictions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "step",
+          "status",
+          "portfolio_id",
+          "client_name",
+          "risk_profile",
+          "recommendation",
+          "rules",
+          "restrictions"
+        ],
+        "title": "ApprovalItem"
+      },
+      "ApprovalOut": {
+        "properties": {
+          "required_steps": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "advisor",
+                "compliance",
+                "committee"
+              ]
+            },
+            "type": "array",
+            "title": "Required Steps"
+          },
+          "needs_compliance": {
+            "type": "boolean",
+            "title": "Needs Compliance"
+          },
+          "high_impact": {
+            "type": "boolean",
+            "title": "High Impact"
+          },
+          "thresholds": {
+            "$ref": "#/components/schemas/ThresholdsOut"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "required_steps",
+          "needs_compliance",
+          "high_impact",
+          "thresholds",
+          "reasons"
+        ],
+        "title": "ApprovalOut",
+        "description": "Which approval steps this Recommendation needs, and why (thresholds are those currently configured)."
+      },
       "ApprovalThresholds": {
         "properties": {
           "turnover_pct": {
@@ -808,6 +1050,22 @@
           "trade_line_pct"
         ],
         "title": "ApprovalThresholds"
+      },
+      "ApprovalsOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ApprovalsOut"
       },
       "AuditEvent": {
         "properties": {
@@ -1053,6 +1311,62 @@
           "review_due"
         ],
         "title": "ClientOut"
+      },
+      "CommitteeIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Action"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "CommitteeIn"
+      },
+      "ComplianceIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "block"
+            ],
+            "title": "Action"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "ComplianceIn"
       },
       "ComponentOut": {
         "properties": {
@@ -1321,7 +1635,11 @@
             "enum": [
               "accept",
               "reject",
-              "modify"
+              "modify",
+              "approve_exception",
+              "block",
+              "committee_approve",
+              "committee_reject"
             ],
             "title": "Action"
           },
@@ -1353,6 +1671,7 @@
             "enum": [
               "pending_advisor",
               "pending_compliance",
+              "pending_committee",
               "approved",
               "rejected",
               "superseded"
@@ -1481,6 +1800,83 @@
           "note"
         ],
         "title": "FindingOut"
+      },
+      "FlaggedFinding": {
+        "properties": {
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "actual": {
+            "type": "number",
+            "title": "Actual"
+          },
+          "limit": {
+            "type": "number",
+            "title": "Limit"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          },
+          "affected_trade_lines": {
+            "items": {
+              "$ref": "#/components/schemas/TradeLineOut"
+            },
+            "type": "array",
+            "title": "Affected Trade Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject",
+          "actual",
+          "limit",
+          "status",
+          "note",
+          "affected_trade_lines"
+        ],
+        "title": "FlaggedFinding"
+      },
+      "FlaggedRuleOut": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/FlaggedFinding"
+            },
+            "type": "array",
+            "title": "Findings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule_id",
+          "name",
+          "status",
+          "message",
+          "findings"
+        ],
+        "title": "FlaggedRuleOut"
       },
       "HTTPValidationError": {
         "properties": {
@@ -2012,6 +2408,7 @@
             "enum": [
               "pending_advisor",
               "pending_compliance",
+              "pending_committee",
               "approved",
               "rejected",
               "superseded"
@@ -2054,6 +2451,9 @@
             },
             "type": "array",
             "title": "Post Trade Drift"
+          },
+          "approval": {
+            "$ref": "#/components/schemas/ApprovalOut"
           }
         },
         "type": "object",
@@ -2072,7 +2472,8 @@
           "turnover_pct",
           "trade_lines",
           "suitability",
-          "post_trade_drift"
+          "post_trade_drift",
+          "approval"
         ],
         "title": "RecommendationOut"
       },
@@ -2180,6 +2581,22 @@
           "via_funds_pct"
         ],
         "title": "SectorExposureOut"
+      },
+      "StepResult": {
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/DecisionOut"
+          },
+          "recommendation": {
+            "$ref": "#/components/schemas/RecommendationOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision",
+          "recommendation"
+        ],
+        "title": "StepResult"
       },
       "SuitabilityLimits": {
         "properties": {
@@ -2396,6 +2813,24 @@
         "title": "SuitabilityUpdate",
         "description": "Partial update of SuitabilityLimits: only supplied fields change; per-profile maps merge by profile."
       },
+      "ThresholdsOut": {
+        "properties": {
+          "turnover_pct": {
+            "type": "number",
+            "title": "Turnover Pct"
+          },
+          "trade_line_pct": {
+            "type": "number",
+            "title": "Trade Line Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "turnover_pct",
+          "trade_line_pct"
+        ],
+        "title": "ThresholdsOut"
+      },
       "TradeLineIn": {
         "properties": {
           "account_id": {
@@ -2593,6 +3028,7 @@
             "enum": [
               "pending_advisor",
               "pending_compliance",
+              "pending_committee",
               "approved",
               "rejected",
               "superseded"

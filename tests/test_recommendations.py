@@ -19,6 +19,9 @@ from tests.test_queue import QUEUE, seeded  # noqa: F401  (fixture)
 @pytest.fixture
 def advisor(login, seeded):  # noqa: F811
     c = login("advisor")
+    # Nothing is high-impact here: these tests cover the Advisor's own path (tiered approvals: test_approvals.py).
+    never = {"approval_thresholds": {"turnover_pct": 100, "trade_line_pct": 100}}
+    assert login("platform_owner").patch("/api/config", json=never).status_code == 200
     assert c.post("/api/analysis/runs").status_code == 200
     return c
 
@@ -146,7 +149,7 @@ def test_accepting_a_version_in_breach_is_not_approved(advisor):
     v1 = rec(advisor, "C003")
     v2 = decide(advisor, v1["id"], "modify", "More growth", breaching_lines(advisor, "C003")).json()["recommendation"]
     out = decide(advisor, v2["id"], "accept").json()
-    assert out["recommendation"]["status"] == "pending_compliance"  # compliance sign-off arrives in ticket 08
+    assert out["recommendation"]["status"] == "pending_compliance"  # waits for Compliance (test_approvals.py)
     assert out["recommendation"]["status"] != "approved"
 
 

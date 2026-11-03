@@ -18,6 +18,7 @@ const BADGE = {
 const STATUS_LABEL: Record<Rec["status"], string> = {
   pending_advisor: "Pending Advisor decision",
   pending_compliance: "Pending Compliance (rule breach)",
+  pending_committee: "Pending Investment Committee (high-impact)",
   approved: "Approved: cleared to act outside this system",
   rejected: "Rejected",
   superseded: "Superseded",
@@ -154,6 +155,12 @@ export function RecommendationPanel({ p, canDecide }: { p: Detail; canDecide: bo
             </p>
             <p className="text-sm text-slate-600">{rec.summary}</p>
           </div>
+          {(rec.status === "pending_advisor" || rec.status === "pending_compliance" || rec.status === "pending_committee") && (
+            <p className="text-sm text-slate-600">
+              Approval path: {rec.approval.required_steps.join(" → ")} → Approved.
+              {rec.approval.reasons.map((x) => <span key={x} className="block text-violet-800">{x}</span>)}
+            </p>
+          )}
           <Lines rec={rec} />
           <PostTradeRules rec={rec} />
           {rec.status === "pending_advisor" && canDecide && <DecisionForm key={rec.id} rec={rec} accounts={accounts} portfolioId={p.portfolio_id} />}
@@ -170,7 +177,7 @@ export function RecommendationPanel({ p, canDecide }: { p: Detail; canDecide: bo
                 {" "}<span className={`rounded px-1.5 py-0.5 text-xs ${BADGE[v.suitability_status]}`}>{v.suitability_status}</span>
                 <ul className="ml-4 list-disc text-slate-600">
                   {p.history.decisions.filter((d) => d.recommendation_id === v.id).map((d) => (
-                    <li key={d.id}>{d.action} by {d.actor_name} ({d.actor_role}){d.rationale ? `: ${d.rationale}` : ""}</li>
+                    <li key={d.id}>{d.action.replace("_", " ")} by {d.actor_name} ({d.actor_role}){d.rationale ? `: ${d.rationale}` : ""}</li>
                   ))}
                 </ul>
               </li>
