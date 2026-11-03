@@ -87,7 +87,7 @@ def test_single_position_limit_names_every_offending_instrument(advisor):
 
 
 def test_single_position_limit_ignores_diversified_funds(advisor):
-    # C004 holds 30% SPY; only single names count, and AAPL/MSFT at 8% sit inside the 9% warning line? no: below it.
+    # C004 holds 30% SPY; only single names count, and its largest (AAPL/MSFT, 8%) is below the 9% warning line.
     assert rule(advisor, PLANTED["restricted_breach"], "SR-02")["status"] == "pass"
 
 
