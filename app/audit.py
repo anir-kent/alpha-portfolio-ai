@@ -27,6 +27,7 @@ EVENT_TYPES = (
     "recommendation_drafted",
     "memo_generated",
     "recommendation_modified",
+    "recommendation_superseded",
     "decision_recorded",
     "exception_approved",
     "exception_blocked",

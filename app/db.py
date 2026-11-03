@@ -135,6 +135,45 @@ class SuitabilityResultRow(Base):
     results_json: Mapped[str] = mapped_column(Text)
 
 
+class RecommendationRow(Base):
+    """One version of a Recommendation. A modification adds a new row linked by parent_id; versions are never edited
+    except for their status."""
+
+    __tablename__ = "recommendations"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), index=True)
+    root_id: Mapped[int] = mapped_column(index=True)  # id of version 1
+    parent_id: Mapped[int | None] = mapped_column(nullable=True)
+    version: Mapped[int] = mapped_column()
+    run_id: Mapped[int] = mapped_column(ForeignKey("analysis_runs.id"))
+    status: Mapped[str] = mapped_column(String, index=True)  # pending_advisor | pending_compliance | approved | rejected | superseded
+    created_at: Mapped[str] = mapped_column(String)
+    created_by: Mapped[str] = mapped_column(String)
+    summary: Mapped[str] = mapped_column(Text)
+    total_value: Mapped[float] = mapped_column()
+    turnover_pct: Mapped[float] = mapped_column()
+    trade_lines_json: Mapped[str] = mapped_column(Text)
+    suitability_status: Mapped[str] = mapped_column(String)  # worst post-trade rule status
+    suitability_json: Mapped[str] = mapped_column(Text)
+    post_trade_drift_json: Mapped[str] = mapped_column(Text)
+
+
+class DecisionRow(Base):
+    """A human's accept, modify or reject of one Recommendation version, with rationale."""
+
+    __tablename__ = "decisions"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    recommendation_id: Mapped[int] = mapped_column(ForeignKey("recommendations.id"), index=True)
+    client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), index=True)
+    action: Mapped[str] = mapped_column(String)  # accept | reject | modify
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    actor_name: Mapped[str] = mapped_column(String)
+    actor_role: Mapped[str] = mapped_column(String)
+    created_at: Mapped[str] = mapped_column(String)
+    resulting_status: Mapped[str] = mapped_column(String)
+    resulting_recommendation_id: Mapped[int | None] = mapped_column(nullable=True)  # the new version, on modify
+
+
 def make_session_factory(url: str) -> sessionmaker:
     kwargs = {}
     if url.startswith("sqlite"):

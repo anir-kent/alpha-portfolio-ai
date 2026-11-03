@@ -13,7 +13,7 @@ const FIELDS: [keyof Filters, string][] = [
 ];
 const EVENT_TYPES = [
   "report_ingested", "insight_extracted", "insight_approved", "analysis_run_started", "priority_scored",
-  "suitability_evaluated", "recommendation_drafted", "memo_generated", "recommendation_modified",
+  "suitability_evaluated", "recommendation_drafted", "memo_generated", "recommendation_modified", "recommendation_superseded",
   "decision_recorded", "exception_approved", "exception_blocked", "access_denied",
 ];
 
