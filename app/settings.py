@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     market_data_snapshot_path: str = "data/market_snapshot.json"
     fund_lookthrough_path: str = "data/fund_lookthrough.json"
+    twelve_data_api_key: str = ""  # only used by app.market_refresh
     llm_mode: str = "recorded"  # recorded | live
     llm_api_key: str = ""
     cors_origins: list[str] = ["http://localhost:5173"]

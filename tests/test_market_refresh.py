@@ -66,3 +66,22 @@ def test_refresh_never_writes_a_partial_snapshot(tmp_path):
     with pytest.raises(RefreshError, match="XOM"):
         refresh_snapshot(api_key="k", out_path=out, client=client, sleep=lambda s: None)
     assert out.read_text() == "previous"
+
+
+def test_snapshot_names_come_from_the_universe_since_the_api_has_none(tmp_path):
+    md = MarketData.load(_run(tmp_path, _handler()), LOOKTHROUGH)
+    assert md.instrument("XOM").name == "Exxon Mobil Corp"
+
+
+def test_refresh_waits_and_retries_when_rate_limited(tmp_path):
+    state, sleeps = {"n": 0}, []
+
+    def handle(request):
+        state["n"] += 1
+        if state["n"] == 1:
+            return httpx.Response(429, json={"code": 429, "status": "error", "message": "limit"})
+        return _handler()(request)
+
+    out = _run(tmp_path, handle, sleeps)
+    assert sleeps[0] >= 60
+    assert len(MarketData.load(out, LOOKTHROUGH).instruments()) == len(UNIVERSE)

@@ -68,3 +68,37 @@ UNIVERSE: tuple[UniverseEntry, ...] = (
     UniverseEntry("SHY", "bond", "fund", None),
     UniverseEntry("SGOV", "cash", "cash", None),  # 0-3 month T-bill ETF as cash proxy
 )
+
+# Display names: the Twelve Data time-series endpoint returns no instrument name.
+NAMES = {
+    "GOOGL": "Alphabet Inc",
+    "AMZN": "Amazon.com Inc",
+    "PG": "Procter & Gamble Co",
+    "XOM": "Exxon Mobil Corp",
+    "JPM": "JPMorgan Chase & Co",
+    "JNJ": "Johnson & Johnson",
+    "CAT": "Caterpillar Inc",
+    "AAPL": "Apple Inc",
+    "MSFT": "Microsoft Corp",
+    "NVDA": "NVIDIA Corp",
+    "LIN": "Linde plc",
+    "PLD": "Prologis Inc",
+    "NEE": "NextEra Energy Inc",
+    "XLC": "Communication Services Select Sector SPDR Fund",
+    "XLY": "Consumer Discretionary Select Sector SPDR Fund",
+    "XLP": "Consumer Staples Select Sector SPDR Fund",
+    "XLE": "Energy Select Sector SPDR Fund",
+    "XLF": "Financial Select Sector SPDR Fund",
+    "XLV": "Health Care Select Sector SPDR Fund",
+    "XLI": "Industrial Select Sector SPDR Fund",
+    "XLK": "Technology Select Sector SPDR Fund",
+    "XLB": "Materials Select Sector SPDR Fund",
+    "XLRE": "Real Estate Select Sector SPDR Fund",
+    "XLU": "Utilities Select Sector SPDR Fund",
+    "SPY": "SPDR S&P 500 ETF Trust",
+    "AGG": "iShares Core US Aggregate Bond ETF",
+    "TLT": "iShares 20+ Year Treasury Bond ETF",
+    "LQD": "iShares iBoxx $ Investment Grade Corporate Bond ETF",
+    "SHY": "iShares 1-3 Year Treasury Bond ETF",
+    "SGOV": "iShares 0-3 Month Treasury Bond ETF"
+}

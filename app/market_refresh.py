@@ -12,11 +12,12 @@ from pathlib import Path
 
 import httpx
 
-from app.universe import UNIVERSE
+from app.universe import NAMES, UNIVERSE
 
 API = "https://api.twelvedata.com/time_series"
 BATCH = 8  # free tier: 8 credits per minute, one credit per symbol
 HISTORY_DAYS = 30
+RETRIES = 2
 
 
 class RefreshError(RuntimeError):
@@ -32,7 +33,7 @@ def _parse(symbol: str, data: dict) -> dict:
         raise RefreshError(f"{symbol}: no price data returned")
     history = [{"date": v["datetime"], "close": float(v["close"])} for v in values]
     return {
-        "name": meta.get("name") or symbol,
+        "name": NAMES[symbol],
         "exchange": meta.get("exchange", ""),
         "currency": meta.get("currency", "USD"),
         "price": history[0]["close"],
@@ -51,9 +52,14 @@ def refresh_snapshot(api_key: str, out_path, client: httpx.Client | None = None,
     for n, batch in enumerate(batches):
         if n:
             sleep(61)
-        r = client.get(API, params={"symbol": ",".join(batch), "interval": "1day",
-                                    "outputsize": HISTORY_DAYS, "apikey": api_key})
-        r.raise_for_status()
+        params = {"symbol": ",".join(batch), "interval": "1day", "outputsize": HISTORY_DAYS, "apikey": api_key}
+        for attempt in range(RETRIES + 1):
+            r = client.get(API, params=params)
+            if r.status_code != 429 or attempt == RETRIES:
+                break
+            sleep(61)  # per-minute credit limit hit: wait for the window to reset
+        if r.status_code != 200:
+            raise RefreshError(f"{','.join(batch)}: HTTP {r.status_code}")
         body = r.json()
         if isinstance(body, dict) and body.get("status") == "error" and "code" in body:
             raise RefreshError(f"{','.join(batch)}: {body.get('message')}")
@@ -78,7 +84,7 @@ if __name__ == "__main__":
 
     s = Settings()
     try:
-        refresh_snapshot(os.environ.get("APP_TWELVE_DATA_API_KEY", ""), s.market_data_snapshot_path)
+        refresh_snapshot(s.twelve_data_api_key, s.market_data_snapshot_path)
     except RefreshError as e:
         sys.exit(f"refresh failed, existing snapshot left untouched: {e}")
     print(f"wrote {s.market_data_snapshot_path}")
