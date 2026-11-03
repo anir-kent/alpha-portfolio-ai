@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import select
 
 from app.db import AccountRow, ClientRow, HoldingRow, RestrictionRow, TargetRow, make_session_factory
-from app.market_data import MarketData
+from app.market_data import GICS_SECTORS, MarketData
 from app.seeder import PLANTED, seed_clients
 from tests.test_market_data import LOOKTHROUGH, SNAPSHOT
 
@@ -134,11 +134,6 @@ def test_clean_portfolio_is_on_target_diversified_and_unrestricted(sf, md):
     cw = class_weights(md, v, t)
     assert all(abs(cw[k] - target[k]) < 0.01 for k in target)
     assert max(x for sym, x in v.items() if md.instrument(sym).asset_class == "equity") / t <= 0.10
-    assert max(x for k, x in sector_weights(md, v, t).items() if k in md_gics()) <= 0.30
+    assert max(x for k, x in sector_weights(md, v, t).items() if k in GICS_SECTORS) <= 0.30
     assert not {val for kind, val in restr if kind == "instrument"} & set(v)
 
-
-def md_gics():
-    from app.market_data import GICS_SECTORS
-
-    return set(GICS_SECTORS)

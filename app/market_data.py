@@ -3,7 +3,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.universe import BY_SYMBOL, GICS_SECTORS, UNIVERSE  # noqa: F401  (GICS_SECTORS re-exported)
+from app.universe import GICS_SECTORS, UNIVERSE  # noqa: F401  (GICS_SECTORS re-exported)
 
 
 @dataclass(frozen=True)

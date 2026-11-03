@@ -68,5 +68,3 @@ UNIVERSE: tuple[UniverseEntry, ...] = (
     UniverseEntry("SHY", "bond", "fund", None),
     UniverseEntry("SGOV", "cash", "cash", None),  # 0-3 month T-bill ETF as cash proxy
 )
-
-BY_SYMBOL = {u.symbol: u for u in UNIVERSE}
