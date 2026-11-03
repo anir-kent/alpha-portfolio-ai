@@ -16,7 +16,7 @@ _CLIENT_WORK = {"queue:read", "portfolio:read", "recommendation:read", "recommen
 PERMISSIONS: dict[str, frozenset[str]] = {
     "relationship_manager": frozenset(_CLIENT_WORK),
     "advisor": frozenset(_CLIENT_WORK | {"client:pii"}),
-    "portfolio_manager": frozenset({"queue:read", "portfolio:read", "recommendation:read", "config:read"}),
+    "portfolio_manager": frozenset({"portfolio:read", "recommendation:read", "config:read"}),
     "research_analyst": frozenset({"report:upload", "insight:approve", "insight:read"}),
     "compliance_officer": frozenset(
         {"portfolio:read", "recommendation:read", "compliance:decide", "config:read", "client:pii"}

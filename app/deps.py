@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app import audit
+from app.market_data import MarketData
 from app.db import SessionRow, User
 from app.rbac import PERMISSIONS
 from app.security import token_digest
@@ -55,3 +56,15 @@ def require(permission: str):
         return user
 
     return check
+
+
+def get_market(request: Request) -> MarketData:
+    """The committed market-data snapshot, loaded once per process."""
+    state = request.app.state
+    if getattr(state, "market", None) is None:
+        s = state.settings
+        try:
+            state.market = MarketData.load(s.market_data_snapshot_path, s.fund_lookthrough_path)
+        except FileNotFoundError as e:
+            raise HTTPException(503, str(e))
+    return state.market

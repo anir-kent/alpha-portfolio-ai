@@ -81,6 +81,185 @@
         }
       }
     },
+    "/api/analysis/runs": {
+      "post": {
+        "tags": [
+          "queue"
+        ],
+        "summary": "Start Run",
+        "operationId": "runAnalysis",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/queue": {
+      "get": {
+        "tags": [
+          "queue"
+        ],
+        "summary": "Queue",
+        "operationId": "getQueue",
+        "parameters": [
+          {
+            "name": "label",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "High",
+                    "Medium",
+                    "Low"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Label"
+            }
+          },
+          {
+            "name": "risk_profile",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Risk Profile"
+            }
+          },
+          {
+            "name": "review_due_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO date, inclusive",
+              "title": "Review Due From"
+            },
+            "description": "ISO date, inclusive"
+          },
+          {
+            "name": "review_due_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO date, inclusive",
+              "title": "Review Due To"
+            },
+            "description": "ISO date, inclusive"
+          },
+          {
+            "name": "sla_breached",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sla Breached"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "score",
+                "review_due",
+                "risk_profile",
+                "label"
+              ],
+              "type": "string",
+              "default": "score",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Order"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Queue"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/audit/events": {
       "get": {
         "tags": [
@@ -633,6 +812,83 @@
         ],
         "title": "Band"
       },
+      "ClassDriftOut": {
+        "properties": {
+          "asset_class": {
+            "type": "string",
+            "title": "Asset Class"
+          },
+          "actual_pct": {
+            "type": "number",
+            "title": "Actual Pct"
+          },
+          "target_pct": {
+            "type": "number",
+            "title": "Target Pct"
+          },
+          "signed_pp": {
+            "type": "number",
+            "title": "Signed Pp"
+          },
+          "drift_pp": {
+            "type": "number",
+            "title": "Drift Pp"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warn",
+              "breach"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "asset_class",
+          "actual_pct",
+          "target_pct",
+          "signed_pp",
+          "drift_pp",
+          "status"
+        ],
+        "title": "ClassDriftOut"
+      },
+      "ComponentOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "drift",
+              "risk",
+              "opportunity",
+              "urgency"
+            ],
+            "title": "Name"
+          },
+          "raw": {
+            "type": "number",
+            "title": "Raw"
+          },
+          "weight": {
+            "type": "number",
+            "title": "Weight"
+          },
+          "points": {
+            "type": "number",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "raw",
+          "weight",
+          "points"
+        ],
+        "title": "ComponentOut"
+      },
       "Config": {
         "properties": {
           "tolerance_bands": {
@@ -935,6 +1191,155 @@
           "urgency"
         ],
         "title": "PriorityWeights"
+      },
+      "Queue": {
+        "properties": {
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/QueueRow"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "as_of",
+          "items"
+        ],
+        "title": "Queue"
+      },
+      "QueueRow": {
+        "properties": {
+          "portfolio_id": {
+            "type": "string",
+            "title": "Portfolio Id"
+          },
+          "client_id": {
+            "type": "string",
+            "title": "Client Id"
+          },
+          "client_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Name"
+          },
+          "risk_profile": {
+            "type": "string",
+            "title": "Risk Profile"
+          },
+          "review_due": {
+            "type": "string",
+            "title": "Review Due"
+          },
+          "days_past_due": {
+            "type": "integer",
+            "title": "Days Past Due"
+          },
+          "sla_breached": {
+            "type": "boolean",
+            "title": "Sla Breached"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "label": {
+            "type": "string",
+            "enum": [
+              "High",
+              "Medium",
+              "Low"
+            ],
+            "title": "Label"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/ComponentOut"
+            },
+            "type": "array",
+            "title": "Components"
+          },
+          "portfolio_drift_pp": {
+            "type": "number",
+            "title": "Portfolio Drift Pp"
+          },
+          "asset_class_drift": {
+            "items": {
+              "$ref": "#/components/schemas/ClassDriftOut"
+            },
+            "type": "array",
+            "title": "Asset Class Drift"
+          },
+          "total_value": {
+            "type": "number",
+            "title": "Total Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "portfolio_id",
+          "client_id",
+          "client_name",
+          "risk_profile",
+          "review_due",
+          "days_past_due",
+          "sla_breached",
+          "score",
+          "label",
+          "components",
+          "portfolio_drift_pp",
+          "asset_class_drift",
+          "total_value"
+        ],
+        "title": "QueueRow"
+      },
+      "RunOut": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "portfolios_scored": {
+            "type": "integer",
+            "title": "Portfolios Scored"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "portfolios_scored"
+        ],
+        "title": "RunOut"
       },
       "ValidationError": {
         "properties": {

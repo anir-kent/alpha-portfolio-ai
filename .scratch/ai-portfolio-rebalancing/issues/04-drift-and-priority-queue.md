@@ -4,11 +4,11 @@
 
 **Blocked by:** 02, 03
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Asset-Class Drift is absolute point deviation; Portfolio Drift is half the sum of absolute deviations
-- [ ] Planted scenarios rank as expected; the clean Portfolio ranks Low
-- [ ] Score components and weights are returned with every queue row and respect config
-- [ ] Urgency reflects days past review-due versus SLA; queue flags SLA breaches
-- [ ] Analysis run is audited (Analysis run started, Priority scored)
-- [ ] Queue can be filtered and sorted by label, Risk Profile and review-due date; Advisor/RM role only
+- [x] Asset-Class Drift is absolute point deviation; Portfolio Drift is half the sum of absolute deviations
+- [x] Planted scenarios rank as expected; the clean Portfolio ranks Low
+- [x] Score components and weights are returned with every queue row and respect config
+- [x] Urgency reflects days past review-due versus SLA; queue flags SLA breaches
+- [x] Analysis run is audited (Analysis run started, Priority scored)
+- [x] Queue can be filtered and sorted by label, Risk Profile and review-due date; Advisor/RM role only

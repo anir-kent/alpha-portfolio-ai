@@ -97,6 +97,34 @@ class RestrictionRow(Base):
     value: Mapped[str] = mapped_column(String)
 
 
+class AnalysisRunRow(Base):
+    """One on-demand analysis run. The highest id is the current run; earlier runs are superseded."""
+
+    __tablename__ = "analysis_runs"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    started_at: Mapped[str] = mapped_column(String)
+    actor_name: Mapped[str] = mapped_column(String)
+    as_of: Mapped[str] = mapped_column(String)  # review-due and urgency are measured at this date
+    config_json: Mapped[str] = mapped_column(Text)  # config in force for this run
+    completed: Mapped[bool] = mapped_column(default=False)  # only completed runs are current
+
+
+class PriorityResultRow(Base):
+    __tablename__ = "priority_results"
+    run_id: Mapped[int] = mapped_column(ForeignKey("analysis_runs.id"), primary_key=True)
+    client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), primary_key=True)
+    score: Mapped[float] = mapped_column(index=True)
+    label: Mapped[str] = mapped_column(String, index=True)
+    risk_profile: Mapped[str] = mapped_column(String, index=True)
+    review_due: Mapped[str] = mapped_column(String, index=True)
+    days_past_due: Mapped[int] = mapped_column()
+    sla_breached: Mapped[bool] = mapped_column()
+    portfolio_drift_pp: Mapped[float] = mapped_column()
+    total_value: Mapped[float] = mapped_column()
+    components_json: Mapped[str] = mapped_column(Text)
+    drift_json: Mapped[str] = mapped_column(Text)
+
+
 def make_session_factory(url: str) -> sessionmaker:
     kwargs = {}
     if url.startswith("sqlite"):
