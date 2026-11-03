@@ -1047,6 +1047,29 @@
               "turnover_pct": 15.0,
               "trade_line_pct": 10.0
             }
+          },
+          "suitability": {
+            "$ref": "#/components/schemas/SuitabilityLimits",
+            "default": {
+              "max_equity_pct": {
+                "aggressive": 95.0,
+                "conservative": 30.0,
+                "growth": 80.0,
+                "moderate": 55.0
+              },
+              "single_position_pct": 10.0,
+              "sector_pct": 30.0,
+              "min_cash_pct": {
+                "aggressive": 1.0,
+                "conservative": 5.0,
+                "growth": 2.0,
+                "moderate": 3.0
+              },
+              "horizon_short_years": 5,
+              "horizon_short_equity_max_pct": 40.0,
+              "taxable_gain_pct": 15.0,
+              "warn_ratio": 0.9
+            }
           }
         },
         "type": "object",
@@ -1112,6 +1135,16 @@
                 "type": "null"
               }
             ]
+          },
+          "suitability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SuitabilityUpdate"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -1169,6 +1202,44 @@
           "asset_classes"
         ],
         "title": "DriftOut"
+      },
+      "FindingOut": {
+        "properties": {
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "actual": {
+            "type": "number",
+            "title": "Actual"
+          },
+          "limit": {
+            "type": "number",
+            "title": "Limit"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warning",
+              "breach"
+            ],
+            "title": "Status"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject",
+          "actual",
+          "limit",
+          "status",
+          "note"
+        ],
+        "title": "FindingOut"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1435,6 +1506,16 @@
             "type": "array",
             "title": "Sector Exposure"
           },
+          "suitability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SuitabilityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "history": {
             "$ref": "#/components/schemas/HistoryOut"
           }
@@ -1449,6 +1530,7 @@
           "holdings",
           "drift",
           "sector_exposure",
+          "suitability",
           "history"
         ],
         "title": "PortfolioDetail"
@@ -1634,6 +1716,47 @@
         ],
         "title": "RestrictionOut"
       },
+      "RuleOut": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warning",
+              "breach"
+            ],
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/FindingOut"
+            },
+            "type": "array",
+            "title": "Findings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule_id",
+          "name",
+          "status",
+          "message",
+          "findings"
+        ],
+        "title": "RuleOut"
+      },
       "RunOut": {
         "properties": {
           "run_id": {
@@ -1679,6 +1802,221 @@
           "via_funds_pct"
         ],
         "title": "SectorExposureOut"
+      },
+      "SuitabilityLimits": {
+        "properties": {
+          "max_equity_pct": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Max Equity Pct",
+            "default": {
+              "conservative": 30,
+              "moderate": 55,
+              "growth": 80,
+              "aggressive": 95
+            }
+          },
+          "single_position_pct": {
+            "type": "number",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Single Position Pct",
+            "default": 10
+          },
+          "sector_pct": {
+            "type": "number",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Sector Pct",
+            "default": 30
+          },
+          "min_cash_pct": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Min Cash Pct",
+            "default": {
+              "conservative": 5,
+              "moderate": 3,
+              "growth": 2,
+              "aggressive": 1
+            }
+          },
+          "horizon_short_years": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Horizon Short Years",
+            "default": 5
+          },
+          "horizon_short_equity_max_pct": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Horizon Short Equity Max Pct",
+            "default": 40
+          },
+          "taxable_gain_pct": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Taxable Gain Pct",
+            "default": 15
+          },
+          "warn_ratio": {
+            "type": "number",
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Warn Ratio",
+            "default": 0.9
+          }
+        },
+        "type": "object",
+        "title": "SuitabilityLimits",
+        "description": "Limits for the seven Suitability Rules. Percentages are of Portfolio value."
+      },
+      "SuitabilityOut": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warning",
+              "breach"
+            ],
+            "title": "Status"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "rules"
+        ],
+        "title": "SuitabilityOut"
+      },
+      "SuitabilityUpdate": {
+        "properties": {
+          "max_equity_pct": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Equity Pct"
+          },
+          "single_position_pct": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Single Position Pct"
+          },
+          "sector_pct": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sector Pct"
+          },
+          "min_cash_pct": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Cash Pct"
+          },
+          "horizon_short_years": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon Short Years"
+          },
+          "horizon_short_equity_max_pct": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon Short Equity Max Pct"
+          },
+          "taxable_gain_pct": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxable Gain Pct"
+          },
+          "warn_ratio": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMaximum": 1.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warn Ratio"
+          }
+        },
+        "type": "object",
+        "title": "SuitabilityUpdate",
+        "description": "Partial update of SuitabilityLimits: only supplied fields change; per-profile maps merge by profile."
       },
       "ValidationError": {
         "properties": {

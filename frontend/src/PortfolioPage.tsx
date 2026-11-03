@@ -9,6 +9,44 @@ const STATUS_BAR = { ok: "bg-sky-600", warn: "bg-amber-500", breach: "bg-red-600
 const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const signed = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)}`;
 
+type Suitability = NonNullable<Detail["suitability"]>;
+const RULE_BADGE = {
+  pass: "bg-slate-100 text-slate-700",
+  warning: "bg-amber-100 font-semibold text-amber-800",
+  breach: "bg-red-100 font-semibold text-red-800",
+};
+
+function SuitabilityPanel({ suitability }: { suitability: Suitability }) {
+  return (
+    <div>
+      <p className="mb-2 text-sm text-slate-500">
+        Overall <span className={`rounded px-1.5 py-0.5 ${RULE_BADGE[suitability.status]}`}>{suitability.status}</span> · run #{suitability.run_id}
+      </p>
+      <ul className="space-y-2">
+        {suitability.rules.map((r) => (
+          <li key={r.rule_id} className="rounded border p-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs text-slate-500">{r.rule_id}</span>
+              <span className="font-medium">{r.name}</span>
+              <span className={`ml-auto rounded px-1.5 py-0.5 text-xs ${RULE_BADGE[r.status]}`}>{r.status}</span>
+            </div>
+            <p className="text-slate-600">{r.message}</p>
+            {r.findings.length > 0 && (
+              <ul className="mt-1 text-xs text-slate-500">
+                {r.findings.map((f) => (
+                  <li key={f.subject}>
+                    {f.subject}: {f.actual}% vs limit {f.limit}% ({f.status}){f.note ? ` · ${f.note}` : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function AllocationChart({ drift }: { drift: NonNullable<Detail["drift"]> }) {
   return (
     <div>
@@ -74,6 +112,11 @@ export function PortfolioPage() {
       <div>
         <h2 className="mb-2 font-semibold">Allocation vs target</h2>
         {p.drift ? <AllocationChart drift={p.drift} /> : <p className="text-slate-600">No analysis run yet; run an analysis from the queue.</p>}
+      </div>
+
+      <div>
+        <h2 className="mb-2 font-semibold">Suitability</h2>
+        {p.suitability ? <SuitabilityPanel suitability={p.suitability} /> : <p className="text-slate-600">No analysis run yet; run an analysis from the queue.</p>}
       </div>
 
       <div>
