@@ -155,9 +155,13 @@ def _audit_suitability(db: Session, rec: RecommendationRow, parent: int) -> int:
     )
 
 
-def supersede_open(db: Session, actor: audit.Actor, reason: str, parents=()) -> None:
-    """Mark every open Recommendation superseded (a new analysis run makes them stale) and audit each."""
-    for rec in list(db.scalars(select(RecommendationRow).where(RecommendationRow.status.in_(OPEN)))):
+def open_ids(db: Session) -> list[int]:
+    return list(db.scalars(select(RecommendationRow.id).where(RecommendationRow.status.in_(OPEN)).order_by(RecommendationRow.id)))
+
+
+def supersede(db: Session, ids: list[int], actor: audit.Actor, reason: str, parents=()) -> None:
+    """Mark the given Recommendations superseded (a new analysis run makes them stale) and audit each."""
+    for rec in db.scalars(select(RecommendationRow).where(RecommendationRow.id.in_(ids)).order_by(RecommendationRow.id)):
         rec.status = "superseded"
         db.flush()
         audit.record(

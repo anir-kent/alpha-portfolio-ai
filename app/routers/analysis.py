@@ -39,6 +39,22 @@ class ClassDriftOut(BaseModel):
     status: Literal["ok", "warn", "breach"]
 
 
+class FindingOut(BaseModel):
+    subject: str  # an Instrument, a sector, or a measure such as equity / cash
+    actual: float
+    limit: float
+    status: Literal["pass", "warning", "breach"]
+    note: str
+
+
+class RuleOut(BaseModel):
+    rule_id: str
+    name: str
+    status: Literal["pass", "warning", "breach"]
+    message: str
+    findings: list[FindingOut]
+
+
 class QueueRow(BaseModel):
     portfolio_id: str
     client_id: str

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { api } from "./api/client";
+import { RecommendationPanel } from "./RecommendationPanel";
 import type { components } from "./api/schema";
 
 type Detail = components["schemas"]["PortfolioDetail"];
@@ -73,7 +74,7 @@ function AllocationChart({ drift }: { drift: NonNullable<Detail["drift"]> }) {
   );
 }
 
-export function PortfolioPage() {
+export function PortfolioPage({ canDecide = false }: { canDecide?: boolean }) {
   const { id } = useParams();
   const q = useQuery({
     queryKey: ["portfolio", id],
@@ -152,10 +153,8 @@ export function PortfolioPage() {
       </div>
 
       <div>
-        <h2 className="mb-2 font-semibold">Version and Decision history</h2>
-        {p.history.versions.length + p.history.decisions.length === 0
-          ? <p className="text-slate-600">No Recommendations or Decisions yet.</p>
-          : <pre className="text-xs">{JSON.stringify(p.history, null, 2)}</pre>}
+        <h2 className="mb-2 font-semibold">Recommendation</h2>
+        <RecommendationPanel p={p} canDecide={canDecide} />
       </div>
     </section>
   );

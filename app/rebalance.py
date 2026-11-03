@@ -5,7 +5,7 @@ Pure and deterministic; no tilt yet. A Portfolio is rebalanced only when some As
 - overweight classes are sold pro rata to the market value of their holdings;
 - underweight classes are bought pro rata across the class's existing non-restricted funds (never more of a single
   name), or the class's default fund when there is none.
-Quantities are whole units rounded down, so a few basis points of drift can remain. No tax-lot optimisation.
+A class within 0.5 points of target is left alone. Quantities are whole units rounded down, so a little drift can remain. No tax-lot optimisation.
 """
 from dataclasses import dataclass
 from typing import Literal
@@ -15,6 +15,7 @@ from app.market_data import MarketData
 
 Side = Literal["buy", "sell"]
 DEFAULT_FUND = {"equity": "SPY", "bond": "AGG", "cash": "SGOV"}
+DE_MINIMIS_PCT = 0.5  # a class within this many points of target is left alone (rounding residue is not a trade)
 _EPS = 1e-9
 
 
@@ -43,6 +44,8 @@ def plan(
         members = [r for r in rows if r["asset_class"] == cls]
         value = sum(r["market_value"] for r in members)
         delta = targets.get(cls, 0.0) * total - value
+        if abs(delta) < total * DE_MINIMIS_PCT / 100:
+            continue
         if delta < 0:
             for r in members:
                 amount = -delta * r["market_value"] / value

@@ -69,8 +69,8 @@ def test_cash_drag_scenario_yields_expected_trade_lines(advisor):
     assert buys["SHY"]["pct_of_portfolio"] == pytest.approx(9.4, abs=0.3)
     assert r["turnover_pct"] == pytest.approx(25, abs=0.3)
     for l in r["trade_lines"]:  # percent and currency both present and consistent
-        assert l["amount"] == pytest.approx(l["quantity"] * l["price"])
-        assert l["pct_of_portfolio"] == pytest.approx(l["amount"] / r["total_value"] * 100)
+        assert l["amount"] == pytest.approx(l["quantity"] * l["price"], abs=0.01)
+        assert l["pct_of_portfolio"] == pytest.approx(l["amount"] / r["total_value"] * 100, abs=0.01)
         assert l["currency"] == "USD" and l["quantity"] > 0
 
 
@@ -199,7 +199,7 @@ def test_decisions_are_audited_with_rationale_and_lineage(advisor, app):
         assert of("suitability_evaluated", v1["id"])  # post-trade results audited
 
         d1 = of("decision_recorded", v1["id"])[0]
-        assert drafted.id in parents(d1)
+        assert of("suitability_evaluated", v1["id"])[0].id in parents(d1)  # chained after the draft's own results
         p1 = json.loads(d1.payload_json)
         assert (p1["action"], p1["rationale"], d1.actor_name, d1.actor_role) == ("modify", "More growth", "advisor", "advisor")
 

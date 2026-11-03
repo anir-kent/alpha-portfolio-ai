@@ -9,11 +9,12 @@ from sqlalchemy.orm import Session
 
 from app import portfolio_view
 from app.config_service import Band
-from app.db import AnalysisRunRow, ClientRow, PriorityResultRow, RestrictionRow, SuitabilityResultRow, User
+from app.db import AnalysisRunRow, ClientRow, PriorityResultRow, RecommendationRow, RestrictionRow, SuitabilityResultRow, User
 from app.deps import get_db, get_market, require
 from app.market_data import MarketData
 from app.rbac import PERMISSIONS
-from app.routers.analysis import ClassDriftOut
+from app.routers.analysis import ClassDriftOut, RuleOut
+from app.routers.recommendations import HistoryOut, RecommendationOut, history_for, to_out
 
 router = APIRouter(prefix="/api", tags=["portfolios"])
 
@@ -63,33 +64,10 @@ class DriftOut(BaseModel):
     asset_classes: list[ClassDriftOut]
 
 
-class FindingOut(BaseModel):
-    subject: str  # an Instrument, a sector, or a measure such as equity / cash
-    actual: float
-    limit: float
-    status: Literal["pass", "warning", "breach"]
-    note: str
-
-
-class RuleOut(BaseModel):
-    rule_id: str
-    name: str
-    status: Literal["pass", "warning", "breach"]
-    message: str
-    findings: list[FindingOut]
-
-
 class SuitabilityOut(BaseModel):
     run_id: int
     status: Literal["pass", "warning", "breach"]  # worst rule status
     rules: list[RuleOut]
-
-
-class HistoryOut(BaseModel):
-    """Recommendation versions and Decisions; empty until the recommendation tickets land."""
-
-    versions: list[dict] = []
-    decisions: list[dict] = []
 
 
 class PortfolioDetail(BaseModel):
@@ -102,6 +80,7 @@ class PortfolioDetail(BaseModel):
     drift: DriftOut | None  # null until an analysis run has completed
     sector_exposure: list[SectorExposureOut]
     suitability: SuitabilityOut | None  # null until an analysis run has completed
+    recommendation: RecommendationOut | None  # the current version; null when within tolerance (a latest version that is superseded was replaced by a newer run)
     history: HistoryOut
 
 
@@ -133,6 +112,9 @@ def portfolio(
         sr = db.get(SuitabilityResultRow, (run.id, c.id))
         if sr:
             suit = SuitabilityOut(run_id=run.id, status=sr.status, rules=json.loads(sr.results_json))
+    latest = db.scalar(
+        select(RecommendationRow).where(RecommendationRow.client_id == c.id).order_by(RecommendationRow.id.desc()).limit(1)
+    )
     pii = "client:pii" in PERMISSIONS[user.role]
     restrictions = db.scalars(select(RestrictionRow).where(RestrictionRow.client_id == c.id).order_by(RestrictionRow.id))
     return PortfolioDetail(
@@ -144,5 +126,6 @@ def portfolio(
         ),
         restrictions=[RestrictionOut(kind=r.kind, value=r.value) for r in restrictions],
         as_of=market.as_of, total_value=total, holdings=rows, drift=drift,
-        sector_exposure=portfolio_view.sector_exposure(rows, market), suitability=suit, history=HistoryOut(),
+        sector_exposure=portfolio_view.sector_exposure(rows, market), suitability=suit,
+        recommendation=to_out(latest) if latest and latest.status != "superseded" else None, history=history_for(db, c.id),
     )

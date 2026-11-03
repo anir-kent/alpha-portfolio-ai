@@ -10,7 +10,7 @@ from datetime import date, datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import audit, portfolio_view, suitability
+from app import audit, portfolio_view, recommendations, suitability
 from app.config_service import get_config
 from app.db import AnalysisRunRow, ClientRow, PriorityResultRow, RestrictionRow, SuitabilityResultRow, TargetRow
 from app.drift import compute_drift
@@ -38,6 +38,7 @@ def run_analysis(db: Session, market: MarketData, actor: audit.Actor) -> tuple[i
     )
     db.add(run)
     db.flush()
+    stale = recommendations.open_ids(db)  # superseded once this run is on record
     scored = []
     for c in clients:
         rows = portfolio_view.holdings(db, market, c.id)
@@ -73,14 +74,19 @@ def run_analysis(db: Session, market: MarketData, actor: audit.Actor) -> tuple[i
         db.add(SuitabilityResultRow(
             run_id=run.id, client_id=c.id, status=suitability.overall(suit), results_json=json.dumps(suit_out),
         ))
-        scored.append((c, s, components, drift.portfolio_drift_pp, suitability.overall(suit), suit_out))
+        rec = recommendations.draft(
+            db, run_id=run.id, rows=rows, client=c, targets=targets[c.id], restrictions=restrictions[c.id],
+            tax={h["account_id"]: h["tax_status"] for h in rows}, cfg=cfg, market=market, drift=drift,
+        )
+        scored.append((c, s, components, drift.portfolio_drift_pp, suitability.overall(suit), suit_out, rec))
     db.flush()
 
     started = audit.record(
         db, "analysis_run_started", actor,
         {"run_id": run.id, "as_of": run.as_of, "portfolios": len(clients), "config": json.loads(run.config_json)},
     )
-    for c, s, components, pd, suit_status, suit_out in scored:
+    recommendations.supersede(db, stale, SYSTEM, "A newer analysis run replaced this Recommendation", parents=[started])
+    for c, s, components, pd, suit_status, suit_out, rec in scored:
         evaluated = audit.record(
             db, "suitability_evaluated", SYSTEM, {"run_id": run.id, "status": suit_status, "rules": suit_out},
             parents=[started], portfolio_id=c.id, client_id=c.id,
@@ -91,6 +97,8 @@ def run_analysis(db: Session, market: MarketData, actor: audit.Actor) -> tuple[i
              "portfolio_drift_pp": round(pd, 2), "days_past_due": s.days_past_due, "sla_breached": s.sla_breached},
             parents=[started, evaluated], portfolio_id=c.id, client_id=c.id,
         )
+        if rec is not None:
+            recommendations.audit_draft(db, rec, parents=[started, evaluated])
     run.completed = True
     db.commit()
     return run.id, len(clients)

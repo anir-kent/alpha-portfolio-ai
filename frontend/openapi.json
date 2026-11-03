@@ -285,6 +285,7 @@
                     "recommendation_drafted",
                     "memo_generated",
                     "recommendation_modified",
+                    "recommendation_superseded",
                     "decision_recorded",
                     "exception_approved",
                     "exception_blocked",
@@ -614,6 +615,100 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PortfolioDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recommendations/{recommendation_id}": {
+      "get": {
+        "tags": [
+          "recommendations"
+        ],
+        "summary": "Get Recommendation",
+        "operationId": "getRecommendation",
+        "parameters": [
+          {
+            "name": "recommendation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Recommendation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recommendations/{recommendation_id}/decision": {
+      "post": {
+        "tags": [
+          "recommendations"
+        ],
+        "summary": "Decide",
+        "operationId": "decideRecommendation",
+        "parameters": [
+          {
+            "name": "recommendation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Recommendation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionResult"
                 }
               }
             }
@@ -1168,6 +1263,152 @@
         ],
         "title": "DatabaseHealth"
       },
+      "DecisionIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "accept",
+              "reject",
+              "modify"
+            ],
+            "title": "Action"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "trade_lines": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TradeLineIn"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trade Lines"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "DecisionIn"
+      },
+      "DecisionOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "recommendation_id": {
+            "type": "integer",
+            "title": "Recommendation Id"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "accept",
+              "reject",
+              "modify"
+            ],
+            "title": "Action"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "actor_name": {
+            "type": "string",
+            "title": "Actor Name"
+          },
+          "actor_role": {
+            "type": "string",
+            "title": "Actor Role"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "resulting_status": {
+            "type": "string",
+            "enum": [
+              "pending_advisor",
+              "pending_compliance",
+              "approved",
+              "rejected",
+              "superseded"
+            ],
+            "title": "Resulting Status"
+          },
+          "resulting_recommendation_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resulting Recommendation Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "recommendation_id",
+          "action",
+          "rationale",
+          "actor_name",
+          "actor_role",
+          "created_at",
+          "resulting_status",
+          "resulting_recommendation_id"
+        ],
+        "title": "DecisionOut"
+      },
+      "DecisionResult": {
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/DecisionOut"
+          },
+          "recommendation": {
+            "$ref": "#/components/schemas/RecommendationOut"
+          },
+          "new_breaches": {
+            "items": {
+              "$ref": "#/components/schemas/RuleOut"
+            },
+            "type": "array",
+            "title": "New Breaches"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision",
+          "recommendation",
+          "new_breaches"
+        ],
+        "title": "DecisionResult"
+      },
       "DriftOut": {
         "properties": {
           "run_id": {
@@ -1278,8 +1519,7 @@
         "properties": {
           "versions": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/VersionOut"
             },
             "type": "array",
             "title": "Versions",
@@ -1287,8 +1527,7 @@
           },
           "decisions": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/DecisionOut"
             },
             "type": "array",
             "title": "Decisions",
@@ -1297,7 +1536,7 @@
         },
         "type": "object",
         "title": "HistoryOut",
-        "description": "Recommendation versions and Decisions; empty until the recommendation tickets land."
+        "description": "Every version of the Portfolio's Recommendations, oldest first, and the Decisions taken on them."
       },
       "HoldingOut": {
         "properties": {
@@ -1516,6 +1755,16 @@
               }
             ]
           },
+          "recommendation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "history": {
             "$ref": "#/components/schemas/HistoryOut"
           }
@@ -1531,9 +1780,36 @@
           "drift",
           "sector_exposure",
           "suitability",
+          "recommendation",
           "history"
         ],
         "title": "PortfolioDetail"
+      },
+      "PostTradeSuitability": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warning",
+              "breach"
+            ],
+            "title": "Status"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "rules"
+        ],
+        "title": "PostTradeSuitability"
       },
       "PriorityWeights": {
         "properties": {
@@ -1697,6 +1973,108 @@
           "total_value"
         ],
         "title": "QueueRow"
+      },
+      "RecommendationOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "portfolio_id": {
+            "type": "string",
+            "title": "Portfolio Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "root_id": {
+            "type": "integer",
+            "title": "Root Id"
+          },
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_advisor",
+              "pending_compliance",
+              "approved",
+              "rejected",
+              "superseded"
+            ],
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "total_value": {
+            "type": "number",
+            "title": "Total Value"
+          },
+          "turnover_pct": {
+            "type": "number",
+            "title": "Turnover Pct"
+          },
+          "trade_lines": {
+            "items": {
+              "$ref": "#/components/schemas/TradeLineOut"
+            },
+            "type": "array",
+            "title": "Trade Lines"
+          },
+          "suitability": {
+            "$ref": "#/components/schemas/PostTradeSuitability"
+          },
+          "post_trade_drift": {
+            "items": {
+              "$ref": "#/components/schemas/ClassDriftOut"
+            },
+            "type": "array",
+            "title": "Post Trade Drift"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "portfolio_id",
+          "version",
+          "parent_id",
+          "root_id",
+          "run_id",
+          "status",
+          "created_at",
+          "created_by",
+          "summary",
+          "total_value",
+          "turnover_pct",
+          "trade_lines",
+          "suitability",
+          "post_trade_drift"
+        ],
+        "title": "RecommendationOut"
       },
       "RestrictionOut": {
         "properties": {
@@ -2018,6 +2396,95 @@
         "title": "SuitabilityUpdate",
         "description": "Partial update of SuitabilityLimits: only supplied fields change; per-profile maps merge by profile."
       },
+      "TradeLineIn": {
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "title": "Account Id"
+          },
+          "symbol": {
+            "type": "string",
+            "title": "Symbol"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Side"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "account_id",
+          "symbol",
+          "side",
+          "quantity"
+        ],
+        "title": "TradeLineIn"
+      },
+      "TradeLineOut": {
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "title": "Account Id"
+          },
+          "symbol": {
+            "type": "string",
+            "title": "Symbol"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Side"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "price": {
+            "type": "number",
+            "title": "Price"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "amount": {
+            "type": "number",
+            "title": "Amount"
+          },
+          "pct_of_portfolio": {
+            "type": "number",
+            "title": "Pct Of Portfolio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "account_id",
+          "symbol",
+          "name",
+          "side",
+          "quantity",
+          "price",
+          "currency",
+          "amount",
+          "pct_of_portfolio"
+        ],
+        "title": "TradeLineOut"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -2099,6 +2566,73 @@
           "reason"
         ],
         "title": "Verification"
+      },
+      "VersionOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_advisor",
+              "pending_compliance",
+              "approved",
+              "rejected",
+              "superseded"
+            ],
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          },
+          "turnover_pct": {
+            "type": "number",
+            "title": "Turnover Pct"
+          },
+          "suitability_status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warning",
+              "breach"
+            ],
+            "title": "Suitability Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "parent_id",
+          "status",
+          "created_at",
+          "created_by",
+          "turnover_pct",
+          "suitability_status"
+        ],
+        "title": "VersionOut"
       }
     }
   }

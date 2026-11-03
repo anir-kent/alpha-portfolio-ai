@@ -160,7 +160,8 @@ def test_sector_restriction_breaches_on_direct_holdings_and_warns_on_fund_exposu
 
 def test_suitability_evaluation_is_audited_with_its_results(advisor, app):
     with app.state.session_factory() as db:
-        events = list(db.scalars(select(AuditEventRow).where(AuditEventRow.type == "suitability_evaluated")))
+        events = list(db.scalars(select(AuditEventRow).where(
+            AuditEventRow.type == "suitability_evaluated", AuditEventRow.recommendation_id.is_(None))))  # current Portfolios
         started = db.scalar(select(AuditEventRow).where(AuditEventRow.type == "analysis_run_started"))
         assert len(events) == 25
         e = next(e for e in events if e.portfolio_id == PLANTED["restricted_breach"])
