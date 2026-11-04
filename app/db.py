@@ -236,6 +236,16 @@ class GroundingResultRow(Base):
     created_at: Mapped[str] = mapped_column(String, index=True)
 
 
+class FixtureRunRow(Base):
+    """One run of the adversarial grounding fixtures: what each fixture was expected to trigger and what the validator did."""
+
+    __tablename__ = "fixture_runs"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    ran_at: Mapped[str] = mapped_column(String, index=True)
+    ran_by: Mapped[str] = mapped_column(String)
+    results_json: Mapped[str] = mapped_column(Text)
+
+
 class RecommendationTiltRow(Base):
     """The Research Tilt attempt for one Recommendation: what the LLM proposed and what the engine allowed, per subject
     (sector or Asset Class), or that the attempt failed and the plain rule-based Recommendation stands."""

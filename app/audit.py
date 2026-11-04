@@ -32,6 +32,7 @@ EVENT_TYPES = (
     "priority_narrative_generated",
     "grounding_checked",
     "claim_ungrounded",
+    "adversarial_fixtures_run",
     "recommendation_modified",
     "recommendation_superseded",
     "decision_recorded",

@@ -95,3 +95,6 @@ Rules:
 - A claim that takes a view on a sector, Asset Class or Instrument sets "asset" and must cite a Report passage.
 - Do not rank, re-score or compare clients, and do not state compliance outcomes.""",
 )
+
+
+ALL = (INSIGHT_EXTRACTION, RESEARCH_TILT, RECOMMENDATION_NARRATIVE, PRIORITY_NARRATIVE)

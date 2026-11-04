@@ -311,6 +311,7 @@
                     "priority_narrative_generated",
                     "grounding_checked",
                     "claim_ungrounded",
+                    "adversarial_fixtures_run",
                     "recommendation_modified",
                     "recommendation_superseded",
                     "decision_recorded",
@@ -563,6 +564,48 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/governance": {
+      "get": {
+        "tags": [
+          "governance"
+        ],
+        "summary": "Get Governance",
+        "operationId": "getGovernance",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/governance/fixtures/run": {
+      "post": {
+        "tags": [
+          "governance"
+        ],
+        "summary": "Run Fixtures",
+        "operationId": "runAdversarialFixtures",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixtureRun"
                 }
               }
             }
@@ -2386,6 +2429,86 @@
         ],
         "title": "FindingOut"
       },
+      "FixtureResult": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "expected_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Expected Codes"
+          },
+          "actual_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Actual Codes"
+          },
+          "caught": {
+            "type": "boolean",
+            "title": "Caught"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "expected_codes",
+          "actual_codes",
+          "caught"
+        ],
+        "title": "FixtureResult"
+      },
+      "FixtureRun": {
+        "properties": {
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "ran_at": {
+            "type": "string",
+            "title": "Ran At"
+          },
+          "ran_by": {
+            "type": "string",
+            "title": "Ran By"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "passed": {
+            "type": "integer",
+            "title": "Passed"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/FixtureResult"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "ran_at",
+          "ran_by",
+          "total",
+          "passed",
+          "results"
+        ],
+        "title": "FixtureRun"
+      },
       "FlaggedFinding": {
         "properties": {
           "subject": {
@@ -2462,6 +2585,41 @@
           "findings"
         ],
         "title": "FlaggedRuleOut"
+      },
+      "GovernanceOut": {
+        "properties": {
+          "model_card": {
+            "$ref": "#/components/schemas/ModelCard"
+          },
+          "prompt_log": {
+            "items": {
+              "$ref": "#/components/schemas/PromptUse"
+            },
+            "type": "array",
+            "title": "Prompt Log"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/Quality"
+          },
+          "fixtures": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FixtureRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "model_card",
+          "prompt_log",
+          "quality",
+          "fixtures"
+        ],
+        "title": "GovernanceOut"
       },
       "GroundingIn": {
         "properties": {
@@ -2819,6 +2977,24 @@
         ],
         "title": "Issue"
       },
+      "IssueCount": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "count"
+        ],
+        "title": "IssueCount"
+      },
       "LlmHealth": {
         "properties": {
           "status": {
@@ -2914,6 +3090,55 @@
           "permissions"
         ],
         "title": "Me"
+      },
+      "ModelCard": {
+        "properties": {
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "llm_mode": {
+            "type": "string",
+            "title": "Llm Mode"
+          },
+          "llm_endpoint": {
+            "type": "string",
+            "title": "Llm Endpoint"
+          },
+          "temperature": {
+            "type": "number",
+            "title": "Temperature"
+          },
+          "tilt_bound_pp": {
+            "type": "number",
+            "title": "Tilt Bound Pp"
+          },
+          "current_prompt_versions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Current Prompt Versions"
+          },
+          "controls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Controls"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model",
+          "llm_mode",
+          "llm_endpoint",
+          "temperature",
+          "tilt_bound_pp",
+          "current_prompt_versions",
+          "controls"
+        ],
+        "title": "ModelCard"
       },
       "NarrativeOut": {
         "properties": {
@@ -3156,6 +3381,90 @@
           "urgency"
         ],
         "title": "PriorityWeights"
+      },
+      "PromptUse": {
+        "properties": {
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Models"
+          },
+          "calls": {
+            "type": "integer",
+            "title": "Calls"
+          },
+          "first_used": {
+            "type": "string",
+            "title": "First Used"
+          },
+          "last_used": {
+            "type": "string",
+            "title": "Last Used"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt_version",
+          "models",
+          "calls",
+          "first_used",
+          "last_used"
+        ],
+        "title": "PromptUse"
+      },
+      "Quality": {
+        "properties": {
+          "checks": {
+            "type": "integer",
+            "title": "Checks"
+          },
+          "claims_total": {
+            "type": "integer",
+            "title": "Claims Total"
+          },
+          "claims_grounded": {
+            "type": "integer",
+            "title": "Claims Grounded"
+          },
+          "claims_ungrounded": {
+            "type": "integer",
+            "title": "Claims Ungrounded"
+          },
+          "pass_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass Rate"
+          },
+          "ungrounded_by_issue": {
+            "items": {
+              "$ref": "#/components/schemas/IssueCount"
+            },
+            "type": "array",
+            "title": "Ungrounded By Issue"
+          }
+        },
+        "type": "object",
+        "required": [
+          "checks",
+          "claims_total",
+          "claims_grounded",
+          "claims_ungrounded",
+          "pass_rate",
+          "ungrounded_by_issue"
+        ],
+        "title": "Quality"
       },
       "Queue": {
         "properties": {

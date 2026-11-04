@@ -17,6 +17,9 @@ from typing import Protocol
 import httpx
 
 
+TEMPERATURE = 0.0  # reported on the governance model card
+
+
 class LlmError(Exception):
     pass
 
@@ -103,7 +106,7 @@ class OpenAICompatibleLlm:
     def complete(self, request: LlmRequest) -> LlmResponse:
         body = {
             "model": self.model,
-            "temperature": 0,
+            "temperature": TEMPERATURE,
             "messages": [
                 {"role": "system", "content": request.system + "\n\nJSON schema of the reply:\n" + json.dumps(request.schema)},
                 {"role": "user", "content": request.user},

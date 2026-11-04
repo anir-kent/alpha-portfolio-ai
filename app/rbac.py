@@ -23,9 +23,9 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     ),
     "investment_committee": frozenset({"recommendation:read", "committee:decide", "approvals:read"}),
     "auditor": frozenset(
-        {"audit:read", "audit:verify", "governance:read", "recommendation:read", "portfolio:read", "config:read", "insight:read", "grounding:read"}
+        {"audit:read", "audit:verify", "governance:read", "governance:run", "recommendation:read", "portfolio:read", "config:read", "insight:read", "grounding:read"}
     ),
-    "platform_owner": frozenset({"config:read", "config:write", "health:read", "governance:read"}),
+    "platform_owner": frozenset({"config:read", "config:write", "health:read", "governance:read", "governance:run"}),
 }
 
 assert set(PERMISSIONS) == set(ROLES)
