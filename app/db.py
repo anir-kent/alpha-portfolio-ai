@@ -224,7 +224,8 @@ class GroundingResultRow(Base):
     __tablename__ = "grounding_results"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     check_id: Mapped[str] = mapped_column(String, index=True)  # one validation call
-    recommendation_id: Mapped[int] = mapped_column(ForeignKey("recommendations.id"), index=True)
+    recommendation_id: Mapped[int | None] = mapped_column(ForeignKey("recommendations.id"), index=True, nullable=True)
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("analysis_runs.id"), index=True, nullable=True)  # a priority narrative's claims
     client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), index=True)
     claim_index: Mapped[int] = mapped_column()
     text: Mapped[str] = mapped_column(Text)
@@ -259,6 +260,21 @@ class RecommendationNarrativeRow(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     check_id: Mapped[str | None] = mapped_column(String, nullable=True)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[str] = mapped_column(String)
+
+
+class PriorityNarrativeRow(Base):
+    """The "why this client, why now" narrative for one queue row; its claims and flags are GroundingResultRows of `check_id`."""
+
+    __tablename__ = "priority_narratives"
+    run_id: Mapped[int] = mapped_column(ForeignKey("analysis_runs.id"), primary_key=True)
+    client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), primary_key=True)
+    status: Mapped[str] = mapped_column(String)  # complete | failed
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    check_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)  # built by the engine from grounded claims only
     model: Mapped[str | None] = mapped_column(String, nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[str] = mapped_column(String)

@@ -23,12 +23,15 @@ EQUITY_FUNDS = {"SPY", "XLV", "XLP", "XLK", "XLI"}
 class StubLlm:
     """Replays Insight extraction from the committed recordings; tilt and narrative come from the test."""
 
-    def __init__(self, delegate, tilt=None, narrative=None):
+    def __init__(self, delegate, tilt=None, narrative=None, priority_narrative=None):
         self.delegate, self.tilt, self.narrative, self.calls = delegate, tilt, narrative, []
+        self.priority_narrative = priority_narrative
 
     def complete(self, request):
         self.calls.append(request)
-        handler = {"research_tilt": self.tilt, "recommendation_narrative": self.narrative}.get(request.task, "delegate")
+        handler = {
+            "research_tilt": self.tilt, "recommendation_narrative": self.narrative, "priority_narrative": self.priority_narrative,
+        }.get(request.task, "delegate")
         if handler == "delegate":
             return self.delegate.complete(request)
         if handler is None:

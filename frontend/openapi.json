@@ -308,6 +308,7 @@
                     "research_tilt_applied",
                     "recommendation_drafted",
                     "memo_generated",
+                    "priority_narrative_generated",
                     "grounding_checked",
                     "claim_ungrounded",
                     "recommendation_modified",
@@ -1636,6 +1637,71 @@
           "text"
         ],
         "title": "Claim"
+      },
+      "ClaimResult": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "asset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset"
+          },
+          "citations": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ReportCitation"
+                },
+                {
+                  "$ref": "#/components/schemas/EngineCitation"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "kind",
+                "mapping": {
+                  "engine": "#/components/schemas/EngineCitation",
+                  "report": "#/components/schemas/ReportCitation"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Citations"
+          },
+          "grounded": {
+            "type": "boolean",
+            "title": "Grounded"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            },
+            "type": "array",
+            "title": "Issues"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "text",
+          "asset",
+          "citations",
+          "grounded",
+          "issues"
+        ],
+        "title": "ClaimResult"
       },
       "ClaimResultOut": {
         "properties": {
@@ -3131,6 +3197,80 @@
         ],
         "title": "Queue"
       },
+      "QueueNarrative": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimResult"
+            },
+            "type": "array",
+            "title": "Claims"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "model",
+          "prompt_version",
+          "error",
+          "summary",
+          "claims"
+        ],
+        "title": "QueueNarrative",
+        "description": "Why this client, why now. The score is the engine's; `summary` has grounded claims only, flagged ones are in `claims`."
+      },
       "QueueRow": {
         "properties": {
           "portfolio_id": {
@@ -3202,6 +3342,16 @@
           "total_value": {
             "type": "number",
             "title": "Total Value"
+          },
+          "narrative": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QueueNarrative"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -3218,7 +3368,8 @@
           "components",
           "portfolio_drift_pp",
           "asset_class_drift",
-          "total_value"
+          "total_value",
+          "narrative"
         ],
         "title": "QueueRow"
       },

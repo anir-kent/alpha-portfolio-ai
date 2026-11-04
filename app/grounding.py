@@ -164,24 +164,38 @@ def validate_claim(db: Session, claim: Claim, index: int, figures: dict[str, flo
 
 
 def validate(db: Session, rec: RecommendationRow, claims: list[Claim]) -> tuple[str, list[ClaimResult]]:
-    """Validate, store and audit one batch of claims. Returns (check id, one result per claim in order)."""
-    figures = engine_figures(db, rec)
+    """Validate, store and audit one batch of claims about a Recommendation. Returns (check id, one result per claim in order)."""
+    return validate_figures(
+        db, claims, engine_figures(db, rec), client_id=rec.client_id, recommendation_id=rec.id,
+    )
+
+
+def validate_figures(
+    db: Session, claims: list[Claim], figures: dict[str, float], *, client_id: str, recommendation_id: int | None = None,
+    run_id: int | None = None, parents: Iterable[int] = (),
+) -> tuple[str, list[ClaimResult]]:
+    """Validate, store and audit claims against any engine figure set (a Recommendation's, or a priority result's)."""
     results = [validate_claim(db, c, i, figures) for i, c in enumerate(claims)]
     check_id = "GRD-" + uuid.uuid4().hex[:8]
     now = audit.format_ts(datetime.now(timezone.utc))
     db.add_all(
         GroundingResultRow(
-            check_id=check_id, recommendation_id=rec.id, client_id=rec.client_id, claim_index=r.index, text=r.text,
-            asset=r.asset, citations_json=json.dumps([c.model_dump() for c in r.citations]), grounded=r.grounded,
+            check_id=check_id, recommendation_id=recommendation_id, run_id=run_id, client_id=client_id, claim_index=r.index,
+            text=r.text, asset=r.asset, citations_json=json.dumps([c.model_dump() for c in r.citations]), grounded=r.grounded,
             issues_json=json.dumps([i.model_dump() for i in r.issues]), created_at=now,
         )
         for r in results
     )
     db.commit()
-    scope = dict(portfolio_id=rec.client_id, client_id=rec.client_id, recommendation_id=str(rec.id))
+    scope = dict(
+        portfolio_id=client_id, client_id=client_id,
+        recommendation_id=None if recommendation_id is None else str(recommendation_id),
+    )
     checked = audit.record(
         db, "grounding_checked", VALIDATOR,
-        {"check_id": check_id, "summary": summarise(results), "figure_count": len(figures)}, **scope,
+        {"check_id": check_id, "summary": summarise(results), "figure_count": len(figures),
+         **({"run_id": run_id} if run_id is not None else {})},
+        parents=parents, **scope,
     )
     for r in results:
         if not r.grounded:

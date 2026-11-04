@@ -10,12 +10,13 @@ from datetime import date, datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import audit, narrative, portfolio_view, rebalance, recommendations, research_tilt, suitability
+from app import audit, narrative, portfolio_view, priority_narrative, rebalance, recommendations, reports, research_tilt, suitability
 from app.config_service import get_config
 from app.db import AnalysisRunRow, ClientRow, PriorityResultRow, RestrictionRow, SuitabilityResultRow, TargetRow
 from app.drift import compute_drift
 from app.llm import LlmClient, build_llm
 from app.market_data import MarketData
+from app.opportunity import opportunity_raw, relevant_insights
 from app.priority import score_portfolio
 
 SYSTEM = audit.Actor.system("priority-engine")
@@ -40,8 +41,10 @@ def run_analysis(db: Session, market: MarketData, actor: audit.Actor, llm: LlmCl
     )
     db.add(run)
     db.flush()
+    insights = reports.approved_insights(db)  # the only research that can raise a score
     stale = recommendations.open_ids(db)  # superseded once this run is on record
     scored = []
+    opportunity_ids: dict[str, list[int]] = {}  # the approved Insights behind each Portfolio's Opportunity
     for c in clients:
         rows = portfolio_view.holdings(db, market, c.id)
         by_class: dict[str, float] = defaultdict(float)
@@ -56,10 +59,13 @@ def run_analysis(db: Session, market: MarketData, actor: audit.Actor, llm: LlmCl
             rows, suitability.ClientContext(c.risk_profile, c.horizon_years, c.liquidity_needs_pct, restrictions[c.id]),
             cfg.suitability, market,
         )
+        sector_pct = portfolio_view.sector_pct(rows, market)
         s = score_portfolio(
             drift, band, cfg.priority_weights, days_past_due=days_past_due, sla_days=cfg.sla_days,
             suitability_risk=suitability.risk_points(suit),
+            opportunity=opportunity_raw(sector_pct, insights),
         )
+        opportunity_ids[c.id] = [i.id for i in relevant_insights(sector_pct, insights)]
         components = [{"name": x.name, "raw": round(x.raw, 2), "weight": x.weight, "points": round(x.points, 2)} for x in s.components]
         drift_out = [
             {"asset_class": d.asset_class, "actual_pct": round(d.actual_pct, 2), "target_pct": round(d.target_pct, 2),
@@ -99,7 +105,8 @@ def run_analysis(db: Session, market: MarketData, actor: audit.Actor, llm: LlmCl
         audit.record(
             db, "priority_scored", SYSTEM,
             {"run_id": run.id, "score": round(s.score, 2), "label": s.label, "components": components,
-             "portfolio_drift_pp": round(pd, 2), "days_past_due": s.days_past_due, "sla_breached": s.sla_breached},
+             "portfolio_drift_pp": round(pd, 2), "days_past_due": s.days_past_due, "sla_breached": s.sla_breached,
+             "opportunity_insight_ids": opportunity_ids[c.id]},
             parents=[started, evaluated], portfolio_id=c.id, client_id=c.id,
         )
         if rec is not None:
@@ -108,6 +115,7 @@ def run_analysis(db: Session, market: MarketData, actor: audit.Actor, llm: LlmCl
     run.completed = True
     db.commit()
     if llm is not None:
+        priority_narrative.generate_for_run(db, llm, run.id, market)
         narrative.generate_for_run(db, llm, run.id)  # after the run is on record: a failing LLM cannot undo it
     return run.id, len(clients)
 

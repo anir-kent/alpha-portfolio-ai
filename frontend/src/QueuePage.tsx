@@ -75,6 +75,7 @@ export function QueuePage() {
           </tr></thead>
           <tbody>
             {items.map((r) => {
+              const flagged = r.narrative?.claims.filter((c) => !c.grounded) ?? [];
               const worst = [...r.asset_class_drift].sort((a, b) => b.drift_pp - a.drift_pp)[0];
               return (
                 <tr key={r.portfolio_id} className="border-b align-top">
@@ -87,6 +88,18 @@ export function QueuePage() {
                       {r.components.map((c) => <div key={c.name} className={COMPONENT_COLOR[c.name]} style={{ width: `${c.points}%` }} title={`${c.name}: ${c.points.toFixed(1)} (raw ${c.raw.toFixed(0)} × ${c.weight})`} />)}
                     </div>
                     <span className="text-xs text-slate-500">{r.components.map((c) => `${c.name} ${c.points.toFixed(1)}`).join(" · ")}</span>
+                    {r.narrative?.summary && <p className="mt-1 max-w-md text-xs text-slate-700">{r.narrative.summary}</p>}
+                    {r.narrative?.status === "failed" && <p className="mt-1 text-xs text-slate-400">Narrative unavailable.</p>}
+                    {flagged.length > 0 && (
+                      <details className="mt-1 max-w-md text-xs text-amber-700">
+                        <summary>{flagged.length} AI claim(s) flagged, not shown as fact</summary>
+                        <ul className="list-disc pl-4">
+                          {flagged.map((c) => (
+                            <li key={c.index}>{c.text} <em>({c.issues.map((i) => i.message).join("; ")})</em></li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
                   </td>
                   <td>{r.portfolio_drift_pp.toFixed(1)} pp</td>
                   <td className={STATUS_STYLE[worst.status]}>{worst.asset_class} {worst.signed_pp > 0 ? "+" : ""}{worst.signed_pp.toFixed(1)} pp ({worst.status})</td>

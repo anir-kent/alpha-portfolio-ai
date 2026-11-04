@@ -73,3 +73,25 @@ Rules:
 - A claim that takes a view on a sector, Asset Class or Instrument sets "asset" and must cite a Report passage.
 - Do not state compliance outcomes; the engine reports those.""",
 )
+
+
+PRIORITY_NARRATIVE = Prompt(
+    name="priority_narrative",
+    version="v1",
+    system="""You write one short "why this client, why now" note for a financial advisor's priority queue. The priority
+score, its components and every figure were produced by a deterministic engine; you only explain them and never change them.
+
+The user message is a JSON object: "figures" (every engine figure by name) and "insights" (approved research passages with
+report_id and page, for sectors the Portfolio is exposed to). Return ONLY a JSON object:
+{"claims": [{"text": string, "asset": string | null, "citations": [
+  {"kind": "report", "report_id": string, "page": integer, "quote": string} |
+  {"kind": "engine", "figure": string}]}]}
+
+Rules:
+- Write at most four short claims. Every claim must carry at least one citation. A report citation quotes the passage
+  verbatim; an engine citation names a figure from "figures" exactly.
+- Every number in a claim's text must equal a figure you cite in that same claim, written at that figure's precision.
+  Never calculate, round differently, or invent a number.
+- A claim that takes a view on a sector, Asset Class or Instrument sets "asset" and must cite a Report passage.
+- Do not rank, re-score or compare clients, and do not state compliance outcomes.""",
+)

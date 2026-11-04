@@ -6,9 +6,9 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import audit
+from app import audit, grounding
 from app.analysis import run_analysis
-from app.db import AnalysisRunRow, ClientRow, PriorityResultRow, User
+from app.db import AnalysisRunRow, ClientRow, PriorityNarrativeRow, PriorityResultRow, User
 from app.deps import get_db, get_llm, get_market, require
 from app.market_data import MarketData
 from app.rbac import PERMISSIONS
@@ -55,6 +55,17 @@ class RuleOut(BaseModel):
     findings: list[FindingOut]
 
 
+class QueueNarrative(BaseModel):
+    """Why this client, why now. The score is the engine's; `summary` has grounded claims only, flagged ones are in `claims`."""
+
+    status: Literal["complete", "failed"]
+    model: str | None
+    prompt_version: str | None
+    error: str | None
+    summary: str | None
+    claims: list[grounding.ClaimResult]
+
+
 class QueueRow(BaseModel):
     portfolio_id: str
     client_id: str
@@ -69,6 +80,7 @@ class QueueRow(BaseModel):
     portfolio_drift_pp: float
     asset_class_drift: list[ClassDriftOut]
     total_value: float
+    narrative: QueueNarrative | None  # null when the run had no LLM
 
 
 class Queue(BaseModel):
@@ -84,6 +96,15 @@ def start_run(
 ):
     run_id, n = run_analysis(db, market, audit.Actor.user(user.username, user.role), llm)
     return RunOut(run_id=run_id, portfolios_scored=n)
+
+
+def _narrative(db: Session, n: PriorityNarrativeRow | None) -> QueueNarrative | None:
+    if n is None:
+        return None
+    return QueueNarrative(
+        status=n.status, model=n.model, prompt_version=n.prompt_version, error=n.error, summary=n.summary,
+        claims=grounding.results_for(db, n.check_id) if n.check_id else [],
+    )
 
 
 _SORTS = {
@@ -124,12 +145,14 @@ def queue(
     col = _SORTS[sort]
     q = q.order_by(col.desc() if desc else col.asc(), PriorityResultRow.score.desc(), PriorityResultRow.client_id)
     show_name = "client:pii" in PERMISSIONS[user.role]
+    narratives = {n.client_id: n for n in db.scalars(select(PriorityNarrativeRow).where(PriorityNarrativeRow.run_id == run.id))}
     items = [
         QueueRow(
             portfolio_id=r.client_id, client_id=r.client_id, client_name=c.name if show_name else None,
             risk_profile=r.risk_profile, review_due=r.review_due, days_past_due=r.days_past_due,
             sla_breached=r.sla_breached, score=r.score, label=r.label, components=json.loads(r.components_json),
             portfolio_drift_pp=r.portfolio_drift_pp, asset_class_drift=json.loads(r.drift_json), total_value=r.total_value,
+            narrative=_narrative(db, narratives.get(r.client_id)),
         )
         for r, c in db.execute(q)
     ]

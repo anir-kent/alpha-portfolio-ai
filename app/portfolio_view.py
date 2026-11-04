@@ -29,6 +29,11 @@ def holdings(db: Session, market: MarketData, client_id: str) -> list[dict]:
     return out
 
 
+def sector_pct(rows: list[dict], market: MarketData) -> dict[str, float]:
+    """Look-through weight per sector, percent of Portfolio value."""
+    return {e["sector"]: e["weight_pct"] for e in sector_exposure(rows, market)}
+
+
 def sector_exposure(rows: list[dict], market: MarketData) -> list[dict]:
     """Look-through exposure per sector as a share of Portfolio value, split into direct and via funds."""
     total = sum(r["market_value"] for r in rows)

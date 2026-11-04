@@ -40,7 +40,7 @@ def _request(db: Session, rec: RecommendationRow) -> LlmRequest:
     )
 
 
-def _label(c) -> str:
+def citation_label(c) -> str:
     return f"{c.report_id} p.{c.page}" if isinstance(c, grounding.ReportCitation) else c.figure
 
 
@@ -62,7 +62,7 @@ def build_memo(rec: RecommendationRow, tilt: RecommendationTiltRow | None, resul
     kept = grounding.memo_claims(results)
     if kept:
         out.append("Supported by cited research:")
-        out += [f"- {r.text} [{'; '.join(_label(c) for c in r.citations)}]" for r in kept]
+        out += [f"- {r.text} [{'; '.join(citation_label(c) for c in r.citations)}]" for r in kept]
     return "\n".join(out)
 
 

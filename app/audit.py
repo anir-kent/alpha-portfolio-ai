@@ -29,6 +29,7 @@ EVENT_TYPES = (
     "research_tilt_applied",
     "recommendation_drafted",
     "memo_generated",
+    "priority_narrative_generated",
     "grounding_checked",
     "claim_ungrounded",
     "recommendation_modified",
