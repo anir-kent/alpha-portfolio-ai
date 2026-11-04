@@ -78,6 +78,60 @@ def _buys(cls: str, amount: float, members: list[dict], restricted: set[str], ro
     return out
 
 
+BROAD_EQUITY_FUND = "SPY"
+
+
+def merge(*sets: list[TradeLine]) -> list[TradeLine]:
+    """One Trade Line per (account, symbol): opposite sides net against each other."""
+    net: dict[tuple[str, str], int] = {}
+    for lines in sets:
+        for l in lines:
+            net[(l.account_id, l.symbol)] = net.get((l.account_id, l.symbol), 0) + (l.quantity if l.side == "buy" else -l.quantity)
+    sells = [TradeLine(a, s, "sell", -q) for (a, s), q in net.items() if q < 0]
+    buys = [TradeLine(a, s, "buy", q) for (a, s), q in net.items() if q > 0]
+    key = lambda l: (l.symbol, l.account_id)  # noqa: E731
+    return sorted(sells, key=key) + sorted(buys, key=key)
+
+
+def sector_sleeve(
+    rows: list[dict], sector_tilts_pp: dict[str, float], restricted: set[str], restricted_sectors: set[str],
+    market: MarketData, total: float,
+) -> list[TradeLine]:
+    """Switches inside equity for sector tilts, sized on `total` (the Portfolio value) and priced from `rows` (the Holdings
+    after the Asset-Class trades). A positive tilt sells the broad equity fund and buys the sector ETF in the same Account;
+    a negative one sells held sector ETF and buys the broad fund. Limited to what is held; an Asset-Class weight is unchanged.
+    """
+    broad = market.instrument(BROAD_EQUITY_FUND)
+    spy_held = {r["account_id"]: r["quantity"] for r in rows if r["symbol"] == broad.symbol}
+    out: list[TradeLine] = []
+    for sector, pp in sorted(sector_tilts_pp.items()):
+        etf = next((i for i in market.instruments() if i.kind == "fund" and i.sector == sector), None)
+        if etf is None or pp == 0 or sector in restricted_sectors or etf.symbol in restricted or broad.symbol in restricted:
+            continue
+        amount = abs(pp) / 100 * total
+        if pp > 0:
+            pool = {a: q for a, q in sorted(spy_held.items()) if q > 0}
+            value = sum(q * broad.price for q in pool.values())
+            take = min(amount, value)
+            for account, held in pool.items():
+                sell = min(held, int(take * (held * broad.price / value) / broad.price + 1e-9)) if value else 0
+                buy = int(sell * broad.price / etf.price + 1e-9)
+                if sell > 0 and buy > 0:
+                    out += [TradeLine(account, broad.symbol, "sell", sell), TradeLine(account, etf.symbol, "buy", buy)]
+                    spy_held[account] -= sell
+        else:
+            held = {r["account_id"]: r["quantity"] for r in rows if r["symbol"] == etf.symbol}
+            value = sum(q * etf.price for q in held.values())
+            take = min(amount, value)
+            for account, qty in sorted(held.items()):
+                sell = min(qty, int(take * (qty * etf.price / value) / etf.price + 1e-9)) if value else 0
+                buy = int(sell * etf.price / broad.price + 1e-9)
+                if sell > 0 and buy > 0:
+                    out += [TradeLine(account, etf.symbol, "sell", sell), TradeLine(account, broad.symbol, "buy", buy)]
+                    spy_held[account] = spy_held.get(account, 0) + buy
+    return out
+
+
 def validate(lines: list[TradeLine], rows: list[dict], accounts: set[str], market: MarketData) -> None:
     """Raise ValueError (message safe to show the Advisor) when a set of Trade Lines is not executable on this Portfolio."""
     if not lines:

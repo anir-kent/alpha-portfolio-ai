@@ -19,7 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import audit
-from app.db import GroundingResultRow, PriorityResultRow, RecommendationRow, ReportPageRow, ReportRow
+from app.db import GroundingResultRow, PriorityResultRow, RecommendationRow, RecommendationTiltRow, ReportPageRow, ReportRow
 from app.reports import passage_on_page
 
 VALIDATOR = audit.Actor.system("grounding-validator")
@@ -92,6 +92,12 @@ def engine_figures(db: Session, rec: RecommendationRow) -> dict[str, float]:
         for d in rows:
             for key in ("actual_pct", "target_pct", "signed_pp", "drift_pp"):
                 f[f"{scope}.{d['asset_class']}.{key}"] = d[key]
+    tilt = db.get(RecommendationTiltRow, rec.id)
+    if tilt is not None and tilt.status == "ok":  # what the AI proposed and the engine allowed are engine-owned figures
+        f["tilt.bound_pp"] = tilt.bound_pp
+        for e in json.loads(tilt.entries_json):
+            for key in ("exposure_pct", "proposed_pp", "allowed_pp"):
+                f[f"tilt.{e['subject']}.{key}"] = e[key]
     prio = db.get(PriorityResultRow, (rec.run_id, rec.client_id))
     if prio is not None:
         f["priority_score"], f["portfolio_drift_pp"] = prio.score, prio.portfolio_drift_pp
@@ -194,8 +200,10 @@ def latest_results(db: Session, recommendation_id: int) -> list[ClaimResult]:
         select(GroundingResultRow.check_id).where(GroundingResultRow.recommendation_id == recommendation_id)
         .order_by(GroundingResultRow.id.desc()).limit(1)
     )
-    if check_id is None:
-        return []
+    return [] if check_id is None else results_for(db, check_id)
+
+
+def results_for(db: Session, check_id: str) -> list[ClaimResult]:
     rows = db.scalars(select(GroundingResultRow).where(GroundingResultRow.check_id == check_id).order_by(GroundingResultRow.claim_index))
     return [
         ClaimResult(

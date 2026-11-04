@@ -25,6 +25,8 @@ EVENT_TYPES = (
     "analysis_run_started",
     "priority_scored",
     "suitability_evaluated",
+    "research_tilt_proposed",
+    "research_tilt_applied",
     "recommendation_drafted",
     "memo_generated",
     "grounding_checked",

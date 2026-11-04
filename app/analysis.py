@@ -10,18 +10,20 @@ from datetime import date, datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import audit, portfolio_view, recommendations, suitability
+from app import audit, narrative, portfolio_view, rebalance, recommendations, research_tilt, suitability
 from app.config_service import get_config
 from app.db import AnalysisRunRow, ClientRow, PriorityResultRow, RestrictionRow, SuitabilityResultRow, TargetRow
 from app.drift import compute_drift
+from app.llm import LlmClient, build_llm
 from app.market_data import MarketData
 from app.priority import score_portfolio
 
 SYSTEM = audit.Actor.system("priority-engine")
 
 
-def run_analysis(db: Session, market: MarketData, actor: audit.Actor) -> tuple[int, int]:
-    """Score every Portfolio. Returns (run_id, portfolios scored)."""
+def run_analysis(db: Session, market: MarketData, actor: audit.Actor, llm: LlmClient | None = None) -> tuple[int, int]:
+    """Score every Portfolio. Returns (run_id, portfolios scored). With an `llm`, a Portfolio being rebalanced also gets an
+    engine-bounded Research Tilt from approved Insights (a failing LLM only means no tilt)."""
     cfg = get_config(db)
     as_of = date.fromisoformat(market.as_of[:10])
     restrictions: dict[str, list[tuple[str, str]]] = defaultdict(list)
@@ -74,11 +76,14 @@ def run_analysis(db: Session, market: MarketData, actor: audit.Actor) -> tuple[i
         db.add(SuitabilityResultRow(
             run_id=run.id, client_id=c.id, status=suitability.overall(suit), results_json=json.dumps(suit_out),
         ))
+        tilt = None
+        if llm is not None and rebalance.outside_tolerance(drift):
+            tilt = research_tilt.assess(db, llm, client=c, rows=rows, market=market, cfg=cfg)
         rec = recommendations.draft(
             db, run_id=run.id, rows=rows, client=c, targets=targets[c.id], restrictions=restrictions[c.id],
-            tax={h["account_id"]: h["tax_status"] for h in rows}, cfg=cfg, market=market, drift=drift,
+            tax={h["account_id"]: h["tax_status"] for h in rows}, cfg=cfg, market=market, drift=drift, tilt=tilt,
         )
-        scored.append((c, s, components, drift.portfolio_drift_pp, suitability.overall(suit), suit_out, rec))
+        scored.append((c, s, components, drift.portfolio_drift_pp, suitability.overall(suit), suit_out, rec, tilt))
     db.flush()
 
     started = audit.record(
@@ -86,7 +91,7 @@ def run_analysis(db: Session, market: MarketData, actor: audit.Actor) -> tuple[i
         {"run_id": run.id, "as_of": run.as_of, "portfolios": len(clients), "config": json.loads(run.config_json)},
     )
     recommendations.supersede(db, stale, SYSTEM, "A newer analysis run replaced this Recommendation", parents=[started])
-    for c, s, components, pd, suit_status, suit_out, rec in scored:
+    for c, s, components, pd, suit_status, suit_out, rec, tilt in scored:
         evaluated = audit.record(
             db, "suitability_evaluated", SYSTEM, {"run_id": run.id, "status": suit_status, "rules": suit_out},
             parents=[started], portfolio_id=c.id, client_id=c.id,
@@ -98,9 +103,12 @@ def run_analysis(db: Session, market: MarketData, actor: audit.Actor) -> tuple[i
             parents=[started, evaluated], portfolio_id=c.id, client_id=c.id,
         )
         if rec is not None:
-            recommendations.audit_draft(db, rec, parents=[started, evaluated])
+            tilted = [research_tilt.audit_assessment(db, rec, tilt)] if tilt is not None else []
+            recommendations.audit_draft(db, rec, parents=[started, evaluated, *tilted])
     run.completed = True
     db.commit()
+    if llm is not None:
+        narrative.generate_for_run(db, llm, run.id)  # after the run is on record: a failing LLM cannot undo it
     return run.id, len(clients)
 
 
@@ -111,7 +119,7 @@ def main(settings=None) -> int:
     settings = settings or Settings()
     market = MarketData.load(settings.market_data_snapshot_path, settings.fund_lookthrough_path)
     with make_session_factory(settings.database_url)() as db:
-        run_id, n = run_analysis(db, market, audit.Actor.system("cli"))
+        run_id, n = run_analysis(db, market, audit.Actor.system("cli"), build_llm(settings))
     print(f"analysis run {run_id}: scored {n} portfolios")
     return n
 

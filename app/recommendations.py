@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import approvals, audit, portfolio_view, rebalance, suitability
+from app import approvals, audit, portfolio_view, rebalance, research_tilt, suitability
 from app.config_service import Config
 from app.db import AccountRow, AuditEventRow, ClientRow, DecisionRow, RecommendationRow, RestrictionRow, TargetRow
 from app.drift import compute_drift
@@ -90,15 +90,21 @@ def evaluate_lines(
     )
 
 
-def _summary(drift_rows: list[dict], ev: Evaluation) -> str:
+def _summary(drift_rows: list[dict], ev: Evaluation, tilt: "research_tilt.Assessment | None" = None) -> str:
     moves = "; ".join(
         f"{d['asset_class']} {d['actual_pct']:.1f}% vs {d['target_pct']:.1f}% target ({d['signed_pp']:+.1f} pp, {d['status']})"
         for d in drift_rows
     )
     sells = sum(1 for l in ev.trade_lines if l["side"] == "sell")
+    applied = [e for e in tilt.entries if e.allowed_pp] if tilt and tilt.status == "ok" else []
+    basis = (
+        "Rule-based and band-based, with an engine-bounded Research Tilt on "
+        + ", ".join(f"{e.subject} ({e.allowed_pp:+.1f} pp)" for e in applied) + "."
+        if applied else "Rule-based and band-based; no research tilt applied."
+    )
     return (
         f"Rebalance to target: {moves}. {sells} sell and {len(ev.trade_lines) - sells} buy Trade Lines, "
-        f"turnover {ev.turnover_pct:.1f}% of the Portfolio. Rule-based and band-based; no research tilt applied."
+        f"turnover {ev.turnover_pct:.1f}% of the Portfolio. {basis}"
     )
 
 
@@ -115,19 +121,34 @@ def _row(client_id: str, run_id: int, version: int, parent: RecommendationRow | 
 def draft(
     db: Session, *, run_id: int, rows: list[dict], client: ClientRow, targets: dict[str, float],
     restrictions: list[tuple[str, str]], tax: dict[str, str], cfg: Config, market: MarketData, drift,
+    tilt: "research_tilt.Assessment | None" = None,
 ) -> RecommendationRow | None:
-    """Version 1 for a Portfolio outside tolerance, or None. Added to the session but not committed."""
+    """Version 1 for a Portfolio outside tolerance, or None. Added to the session but not committed.
+
+    An engine-bounded Research Tilt (already clipped, see app.research_tilt) shifts the Asset-Class targets the Trade Lines
+    aim at and adds sector switches inside equity; tolerance and post-trade drift are still measured against the real target."""
     restricted = {v for k, v in restrictions if k == "instrument"}
-    lines = rebalance.plan(rows, targets, restricted, market, drift)
+    usable = tilt is not None and tilt.status == "ok"
+    aim = research_tilt.tilted_targets(targets, tilt.allowed("asset_class"), tilt.bound_pp) if usable else targets
+    lines = rebalance.plan(rows, aim, restricted, market, drift)
     if not lines:
         return None
+    if usable and tilt.allowed("sector"):
+        post = rebalance.apply(lines, rows, tax, market)
+        sleeve = rebalance.sector_sleeve(
+            post, tilt.allowed("sector"), restricted, {v for k, v in restrictions if k == "sector"}, market,
+            sum(r["market_value"] for r in rows),
+        )
+        lines = rebalance.merge(lines, sleeve)
     ev = evaluate_lines(lines, rows, client, targets, restrictions, tax, cfg, market)
     pre = [{"asset_class": d.asset_class, "actual_pct": d.actual_pct, "target_pct": d.target_pct, "signed_pp": d.signed_pp,
             "status": d.status} for d in drift.classes]
-    row = _row(client.id, run_id, 1, None, ENGINE.name, _summary(pre, ev), ev)
+    row = _row(client.id, run_id, 1, None, ENGINE.name, _summary(pre, ev, tilt), ev)
     db.add(row)
     db.flush()
     row.root_id = row.id
+    if tilt is not None:
+        research_tilt.store(db, row, tilt)
     return row
 
 

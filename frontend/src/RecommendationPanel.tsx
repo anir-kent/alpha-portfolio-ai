@@ -7,6 +7,7 @@ type Detail = components["schemas"]["PortfolioDetail"];
 type Rec = components["schemas"]["RecommendationOut"];
 type Rule = components["schemas"]["RuleOut"];
 type LineIn = components["schemas"]["TradeLineIn"];
+type Research = NonNullable<Rec["research"]>;
 type Action = "accept" | "reject" | "modify";
 
 const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -60,6 +61,75 @@ function PostTradeRules({ rec }: { rec: Rec }) {
         </ul>
       )}
     </div>
+  );
+}
+
+const pp = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)} pp`;
+
+type Citation = NonNullable<Research["narrative"]>["claims"][number]["citations"][number];
+
+function citationLabel(c: Citation) {
+  return c.kind === "report" ? `${c.report_id} p.${c.page}: \u201c${c.quote}\u201d` : `engine: ${c.figure}`;
+}
+
+function ResearchSection({ research }: { research: Research }) {
+  const { tilt, narrative } = research;
+  return (
+    <section className="space-y-3 rounded border border-violet-200 bg-violet-50/40 p-3" aria-label="AI contribution">
+      <h3 className="text-sm font-semibold">AI contribution <span className="font-normal text-slate-500">(the AI proposes and explains; the engine owns every number and compliance outcome)</span></h3>
+      {tilt && (
+        tilt.status === "failed" ? (
+          <p role="status" className="text-sm text-amber-800">The AI Research Tilt was unavailable, so this is the plain rule-based Recommendation.</p>
+        ) : tilt.entries.length === 0 ? (
+          <p className="text-sm text-slate-600">The AI proposed no Research Tilt from the approved Insights.</p>
+        ) : (
+          <table className="w-full text-left text-sm" aria-label="Research Tilt">
+            <thead><tr className="border-b text-slate-500"><th className="p-1">Subject</th><th>Exposure</th><th>AI proposed</th><th>Engine allowed</th><th>Why</th></tr></thead>
+            <tbody>
+              {tilt.entries.map((e) => (
+                <tr key={`${e.subject_kind}-${e.subject}`} className="border-b align-top">
+                  <td className="p-1">{e.subject} <span className="text-xs text-slate-500">{e.subject_kind === "sector" ? "sector" : "asset class"}</span></td>
+                  <td>{e.exposure_pct.toFixed(1)}%</td>
+                  <td>{pp(e.proposed_pp)}</td>
+                  <td className={e.clipped ? "font-semibold text-amber-800" : ""}>{pp(e.allowed_pp)}</td>
+                  <td className="text-slate-600">AI proposed {pp(e.proposed_pp)}, engine allowed {pp(e.allowed_pp)}: {e.reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )
+      )}
+      {tilt?.status === "ok" && <p className="text-xs text-slate-500">Bound \u00b1{tilt.bound_pp} pp · {tilt.model} · {tilt.prompt_version}</p>}
+      {narrative && (
+        narrative.status === "failed" ? (
+          <p role="status" className="text-sm text-amber-800">The AI rationale and memo were unavailable for this Recommendation.</p>
+        ) : (
+          <>
+            <div>
+              <h4 className="text-sm font-medium">Rationale and citations</h4>
+              <ul className="mt-1 space-y-1 text-sm">
+                {narrative.claims.map((c) => (
+                  <li key={c.index} className={`rounded border p-2 ${c.grounded ? "bg-white" : "border-red-300 bg-red-50"}`}>
+                    <span className={`mr-2 rounded px-1.5 py-0.5 text-xs ${c.grounded ? BADGE.pass : BADGE.breach}`}>{c.grounded ? "grounded" : "ungrounded: excluded from memo"}</span>
+                    {c.text}
+                    <ul className="ml-4 list-disc text-xs text-slate-600">
+                      {c.citations.map((x, i) => <li key={i}>{citationLabel(x)}</li>)}
+                      {c.citations.length === 0 && <li>no citation</li>}
+                    </ul>
+                    {c.issues.map((i) => <p key={i.code + i.message} className="text-xs text-red-700">{i.message}</p>)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-medium">Advisor memo</h4>
+              <pre className="mt-1 whitespace-pre-wrap rounded border bg-white p-2 text-sm">{narrative.memo}</pre>
+              <p className="text-xs text-slate-500">{narrative.model} · {narrative.prompt_version}</p>
+            </div>
+          </>
+        )
+      )}
+    </section>
   );
 }
 
@@ -163,6 +233,7 @@ export function RecommendationPanel({ p, canDecide }: { p: Detail; canDecide: bo
           )}
           <Lines rec={rec} />
           <PostTradeRules rec={rec} />
+          {rec.research && <ResearchSection research={rec.research} />}
           {rec.status === "pending_advisor" && canDecide && <DecisionForm key={rec.id} rec={rec} accounts={accounts} portfolioId={p.portfolio_id} />}
         </>
       )}

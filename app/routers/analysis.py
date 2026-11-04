@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app import audit
 from app.analysis import run_analysis
 from app.db import AnalysisRunRow, ClientRow, PriorityResultRow, User
-from app.deps import get_db, get_market, require
+from app.deps import get_db, get_llm, get_market, require
 from app.market_data import MarketData
 from app.rbac import PERMISSIONS
 
@@ -78,8 +78,11 @@ class Queue(BaseModel):
 
 
 @router.post("/analysis/runs", response_model=RunOut, operation_id="runAnalysis")
-def start_run(user: User = Depends(require("analysis:run")), db: Session = Depends(get_db), market: MarketData = Depends(get_market)):
-    run_id, n = run_analysis(db, market, audit.Actor.user(user.username, user.role))
+def start_run(
+    user: User = Depends(require("analysis:run")), db: Session = Depends(get_db), market: MarketData = Depends(get_market),
+    llm=Depends(get_llm),
+):
+    run_id, n = run_analysis(db, market, audit.Actor.user(user.username, user.role), llm)
     return RunOut(run_id=run_id, portfolios_scored=n)
 
 

@@ -235,6 +235,35 @@ class GroundingResultRow(Base):
     created_at: Mapped[str] = mapped_column(String, index=True)
 
 
+class RecommendationTiltRow(Base):
+    """The Research Tilt attempt for one Recommendation: what the LLM proposed and what the engine allowed, per subject
+    (sector or Asset Class), or that the attempt failed and the plain rule-based Recommendation stands."""
+
+    __tablename__ = "recommendation_tilts"
+    recommendation_id: Mapped[int] = mapped_column(ForeignKey("recommendations.id"), primary_key=True)
+    status: Mapped[str] = mapped_column(String)  # ok | failed
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bound_pp: Mapped[float] = mapped_column()  # the bound in force when clipped
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
+    prompt_version: Mapped[str] = mapped_column(String)
+    entries_json: Mapped[str] = mapped_column(Text)  # [{subject_kind, subject, exposure_pct, proposed_pp, allowed_pp, clipped, reason, insight_ids}]
+    dropped_json: Mapped[str] = mapped_column(Text)
+
+
+class RecommendationNarrativeRow(Base):
+    """The generated advisor memo for one Recommendation; its claims and flags are GroundingResultRows of `check_id`."""
+
+    __tablename__ = "recommendation_narratives"
+    recommendation_id: Mapped[int] = mapped_column(ForeignKey("recommendations.id"), primary_key=True)
+    status: Mapped[str] = mapped_column(String)  # complete | failed
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    check_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    memo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[str] = mapped_column(String)
+
+
 def make_session_factory(url: str) -> sessionmaker:
     kwargs = {}
     if url.startswith("sqlite"):

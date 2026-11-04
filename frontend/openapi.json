@@ -304,6 +304,8 @@
                     "analysis_run_started",
                     "priority_scored",
                     "suitability_evaluated",
+                    "research_tilt_proposed",
+                    "research_tilt_applied",
                     "recommendation_drafted",
                     "memo_generated",
                     "grounding_checked",
@@ -2847,6 +2849,79 @@
         ],
         "title": "Me"
       },
+      "NarrativeOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "memo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memo"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimResultOut"
+            },
+            "type": "array",
+            "title": "Claims"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "model",
+          "prompt_version",
+          "error",
+          "memo",
+          "claims"
+        ],
+        "title": "NarrativeOut"
+      },
       "PageOut": {
         "properties": {
           "report_id": {
@@ -3231,6 +3306,16 @@
           },
           "approval": {
             "$ref": "#/components/schemas/ApprovalOut"
+          },
+          "research": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -3250,7 +3335,8 @@
           "trade_lines",
           "suitability",
           "post_trade_drift",
-          "approval"
+          "approval",
+          "research"
         ],
         "title": "RecommendationOut"
       },
@@ -3380,6 +3466,37 @@
           "insights"
         ],
         "title": "ReportOut"
+      },
+      "ResearchOut": {
+        "properties": {
+          "tilt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TiltOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "narrative": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NarrativeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "tilt",
+          "narrative"
+        ],
+        "title": "ResearchOut",
+        "description": "The AI contribution to a Recommendation. The numbers are the engine's; the LLM only proposed and explained."
       },
       "RestrictionOut": {
         "properties": {
@@ -3757,6 +3874,120 @@
           "trade_line_pct"
         ],
         "title": "ThresholdsOut"
+      },
+      "TiltEntryOut": {
+        "properties": {
+          "subject_kind": {
+            "type": "string",
+            "enum": [
+              "sector",
+              "asset_class"
+            ],
+            "title": "Subject Kind"
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "exposure_pct": {
+            "type": "number",
+            "title": "Exposure Pct"
+          },
+          "proposed_pp": {
+            "type": "number",
+            "title": "Proposed Pp"
+          },
+          "allowed_pp": {
+            "type": "number",
+            "title": "Allowed Pp"
+          },
+          "clipped": {
+            "type": "boolean",
+            "title": "Clipped"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "insight_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Insight Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject_kind",
+          "subject",
+          "exposure_pct",
+          "proposed_pp",
+          "allowed_pp",
+          "clipped",
+          "reason",
+          "insight_ids"
+        ],
+        "title": "TiltEntryOut"
+      },
+      "TiltOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "bound_pp": {
+            "type": "number",
+            "title": "Bound Pp"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/TiltEntryOut"
+            },
+            "type": "array",
+            "title": "Entries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "bound_pp",
+          "model",
+          "prompt_version",
+          "error",
+          "entries"
+        ],
+        "title": "TiltOut"
       },
       "TradeLineIn": {
         "properties": {
