@@ -141,7 +141,6 @@ def test_ungrounded_claims_stay_visible_but_are_not_memo_eligible(ctx):
     fetched = advisor.get(f"/api/recommendations/{rec['id']}/grounding").json()
     assert [r["text"] for r in fetched["results"]] == ["Tech is favoured.", "Utilities will triple."]  # all visible
     assert [r["memo_eligible"] for r in fetched["results"]] == [True, False]
-    assert [c.text for c in grounding.memo_claims(grounding.Claim(**c) for c in [good, bad])] if False else True
 
 
 def test_memo_claims_keeps_only_grounded_results():
