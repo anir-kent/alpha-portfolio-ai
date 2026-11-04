@@ -2,7 +2,7 @@
 
 A claim is grounded only if it carries at least one citation, every Report citation names a real Report and page and
 quotes it verbatim, every engine citation names a figure the engine produced for the Recommendation, and every number
-in the claim text equals an engine figure at the precision the claim states. A claim that calls a view on an asset
+in the claim text equals a cited engine figure at the precision the claim states. A claim that calls a view on an asset
 (sector, Asset Class or Instrument) also needs a Report citation: engine figures alone cannot support a view.
 
 Ungrounded claims are never dropped: they are flagged with the reasons, kept out of memos (`memo_claims`) and stay
@@ -63,10 +63,6 @@ class ClaimResult(BaseModel):
     citations: list[Citation]
     grounded: bool
     issues: list[Issue]
-
-    @property
-    def memo_eligible(self) -> bool:
-        return self.grounded
 
 
 def memo_claims(results: Iterable[ClaimResult]) -> list[ClaimResult]:
@@ -152,9 +148,10 @@ def validate_claim(db: Session, claim: Claim, index: int, figures: dict[str, flo
             issues.append(issue)
     if claim.asset and claim.citations and not any(isinstance(c, ReportCitation) for c in claim.citations):
         issues.append(Issue(code="asset_call_needs_report", message=f"A view on {claim.asset} needs a Report citation"))
-    for raw, value, decimals in numbers_in(claim.text):
-        if not number_matches(value, decimals, figures.values()):
-            issues.append(Issue(code="number_mismatch", message=f"{raw} does not match any engine figure"))
+    cited = [figures[c.figure] for c in claim.citations if isinstance(c, EngineCitation) and c.figure in figures]
+    for raw, value, decimals in numbers_in(claim.text):  # a number must match a figure the claim itself cites
+        if not number_matches(value, decimals, cited):
+            issues.append(Issue(code="number_mismatch", message=f"{raw} does not match a cited engine figure"))
     return ClaimResult(
         index=index, text=claim.text, asset=claim.asset, citations=claim.citations, grounded=not issues, issues=issues,
     )

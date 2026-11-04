@@ -4,9 +4,9 @@
 
 **Blocked by:** 09
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Adversarial fixtures (fabricated quote, wrong number, uncited asset call) are caught
-- [ ] Valid claims pass with their citation intact
-- [ ] Flags are returned through the API and recorded as audit events
-- [ ] Grounding results are stored so the AI quality panel can aggregate them later
+- [x] Adversarial fixtures (fabricated quote, wrong number, uncited asset call) are caught
+- [x] Valid claims pass with their citation intact
+- [x] Flags are returned through the API and recorded as audit events
+- [x] Grounding results are stored so the AI quality panel can aggregate them later

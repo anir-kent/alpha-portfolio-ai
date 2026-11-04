@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.llm import build_llm
 from app.db import User, make_session_factory
 from app.rbac import ROLES
-from app.routers import analysis, approvals, audit, auth, config, health, portfolios, recommendations, reports
+from app.routers import analysis, approvals, audit, auth, config, grounding, health, portfolios, recommendations, reports
 from app.security import hash_password
 from app.settings import Settings
 
@@ -32,6 +32,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,
         allow_methods=["*"], allow_headers=["*"],
     )
-    for r in (auth.router, analysis.router, approvals.router, audit.router, config.router, health.router, portfolios.router, recommendations.router, reports.router):
+    for r in (auth.router, analysis.router, approvals.router, audit.router, config.router, grounding.router, health.router, portfolios.router, recommendations.router, reports.router):
         app.include_router(r)
     return app

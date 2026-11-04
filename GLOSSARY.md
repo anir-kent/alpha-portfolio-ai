@@ -81,3 +81,11 @@ _Avoid_: Approval (only one outcome of a Decision)
 **Audit Event**:
 An append-only, hash-chained record of an Insight, Recommendation, Suitability result or Decision, linked to its lineage.
 _Avoid_: Log entry
+
+### Grounding
+
+**Claim**:
+One statement an LLM makes about a Portfolio, Recommendation or asset, with its citations.
+
+**Grounded**:
+A Claim whose Report citations quote a real Report page verbatim, whose engine citations name real engine figures, and whose numbers all match those figures. Anything else is flagged ungrounded: kept out of memos but still shown to the Advisor.

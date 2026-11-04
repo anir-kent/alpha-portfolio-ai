@@ -27,6 +27,8 @@ EVENT_TYPES = (
     "suitability_evaluated",
     "recommendation_drafted",
     "memo_generated",
+    "grounding_checked",
+    "claim_ungrounded",
     "recommendation_modified",
     "recommendation_superseded",
     "decision_recorded",

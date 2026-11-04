@@ -218,6 +218,23 @@ class InsightRow(Base):
     extract_event_id: Mapped[int] = mapped_column()  # the audit event that produced it
 
 
+class GroundingResultRow(Base):
+    """One claim's grounding verdict. Kept per claim so the AI quality panel can aggregate pass rates and flag reasons."""
+
+    __tablename__ = "grounding_results"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    check_id: Mapped[str] = mapped_column(String, index=True)  # one validation call
+    recommendation_id: Mapped[int] = mapped_column(ForeignKey("recommendations.id"), index=True)
+    client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), index=True)
+    claim_index: Mapped[int] = mapped_column()
+    text: Mapped[str] = mapped_column(Text)
+    asset: Mapped[str | None] = mapped_column(String, nullable=True)
+    citations_json: Mapped[str] = mapped_column(Text)
+    grounded: Mapped[bool] = mapped_column(index=True)
+    issues_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(String, index=True)
+
+
 def make_session_factory(url: str) -> sessionmaker:
     kwargs = {}
     if url.startswith("sqlite"):

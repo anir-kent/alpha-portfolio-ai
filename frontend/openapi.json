@@ -306,6 +306,8 @@
                     "suitability_evaluated",
                     "recommendation_drafted",
                     "memo_generated",
+                    "grounding_checked",
+                    "claim_ungrounded",
                     "recommendation_modified",
                     "recommendation_superseded",
                     "decision_recorded",
@@ -548,6 +550,98 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Config"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/recommendations/{recommendation_id}/grounding": {
+      "post": {
+        "tags": [
+          "grounding"
+        ],
+        "summary": "Validate Claims",
+        "operationId": "validateClaims",
+        "parameters": [
+          {
+            "name": "recommendation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Recommendation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroundingIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroundingOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "grounding"
+        ],
+        "summary": "Get Grounding",
+        "operationId": "getGrounding",
+        "parameters": [
+          {
+            "name": "recommendation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Recommendation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroundingOut"
                 }
               }
             }
@@ -1495,6 +1589,122 @@
         ],
         "title": "Body_uploadReport"
       },
+      "Claim": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "asset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset"
+          },
+          "citations": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ReportCitation"
+                },
+                {
+                  "$ref": "#/components/schemas/EngineCitation"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "kind",
+                "mapping": {
+                  "engine": "#/components/schemas/EngineCitation",
+                  "report": "#/components/schemas/ReportCitation"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Citations",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "Claim"
+      },
+      "ClaimResultOut": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "asset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset"
+          },
+          "citations": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ReportCitation"
+                },
+                {
+                  "$ref": "#/components/schemas/EngineCitation"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "kind",
+                "mapping": {
+                  "engine": "#/components/schemas/EngineCitation",
+                  "report": "#/components/schemas/ReportCitation"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Citations"
+          },
+          "grounded": {
+            "type": "boolean",
+            "title": "Grounded"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "memo_eligible": {
+            "type": "boolean",
+            "title": "Memo Eligible"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "text",
+          "asset",
+          "citations",
+          "grounded",
+          "issues",
+          "memo_eligible"
+        ],
+        "title": "ClaimResultOut"
+      },
       "ClassDriftOut": {
         "properties": {
           "asset_class": {
@@ -2051,6 +2261,25 @@
         ],
         "title": "DriftOut"
       },
+      "EngineCitation": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "engine",
+            "title": "Kind"
+          },
+          "figure": {
+            "type": "string",
+            "title": "Figure"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "figure"
+        ],
+        "title": "EngineCitation"
+      },
       "FindingOut": {
         "properties": {
           "subject": {
@@ -2165,6 +2394,59 @@
           "findings"
         ],
         "title": "FlaggedRuleOut"
+      },
+      "GroundingIn": {
+        "properties": {
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            },
+            "type": "array",
+            "title": "Claims"
+          }
+        },
+        "type": "object",
+        "required": [
+          "claims"
+        ],
+        "title": "GroundingIn"
+      },
+      "GroundingOut": {
+        "properties": {
+          "recommendation_id": {
+            "type": "integer",
+            "title": "Recommendation Id"
+          },
+          "check_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Id"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimResultOut"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/SummaryOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "recommendation_id",
+          "check_id",
+          "results",
+          "summary"
+        ],
+        "title": "GroundingOut"
       },
       "HTTPValidationError": {
         "properties": {
@@ -2441,6 +2723,33 @@
           "decision_note"
         ],
         "title": "InsightOut"
+      },
+      "Issue": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "uncited",
+              "report_not_found",
+              "page_not_found",
+              "quote_not_found",
+              "unknown_engine_figure",
+              "number_mismatch",
+              "asset_call_needs_report"
+            ],
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "Issue"
       },
       "LlmHealth": {
         "properties": {
@@ -2945,6 +3254,35 @@
         ],
         "title": "RecommendationOut"
       },
+      "ReportCitation": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "report",
+            "title": "Kind"
+          },
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "quote": {
+            "type": "string",
+            "title": "Quote"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "report_id",
+          "page",
+          "quote"
+        ],
+        "title": "ReportCitation"
+      },
       "ReportList": {
         "properties": {
           "items": {
@@ -3378,6 +3716,29 @@
         "type": "object",
         "title": "SuitabilityUpdate",
         "description": "Partial update of SuitabilityLimits: only supplied fields change; per-profile maps merge by profile."
+      },
+      "SummaryOut": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "grounded": {
+            "type": "integer",
+            "title": "Grounded"
+          },
+          "ungrounded": {
+            "type": "integer",
+            "title": "Ungrounded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "grounded",
+          "ungrounded"
+        ],
+        "title": "SummaryOut"
       },
       "ThresholdsOut": {
         "properties": {

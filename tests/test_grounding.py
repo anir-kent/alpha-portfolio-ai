@@ -67,7 +67,7 @@ def test_numbers_match_at_the_precision_stated(ctx):
     advisor, rec, rid = ctx
     line = rec["trade_lines"][0]
     text = f"Sell {line['symbol']}: ${line['amount']:,.2f}, {line['pct_of_portfolio']:.1f}% of the Portfolio."
-    cites = [engine_cite(f"trade_line.{line['symbol']}.amount")]
+    cites = [engine_cite(f"trade_line.{line['symbol']}.amount"), engine_cite(f"trade_line.{line['symbol']}.pct_of_portfolio")]
     body = check(advisor, rec, [{"text": text, "citations": cites}])
     assert body["results"][0]["grounded"] is True, body["results"][0]["issues"]
 
@@ -109,6 +109,12 @@ def test_a_number_with_no_engine_figure_is_flagged_even_when_cited(ctx):
     advisor, rec, rid = ctx
     claim = {"text": "Technology should return 12.5% next year.", "asset": "Information Technology",
              "citations": [report_cite(rid)]}
+    assert codes(check(advisor, rec, [claim])["results"][0]) == {"number_mismatch"}
+
+
+def test_a_number_matching_an_uncited_engine_figure_is_flagged(ctx):
+    advisor, rec, rid = ctx
+    claim = {"text": f"Turnover is {rec['turnover_pct']}%.", "citations": [engine_cite("total_value")]}
     assert codes(check(advisor, rec, [claim])["results"][0]) == {"number_mismatch"}
 
 
