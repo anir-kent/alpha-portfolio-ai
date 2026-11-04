@@ -836,6 +836,48 @@
         }
       }
     },
+    "/api/recommendations/{recommendation_id}/lineage": {
+      "get": {
+        "tags": [
+          "recommendations"
+        ],
+        "summary": "Get Lineage",
+        "operationId": "getRecommendationLineage",
+        "parameters": [
+          {
+            "name": "recommendation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Recommendation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lineage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/recommendations/{recommendation_id}/decision": {
       "post": {
         "tags": [
@@ -2995,6 +3037,102 @@
         ],
         "title": "IssueCount"
       },
+      "Lineage": {
+        "properties": {
+          "recommendation_id": {
+            "type": "integer",
+            "title": "Recommendation Id"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/LineageNode"
+            },
+            "type": "array",
+            "title": "Nodes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "recommendation_id",
+          "nodes"
+        ],
+        "title": "Lineage"
+      },
+      "LineageNode": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "report",
+              "insight",
+              "research_tilt",
+              "recommendation",
+              "decision",
+              "analysis"
+            ],
+            "title": "Stage"
+          },
+          "actor": {
+            "$ref": "#/components/schemas/ActorOut"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "parent_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Parent Ids"
+          },
+          "override": {
+            "type": "boolean",
+            "title": "Override"
+          },
+          "human_verified": {
+            "type": "boolean",
+            "title": "Human Verified"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourcePassage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "stage",
+          "actor",
+          "timestamp",
+          "payload",
+          "parent_ids",
+          "override",
+          "human_verified",
+          "source"
+        ],
+        "title": "LineageNode"
+      },
       "LlmHealth": {
         "properties": {
           "status": {
@@ -4062,6 +4200,41 @@
           "via_funds_pct"
         ],
         "title": "SectorExposureOut"
+      },
+      "SourcePassage": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "report_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report Title"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "passage": {
+            "type": "string",
+            "title": "Passage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_id",
+          "report_title",
+          "page",
+          "passage"
+        ],
+        "title": "SourcePassage"
       },
       "StepResult": {
         "properties": {

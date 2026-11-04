@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "./api/client";
 import type { operations } from "./api/schema";
 
@@ -106,7 +107,10 @@ export function AuditPage() {
             <tbody>
               {results.data.items.map((e) => (
                 <tr key={e.id} className={`border-b align-top ${e.type === "access_denied" ? "bg-red-50" : ""}`}>
-                  <td className="p-1">{e.id}</td>
+                  <td className="p-1">
+                    {e.id}
+                    {e.recommendation_id && <Link className="block text-xs underline" to={`/audit/recommendations/${e.recommendation_id}`}>Lineage</Link>}
+                  </td>
                   <td className="p-1 whitespace-nowrap">{e.timestamp}</td>
                   <td className="p-1">{e.type}</td>
                   <td className="p-1">

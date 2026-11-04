@@ -6,12 +6,13 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import approvals, audit, grounding, recommendations
+from app import approvals, audit, grounding, lineage as lineage_view, recommendations
 from app.config_service import Config, get_config
 from app.db import DecisionRow, RecommendationNarrativeRow, RecommendationRow, RecommendationTiltRow, User
 from app.deps import get_db, get_market, require
 from app.market_data import MarketData
 from app.rebalance import TradeLine
+from app.routers.audit import ActorOut
 from app.routers.analysis import ClassDriftOut, RuleOut
 from app.routers.grounding import ClaimResultOut
 
@@ -219,6 +220,47 @@ def get_recommendation(recommendation_id: int, user: User = Depends(require("rec
     if r is None:
         raise HTTPException(404, "Recommendation not found")
     return to_out(r, get_config(db), db)
+
+
+class SourcePassage(BaseModel):
+    report_id: str
+    report_title: str | None
+    page: int
+    passage: str
+
+
+class LineageNode(BaseModel):
+    id: int
+    type: str
+    stage: Literal["report", "insight", "research_tilt", "recommendation", "decision", "analysis"]
+    actor: ActorOut
+    timestamp: str
+    payload: dict
+    parent_ids: list[int]
+    override: bool  # a modification or Suitability exception approval
+    human_verified: bool
+    source: SourcePassage | None  # the Report passage behind an approved Insight
+
+
+class Lineage(BaseModel):
+    recommendation_id: int
+    nodes: list[LineageNode]  # oldest first
+
+
+@router.get("/recommendations/{recommendation_id}/lineage", response_model=Lineage, operation_id="getRecommendationLineage",
+            dependencies=[Depends(require("audit:read"))])
+def get_lineage(recommendation_id: int, db: Session = Depends(get_db)):
+    if db.get(RecommendationRow, recommendation_id) is None:
+        raise HTTPException(404, "Recommendation not found")
+    return Lineage(recommendation_id=recommendation_id, nodes=[
+        LineageNode(
+            id=n.event.id, type=n.event.type, stage=n.stage, timestamp=n.event.timestamp, payload=n.payload,
+            actor=ActorOut(kind=n.event.actor_kind, name=n.event.actor_name, role=n.event.actor_role,
+                           model=n.event.model, prompt_version=n.event.prompt_version),
+            parent_ids=n.parent_ids, override=n.override, human_verified=n.human_verified,
+            source=SourcePassage(**n.source) if n.source else None,
+        ) for n in lineage_view.lineage(db, recommendation_id)
+    ])
 
 
 @router.post("/recommendations/{recommendation_id}/decision", response_model=DecisionResult, operation_id="decideRecommendation")
