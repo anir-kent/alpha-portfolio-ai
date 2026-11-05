@@ -52,6 +52,17 @@ def test_list_is_newest_first_summary_rows_with_the_linked_portfolio_and_paginat
     assert page["total"] == 3 and [i["id"] for i in page["items"]] == [b]
 
 
+def test_failed_exchange_rows_carry_a_bounded_error_summary_and_ok_rows_none(app, login):
+    ok = add_exchange(app, ts="2026-01-01T00:00:00.000000Z")
+    bad = add_exchange(app, ts="2026-01-02T00:00:00.000000Z", outcome="error")
+    with app.state.session_factory() as db:
+        db.get(LlmExchangeRow, bad).error = "x" * 1000
+        db.commit()
+    by_id = {i["id"]: i for i in login("auditor").get("/api/llm/exchanges").json()["items"]}
+    assert by_id[ok]["error"] is None
+    assert by_id[bad]["error"].startswith("xxx") and len(by_id[bad]["error"]) == 200  # bounded: a summary, not bulk text
+
+
 def ids(c, **params):
     r = c.get("/api/llm/exchanges", params=params)
     assert r.status_code == 200, r.text

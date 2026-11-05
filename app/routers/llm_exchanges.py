@@ -88,6 +88,7 @@ class ExchangeSummary(BaseModel):
     latency_ms: int | None
     usage: dict | None
     telemetry: Literal["measured", "not_available_replayed"]
+    error: str | None  # a failed call's message, cut short: a summary for the row, the full text is in the detail
     hash: str
     recommendation_id: str | None  # from the Audit Event that references this Exchange
     portfolio_id: str | None
@@ -111,8 +112,12 @@ def referencing_events(db: Session, exchange_ids: list[int]) -> dict[int, list[A
     return found
 
 
+ERROR_SUMMARY_CHARS = 200
+
+
 def exchange_summary(r: LlmExchangeRow, events: list[AuditEventRow]) -> ExchangeSummary:
     return ExchangeSummary(
+        error=None if r.error is None else r.error[:ERROR_SUMMARY_CHARS],
         id=r.id, created_at=r.created_at, task=r.task, prompt_version=r.prompt_version, model=r.model, mode=r.mode,
         outcome=r.outcome, latency_ms=r.latency_ms, usage=_loads(r.usage_json), hash=r.hash,
         telemetry="measured" if r.mode == "live" else "not_available_replayed",
@@ -207,7 +212,7 @@ def stream_exchanges(request: Request, last_event_id: str | None = Header(None),
     """Push each new Exchange (as a summary row) once, in id order. A reconnect sends the standard `Last-Event-ID`;
     a value that is not an id is ignored and the stream starts at the tail."""
     db.close()  # hand the auth session's connection back: a stream lives for minutes and polls on its own sessions
-    after = int(last_event_id) if last_event_id and last_event_id.strip().isdigit() else None
+    after = int(last_event_id) if last_event_id and last_event_id.strip().isascii() and last_event_id.strip().isdigit() else None
     return StreamingResponse(_exchange_events(request, after), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 

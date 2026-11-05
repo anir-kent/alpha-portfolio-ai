@@ -7,6 +7,7 @@ export const NAV: NavItem[] = [
   { to: "/approvals", label: "Approvals", requires: "approvals:read" },
   { to: "/audit", label: "Audit", requires: "audit:read" },
   { to: "/governance", label: "Governance", requires: "governance:read" },
+  { to: "/llm-exchanges", label: "LLM Exchanges", requires: "llm:read" },
   { to: "/config", label: "Config", requires: "config:read" },
   { to: "/health", label: "Health", requires: "health:read" },
 ];

@@ -51,6 +51,17 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] Governance: model card, prompt log, AI quality panel
 - [ ] Adversarial fixtures (fabricated quote, wrong number, uncited call) flagged or blocked
 
+## LLM Exchanges
+- [ ] `auditor`, `compliance_officer`, `platform_owner` see "LLM Exchanges" under GATEWAY; `advisor` and `relationship_manager` do not, and `/llm-exchanges` shows no page for them
+- [ ] Feed lists newest first: time, task, prompt version, model, live/recorded pill, outcome, latency, tokens, linked Recommendation or Portfolio; figures right-aligned in monospace
+- [ ] Filters work alone and combined: task, prompt version, mode, outcome, date range
+- [ ] Recorded (replayed) rows show tokens and latency as "n/a (replayed)"; failed rows are marked and show the error summary
+- [ ] Empty database shows the empty state; a filter with no hits shows "No Exchanges match"; stopping the API shows the error line
+- [ ] Live tail on, then Run analysis (Queue page, another tab): new Exchanges appear without reloading, each once
+- [ ] Live tail off: rows already shown stay; the list catches up on anything missed
+- [ ] Stop the API while tailing: pill goes to "Reconnecting…"; restart it and the tail resumes with nothing missing or doubled
+- [ ] Tail refused (e.g. session expired) falls back to the list with "Stream unavailable, showing list" and no rows lost
+
 ## Supersession and clean portfolio
 - [ ] Rerun analysis: open recommendations become Superseded
 - [ ] C005 still produces no action

@@ -3007,6 +3007,17 @@
             ],
             "title": "Telemetry"
           },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
           "hash": {
             "type": "string",
             "title": "Hash"
@@ -3046,6 +3057,7 @@
           "latency_ms",
           "usage",
           "telemetry",
+          "error",
           "hash",
           "recommendation_id",
           "portfolio_id"

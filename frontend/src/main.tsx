@@ -6,6 +6,7 @@ import { api } from "./api/client";
 import { ApprovalsPage } from "./ApprovalsPage";
 import { AuditPage } from "./AuditPage";
 import { LineagePage } from "./LineagePage";
+import { ExchangesPage } from "./ExchangesPage";
 import { GovernancePage } from "./GovernancePage";
 import { PortfolioPage } from "./PortfolioPage";
 import { QueuePage } from "./QueuePage";
@@ -24,11 +25,11 @@ const ROLE_LABEL: Record<string, string> = {
   platform_owner: "Platform Owner",
 };
 const LOGIN_ROLES = ["advisor", "relationship_manager", "compliance_officer", "investment_committee", "auditor", "platform_owner"];
-const NAV_ICON: Record<string, string> = { "/queue": "queue", "/approvals": "approvals", "/audit": "audit", "/governance": "governance", "/config": "config", "/health": "health" };
+const NAV_ICON: Record<string, string> = { "/queue": "queue", "/approvals": "approvals", "/audit": "audit", "/governance": "governance", "/llm-exchanges": "spark", "/config": "config", "/health": "health" };
 /** Sidebar grouping only; which items appear is still decided by the server-issued permissions in nav.ts. */
 const NAV_GROUPS: { label: string; routes: string[] }[] = [
   { label: "MONITORING", routes: ["/queue", "/approvals"] },
-  { label: "GATEWAY", routes: ["/audit", "/governance"] },
+  { label: "GATEWAY", routes: ["/audit", "/governance", "/llm-exchanges"] },
   { label: "WORKSPACE", routes: ["/config", "/health"] },
 ];
 
@@ -188,6 +189,7 @@ function Shell({ username, role, permissions }: { username: string; role: string
             {permissions.includes("audit:read") && <Route path="/audit" element={<AuditPage />} />}
             {permissions.includes("audit:read") && <Route path="/audit/recommendations/:id" element={<LineagePage />} />}
             {permissions.includes("governance:read") && <Route path="/governance" element={<GovernancePage canRunFixtures={permissions.includes("governance:run")} />} />}
+            {permissions.includes("llm:read") && <Route path="/llm-exchanges" element={<ExchangesPage permissions={permissions} />} />}
             <Route path="*" element={<p className="text-ink-2">Select a section. Screens arrive in later tickets.</p>} />
           </Routes>
         </main>
