@@ -19,5 +19,7 @@ class Settings(BaseSettings):
     llm_model: str = "claude-sonnet-5-5"
     llm_recordings_dir: str = "data/llm_recordings"
     llm_record: bool = False  # live mode only: save each response as a recording
+    llm_stream_poll_seconds: float = 1.0  # how often the Exchange stream looks for new rows
+    llm_stream_max_seconds: float = 300.0  # a stream closes after this; the browser reconnects with its last event id
     seed_dir: str = "data/seed"
     cors_origins: list[str] = ["http://localhost:5173"]

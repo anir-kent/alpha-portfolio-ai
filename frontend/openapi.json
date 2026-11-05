@@ -752,6 +752,214 @@
         }
       }
     },
+    "/api/llm/exchanges": {
+      "get": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "List Exchanges",
+        "operationId": "listLlmExchanges",
+        "parameters": [
+          {
+            "name": "task",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task"
+            }
+          },
+          {
+            "name": "prompt_version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Prompt Version"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "live",
+                    "recorded"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mode"
+            }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "ok",
+                    "error"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExchangePage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/llm/exchanges/stream": {
+      "get": {
+        "tags": [
+          "llm"
+        ],
+        "summary": "Stream Exchanges",
+        "description": "Push each new Exchange (as a summary row) once, in id order. A reconnect sends the standard `Last-Event-ID`;\na value that is not an id is ignored and the stream starts at the tail.",
+        "operationId": "streamLlmExchanges",
+        "parameters": [
+          {
+            "name": "last-event-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/event-stream": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/llm/exchanges/{exchange_id}": {
       "get": {
         "tags": [
@@ -776,7 +984,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ExchangeOut"
+                  "$ref": "#/components/schemas/ExchangeDetail"
                 }
               }
             }
@@ -2508,7 +2716,7 @@
         ],
         "title": "EngineCitation"
       },
-      "ExchangeOut": {
+      "ExchangeDetail": {
         "properties": {
           "id": {
             "type": "integer",
@@ -2660,6 +2868,20 @@
           "hash": {
             "type": "string",
             "title": "Hash"
+          },
+          "used_by": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            },
+            "type": "array",
+            "title": "Used By"
+          },
+          "grounding": {
+            "items": {
+              "$ref": "#/components/schemas/GroundingVerdict"
+            },
+            "type": "array",
+            "title": "Grounding"
           }
         },
         "type": "object",
@@ -2682,9 +2904,154 @@
           "telemetry",
           "outcome",
           "error",
-          "hash"
+          "hash",
+          "used_by",
+          "grounding"
         ],
-        "title": "ExchangeOut"
+        "title": "ExchangeDetail"
+      },
+      "ExchangePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExchangeSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "ExchangePage"
+      },
+      "ExchangeSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "task": {
+            "type": "string",
+            "title": "Task"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "recorded"
+            ],
+            "title": "Mode"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error"
+            ],
+            "title": "Outcome"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage"
+          },
+          "telemetry": {
+            "type": "string",
+            "enum": [
+              "measured",
+              "not_available_replayed"
+            ],
+            "title": "Telemetry"
+          },
+          "hash": {
+            "type": "string",
+            "title": "Hash"
+          },
+          "recommendation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Id"
+          },
+          "portfolio_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portfolio Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "task",
+          "prompt_version",
+          "model",
+          "mode",
+          "outcome",
+          "latency_ms",
+          "usage",
+          "telemetry",
+          "hash",
+          "recommendation_id",
+          "portfolio_id"
+        ],
+        "title": "ExchangeSummary",
+        "description": "One feed row: everything needed to scan, none of the bulk text."
       },
       "FindingOut": {
         "properties": {
@@ -2972,6 +3339,55 @@
           "summary"
         ],
         "title": "GroundingOut"
+      },
+      "GroundingSummary": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "grounded": {
+            "type": "integer",
+            "title": "Grounded"
+          },
+          "ungrounded": {
+            "type": "integer",
+            "title": "Ungrounded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "grounded",
+          "ungrounded"
+        ],
+        "title": "GroundingSummary"
+      },
+      "GroundingVerdict": {
+        "properties": {
+          "check_id": {
+            "type": "string",
+            "title": "Check Id"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/GroundingSummary"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimResult"
+            },
+            "type": "array",
+            "title": "Claims"
+          }
+        },
+        "type": "object",
+        "required": [
+          "check_id",
+          "summary",
+          "claims"
+        ],
+        "title": "GroundingVerdict",
+        "description": "The validator's verdict on the Claims one referencing event produced, joined through that event's check id."
       },
       "HTTPValidationError": {
         "properties": {
