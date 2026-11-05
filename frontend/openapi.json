@@ -1618,6 +1618,110 @@
         ],
         "title": "ActorOut"
       },
+      "AiStepOut": {
+        "properties": {
+          "step": {
+            "type": "string",
+            "enum": [
+              "tilt",
+              "memo"
+            ],
+            "title": "Step"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "live",
+              "recorded"
+            ],
+            "title": "Mode"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "telemetry": {
+            "type": "string",
+            "enum": [
+              "measured",
+              "not_available_replayed"
+            ],
+            "title": "Telemetry"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "failed"
+            ],
+            "title": "Outcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "grounded": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grounded"
+          },
+          "ungrounded": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ungrounded"
+          },
+          "exchange_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exchange Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "step",
+          "mode",
+          "latency_ms",
+          "telemetry",
+          "outcome",
+          "reason",
+          "grounded",
+          "ungrounded"
+        ],
+        "title": "AiStepOut",
+        "description": "How far to rely on one AI step. No prompt or reply text; the Exchange id only for roles holding `llm:read`."
+      },
       "ApprovalItem": {
         "properties": {
           "step": {
@@ -4771,6 +4875,14 @@
                 "type": "null"
               }
             ]
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/AiStepOut"
+            },
+            "type": "array",
+            "title": "Steps",
+            "default": []
           }
         },
         "type": "object",

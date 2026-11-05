@@ -9,6 +9,7 @@ Button labels below are taken from the code, not from a live run, and may differ
 **LLM mode.** `.env` may be in live mode (`APP_LLM_MODE=live`, `APP_LLM_RECORD=true`). This matters for what you will see:
 - The repo only ships recordings for insight extraction. In `recorded` mode, the tilt, rationale, memo and queue narrative all fail with `LlmError`. The app handles that by showing a "failed" status instead of crashing.
 - For a realistic AI walkthrough, stay in live mode. Each reply is also saved as a recording, so you can switch to `recorded` for repeat runs.
+- Recorded mode ships recordings only for insight extraction, so the tilt, rationale, memo and narrative steps show failed Exchanges there. In a Recommendation's AI contribution each such step shows as `recorded` and `failed` with a short reason, and latency reads "n/a (replayed)".
 - A failed AI step is itself a useful check. The deterministic parts (drift, suitability, approvals) must still work.
 
 **Reset and start** (three terminals, from the repo root):

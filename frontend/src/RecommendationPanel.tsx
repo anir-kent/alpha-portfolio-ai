@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { api } from "./api/client";
 import type { components } from "./api/schema";
+import { ExchangeDrawer } from "./ExchangeDrawer";
 import { Citations, DeltaBar, Drawer, Empty, Icon, Pill, RULE_TONE, money, pp, type Tone } from "./ui";
 
 type Detail = components["schemas"]["PortfolioDetail"];
@@ -9,6 +10,7 @@ type Rec = components["schemas"]["RecommendationOut"];
 type Rule = components["schemas"]["RuleOut"];
 type LineIn = components["schemas"]["TradeLineIn"];
 type Research = NonNullable<Rec["research"]>;
+type AiStep = Research["steps"][number];
 type Action = "accept" | "reject" | "modify";
 
 const STATUS_LABEL: Record<Rec["status"], string> = {
@@ -76,8 +78,32 @@ function TiltTrack({ proposed, allowed, bound }: { proposed: number; allowed: nu
   );
 }
 
+const STEP_LABEL: Record<AiStep["step"], string> = { tilt: "Research Tilt", memo: "Rationale and memo" };
+
+/** One line per AI step: how far to rely on it. Figures only; the prompt and reply text stay with `llm:read` reviewers. */
+function StepSummary({ step, onOpen }: { step: AiStep; onOpen: (id: number) => void }) {
+  const failed = step.outcome === "failed";
+  const counts = step.grounded !== null && step.ungrounded !== null;
+  return (
+    <li className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="font-medium text-ink">{STEP_LABEL[step.step]}</span>
+      <Pill tone={step.mode === "live" ? "ai" : "mute"}>{step.mode === "live" ? "live" : "recorded"}</Pill>
+      {failed ? <Pill tone="neg"><Icon name="alert" size={11} />failed</Pill> : <Pill tone="pos">ok</Pill>}
+      <span className="mono text-ink-3">
+        {step.latency_ms === null ? "n/a (replayed)" : `${step.latency_ms} ms`}
+        {counts && !failed && ` · ${step.grounded} grounded · ${step.ungrounded} ungrounded`}
+      </span>
+      {failed && step.reason && <span className="text-ink-2">{step.reason}</span>}
+      {step.exchange_id !== null && (
+        <button type="button" className="btn btn-sm" onClick={() => onOpen(step.exchange_id!)}>Open exchange</button>
+      )}
+    </li>
+  );
+}
+
 function ResearchSection({ research }: { research: Research }) {
-  const { tilt, narrative } = research;
+  const { tilt, narrative, steps } = research;
+  const [exchangeId, setExchangeId] = useState<number | null>(null);
   const grounded = narrative?.claims.filter((c) => c.grounded).length ?? 0;
   const ungrounded = (narrative?.claims.length ?? 0) - grounded;
   return (
@@ -86,6 +112,8 @@ function ResearchSection({ research }: { research: Research }) {
         <Pill tone="ai"><Icon name="spark" size={10} />AI contribution</Pill>
         <span className="font-normal text-ink-2">The AI proposes and explains; the engine owns every number and compliance outcome.</span>
       </h3>
+
+      {steps.length > 0 && <ul className="space-y-1" aria-label="AI steps">{steps.map((st) => <StepSummary key={st.step} step={st} onOpen={setExchangeId} />)}</ul>}
 
       {tilt && (
         tilt.status === "failed" ? (
@@ -144,6 +172,7 @@ function ResearchSection({ research }: { research: Research }) {
           </>
         )
       )}
+      {exchangeId !== null && <ExchangeDrawer id={exchangeId} canLineage={false} onClose={() => setExchangeId(null)} />}
     </section>
   );
 }

@@ -72,6 +72,12 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] A failed Exchange shows the error text and any raw reply that was captured
 - [ ] Lineage page, as a role with `llm:read`: AI nodes show "View LLM Exchange" and open the same drawer; as a role without `llm:read` the button is absent
 
+### Advisor AI-step summary
+- [ ] `advisor`: a Recommendation's AI contribution lists each AI step (Research Tilt, Rationale and memo) with a live or recorded pill, ok or failed, latency and grounded/ungrounded counts in monospace; no prompt or reply text and no "Open exchange" button
+- [ ] Recorded mode: latency reads "n/a (replayed)"; steps with no recording show `failed` with a short reason, and the plain rule-based Recommendation is unaffected
+- [ ] `relationship_manager`: same summary, client name and email still masked
+- [ ] `compliance_officer` (Portfolio page): steps also show "Open exchange", which opens the Exchange drawer
+
 ## Supersession and clean portfolio
 - [ ] Rerun analysis: open recommendations become Superseded
 - [ ] C005 still produces no action

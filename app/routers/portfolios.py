@@ -127,5 +127,5 @@ def portfolio(
         restrictions=[RestrictionOut(kind=r.kind, value=r.value) for r in restrictions],
         as_of=market.as_of, total_value=total, holdings=rows, drift=drift,
         sector_exposure=portfolio_view.sector_exposure(rows, market), suitability=suit,
-        recommendation=to_out(latest, get_config(db), db) if latest and latest.status != "superseded" else None, history=history_for(db, c.id),
+        recommendation=to_out(latest, get_config(db), db, user) if latest and latest.status != "superseded" else None, history=history_for(db, c.id),
     )
