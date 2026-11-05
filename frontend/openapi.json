@@ -1719,6 +1719,39 @@
         ],
         "title": "Body_uploadReport"
       },
+      "CaptureHealth": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "live": {
+            "type": "integer",
+            "title": "Live"
+          },
+          "recorded": {
+            "type": "integer",
+            "title": "Recorded"
+          },
+          "errors": {
+            "type": "integer",
+            "title": "Errors"
+          },
+          "unreferenced": {
+            "type": "integer",
+            "title": "Unreferenced"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "live",
+          "recorded",
+          "errors",
+          "unreferenced"
+        ],
+        "title": "CaptureHealth"
+      },
       "Claim": {
         "properties": {
           "text": {
@@ -2863,6 +2896,9 @@
           "quality": {
             "$ref": "#/components/schemas/Quality"
           },
+          "capture_health": {
+            "$ref": "#/components/schemas/CaptureHealth"
+          },
           "fixtures": {
             "anyOf": [
               {
@@ -2879,6 +2915,7 @@
           "model_card",
           "prompt_log",
           "quality",
+          "capture_health",
           "fixtures"
         ],
         "title": "GovernanceOut"
@@ -5002,6 +5039,21 @@
               }
             ],
             "title": "Reason"
+          },
+          "exchanges_checked": {
+            "type": "integer",
+            "title": "Exchanges Checked"
+          },
+          "first_broken_exchange_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Broken Exchange Id"
           }
         },
         "type": "object",
@@ -5009,7 +5061,9 @@
           "valid",
           "checked",
           "first_broken_id",
-          "reason"
+          "reason",
+          "exchanges_checked",
+          "first_broken_exchange_id"
         ],
         "title": "Verification"
       },

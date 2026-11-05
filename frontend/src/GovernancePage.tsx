@@ -35,7 +35,7 @@ export function GovernancePage({ canRunFixtures }: { canRunFixtures: boolean }) 
 
   if (gov.isPending) return <Empty>Loading…</Empty>;
   if (gov.isError) return <ErrorLine>{gov.error.message}</ErrorLine>;
-  const { model_card: card, prompt_log: log, quality: q, fixtures: fx } = gov.data;
+  const { model_card: card, prompt_log: log, quality: q, fixtures: fx, capture_health: ch } = gov.data;
   const passTone = q.pass_rate === null ? undefined : q.pass_rate >= 0.9 ? "pos" : "neg";
 
   return (
@@ -81,6 +81,19 @@ export function GovernancePage({ canRunFixtures }: { canRunFixtures: boolean }) 
           </div>
         </Panel>
       </div>
+
+      <Panel
+        title="Capture health" label="Capture health" flush
+        aside={<Pill tone={ch.unreferenced > 0 ? "warn" : "pos"}>{ch.unreferenced > 0 ? "Unanchored Exchanges" : "All Exchanges anchored"}</Pill>}
+      >
+        <div className="grid grid-cols-2 divide-x divide-line sm:grid-cols-5">
+          <Kpi label="Exchanges" value={String(ch.total)} sub="stored, append-only" />
+          <Kpi label="Live" value={String(ch.live)} sub="crossed the wire" />
+          <Kpi label="Recorded" value={String(ch.recorded)} sub="replayed" />
+          <Kpi label="Errors" value={String(ch.errors)} sub="failed calls, kept" tone={ch.errors > 0 ? "neg" : undefined} />
+          <Kpi label="Unreferenced" value={String(ch.unreferenced)} sub="no Audit Event points here" tone={ch.unreferenced > 0 ? "neg" : undefined} />
+        </div>
+      </Panel>
 
       <Panel
         title="Adversarial fixtures" label="Adversarial fixtures"

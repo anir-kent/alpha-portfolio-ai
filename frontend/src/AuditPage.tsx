@@ -43,14 +43,14 @@ export function VerifyPanel() {
       <div className="ml-auto flex items-center gap-3">
         {!v && !verify.isPending && <Pill tone="mute">Not verified this session</Pill>}
         {verify.isPending && <Pill tone="info">Verifying…</Pill>}
-        {v?.valid && <span role="status"><Pill tone="pos"><Icon name="approvals" size={11} />Chain intact</Pill> <span className="mono text-ink-2">{v.checked} events verified</span></span>}
+        {v?.valid && <span role="status"><Pill tone="pos"><Icon name="approvals" size={11} />Chain intact</Pill> <span className="mono text-ink-2">{v.checked} events, {v.exchanges_checked} Exchanges verified</span></span>}
         <button className="btn btn-primary" onClick={() => verify.mutate()} disabled={verify.isPending}>Verify chain</button>
       </div>
       {verify.isError && <div className="w-full"><ErrorLine>{verify.error.message}</ErrorLine></div>}
       {v && !v.valid && (
         <p role="alert" className="callout callout-neg w-full">
           <Icon name="alert" size={16} />
-          <span><strong>Tampered link.</strong> Chain broken at event <span className="mono">#{v.first_broken_id}</span>: {v.reason} (<span className="mono">{v.checked}</span> events verified before the break).</span>
+          <span><strong>{v.first_broken_exchange_id !== null ? "Tampered Exchange." : "Tampered link."}</strong> Chain broken at event <span className="mono">#{v.first_broken_id}</span>: {v.reason} (<span className="mono">{v.checked}</span> events verified before the break).</span>
         </p>
       )}
     </section>

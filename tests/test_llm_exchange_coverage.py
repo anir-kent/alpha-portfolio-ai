@@ -94,7 +94,10 @@ def test_losing_the_exchange_store_fails_each_ai_step_but_nothing_deterministic(
     assert rec["research"]["tilt"]["status"] == "failed"
     decided = advisor.post(f"/api/recommendations/{rec['id']}/decision", json={"action": "accept"})
     assert decided.status_code == 200, decided.text
-    assert login("auditor").get("/api/audit/verify").json()["valid"]
+    # events written before the store was lost still pin Exchanges that are now gone; verification says so rather than erroring
+    verdict = login("auditor").get("/api/audit/verify").json()
+    assert verdict["valid"] is False and "missing" in verdict["reason"]
+    assert verdict["first_broken_exchange_id"] is not None
 
 
 def test_no_client_name_or_email_ever_appears_in_a_captured_prompt(app, login, captured):

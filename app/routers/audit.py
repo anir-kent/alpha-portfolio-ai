@@ -48,6 +48,8 @@ class Verification(BaseModel):
     checked: int
     first_broken_id: int | None
     reason: str | None
+    exchanges_checked: int
+    first_broken_exchange_id: int | None  # set when the break is an altered or missing LLM Exchange
 
 
 def _out(r: AuditEventRow) -> AuditEvent:
@@ -88,4 +90,5 @@ def search_events(
             dependencies=[Depends(require("audit:verify"))])
 def verify_chain(db: Session = Depends(get_db)):
     v = audit.verify(db)
-    return Verification(valid=v.valid, checked=v.checked, first_broken_id=v.first_broken_id, reason=v.reason)
+    return Verification(valid=v.valid, checked=v.checked, first_broken_id=v.first_broken_id, reason=v.reason,
+                        exchanges_checked=v.exchanges_checked, first_broken_exchange_id=v.first_broken_exchange_id)

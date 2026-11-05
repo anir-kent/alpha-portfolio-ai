@@ -239,3 +239,88 @@ def test_provider_redirect_is_reported_as_an_http_failure(live_app):
     app, _ = live_app(lambda r: httpx.Response(301, headers={"location": "https://elsewhere.example/"}))
     ex = exchange_for(app, upload(as_role(app, "research_analyst")).json())
     assert ex["outcome"] == "error" and "HTTP 301" in ex["error"]
+
+
+# --- verification and capture health (ticket 04) -----------------------------------------------------------------
+
+def tamper(app, sql, **params):
+    with app.state.session_factory() as db:
+        db.execute(text(sql), params)
+        db.commit()
+
+
+def test_verify_also_checks_every_referenced_exchange(app, login):
+    upload(login("research_analyst"))
+    body = login("auditor").get("/api/audit/verify").json()
+    assert body["valid"] is True
+    assert body["exchanges_checked"] == 1 and body["first_broken_exchange_id"] is None
+
+
+def test_verify_names_the_first_event_whose_exchange_was_altered(app, login):
+    first = upload(login("research_analyst")).json()
+    second = upload(login("research_analyst"), content=b"Another view. We are cautious on energy.\n").json()
+    e1, e2 = extraction_event(app, first["id"]), extraction_event(app, second["id"])
+    tamper(app, "update llm_exchanges set user_prompt = 'edited' where id in (:a, :b)", a=e1["exchange_id"], b=e2["exchange_id"])
+    with app.state.session_factory() as db:
+        first_event = db.scalars(select(AuditEventRow).where(
+            AuditEventRow.report_id == first["id"], AuditEventRow.type == "insight_extracted")).one().id
+
+    body = login("auditor").get("/api/audit/verify").json()
+    assert body["valid"] is False
+    assert body["first_broken_id"] == first_event
+    assert body["first_broken_exchange_id"] == e1["exchange_id"]
+    assert "Exchange" in body["reason"] and "altered" in body["reason"]
+
+
+def test_verify_detects_a_removed_exchange(app, login):
+    payload = extraction_event(app, upload(login("research_analyst")).json()["id"])
+    tamper(app, "delete from llm_exchanges where id = :i", i=payload["exchange_id"])
+    body = login("auditor").get("/api/audit/verify").json()
+    assert body["valid"] is False and body["first_broken_exchange_id"] == payload["exchange_id"]
+    assert "Exchange" in body["reason"] and "missing" in body["reason"]
+
+
+def test_verify_detects_an_exchange_rewritten_with_a_matching_hash(app, login):
+    """Editing the content and recomputing the Exchange's own hash is still caught: the Audit Event pins the original."""
+    from app.db import LlmExchangeRow
+    from app.exchanges import exchange_digest
+
+    payload = extraction_event(app, upload(login("research_analyst")).json()["id"])
+    with app.state.session_factory() as db:
+        row = db.get(LlmExchangeRow, payload["exchange_id"])
+        row.user_prompt = "rewritten"
+        row.hash = exchange_digest(row)
+        db.commit()
+    body = login("auditor").get("/api/audit/verify").json()
+    assert body["valid"] is False and body["first_broken_exchange_id"] == payload["exchange_id"]
+
+
+def test_events_without_an_exchange_reference_are_pre_capture_not_a_break(app, login):
+    legacy = audit.Actor.system("legacy")
+    with app.state.session_factory() as db:
+        audit.record(db, "memo_generated", legacy, {"status": "complete"})
+    body = login("auditor").get("/api/audit/verify").json()
+    assert body["valid"] is True and body["checked"] == 1 and body["exchanges_checked"] == 0
+
+
+def test_governance_reports_capture_health(app, login):
+    from app.db import LlmExchangeRow
+    from app.exchanges import exchange_digest
+
+    upload(login("research_analyst"))  # one recorded ok exchange, referenced
+    upload(login("research_analyst"), content=b"A report nobody recorded a reply for.\n")  # one recorded error, referenced
+    with app.state.session_factory() as db:
+        orphan = LlmExchangeRow(
+            created_at="2026-01-01T00:00:00.000000Z", task="t", prompt_version="p@v1", model="m", mode="live",
+            endpoint_host="h", system_text="s", user_prompt="u", reply_schema_json="{}", outcome="ok", hash="")
+        orphan.hash = exchange_digest(orphan)
+        db.add(orphan)
+        db.commit()
+    r = login("auditor").get("/api/governance")
+    assert r.status_code == 200
+    assert r.json()["capture_health"] == {"total": 3, "live": 1, "recorded": 2, "errors": 1, "unreferenced": 1}
+
+
+def test_capture_health_is_all_zero_on_an_empty_database(login):
+    assert login("auditor").get("/api/governance").json()["capture_health"] == {
+        "total": 0, "live": 0, "recorded": 0, "errors": 0, "unreferenced": 0}
