@@ -208,3 +208,23 @@ export function useQueue(filters: QueueParams) {
     },
   });
 }
+
+/* ---------- drawer: portalled, closes on Escape and the scrim ---------- */
+export function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  // Portalled to <body>: the glass panels use backdrop-filter, which would otherwise become the containing block of a fixed drawer.
+  return createPortal(
+    <>
+      <div className="scrim" onClick={onClose} />
+      <aside className="drawer" role="dialog" aria-modal="true" aria-label={title}>
+        <div className="panel-head !px-4 !py-2.5"><h2 className="!text-[1.0769rem]">{title}</h2><button type="button" className="btn btn-ghost btn-sm ml-auto" onClick={onClose} aria-label="Close"><Icon name="close" /></button></div>
+        <div className="flex-1 space-y-3 overflow-y-auto p-4">{children}</div>
+      </aside>
+    </>,
+    document.body,
+  );
+}

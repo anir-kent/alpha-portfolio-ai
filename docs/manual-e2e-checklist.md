@@ -62,6 +62,16 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] Stop the API while tailing: pill goes to "Reconnecting…"; restart it and the tail resumes with nothing missing or doubled
 - [ ] Tail refused (e.g. session expired) falls back to the list with "Stream unavailable, showing list" and no rows lost
 
+### Exchange drawer, download and lineage entry
+- [ ] Click a feed row (or its # button): a drawer opens with Prompt, Schema, Reply, Metadata and Used by tabs; Escape and a click on the scrim both close it
+- [ ] Prompt shows system text and user prompt; long content scrolls inside the drawer and the page behind does not clip it
+- [ ] Reply shows the raw text and the parsed view; a reply with ungrounded Claims shows them flagged in red, with the tab marked
+- [ ] Metadata shows hash, tokens, latency, model, endpoint host and mode; a recorded Exchange shows "n/a (replayed)" for tokens and latency
+- [ ] Used by lists the referencing Audit Events and the grounding verdict, and links to the Recommendation's lineage
+- [ ] "Download JSON" saves `llm-exchange-<id>.json` containing the Exchange and its `hash`
+- [ ] A failed Exchange shows the error text and any raw reply that was captured
+- [ ] Lineage page, as a role with `llm:read`: AI nodes show "View exchange" and open the same drawer; as a role without `llm:read` the button is absent
+
 ## Supersession and clean portfolio
 - [ ] Rerun analysis: open recommendations become Superseded
 - [ ] C005 still produces no action

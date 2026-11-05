@@ -187,7 +187,7 @@ function Shell({ username, role, permissions }: { username: string; role: string
             {permissions.includes("portfolio:read") && <Route path="/portfolios/:id" element={<PortfolioPage canDecide={permissions.includes("recommendation:decide")} />} />}
             {permissions.includes("approvals:read") && <Route path="/approvals" element={<ApprovalsPage permissions={permissions} />} />}
             {permissions.includes("audit:read") && <Route path="/audit" element={<AuditPage />} />}
-            {permissions.includes("audit:read") && <Route path="/audit/recommendations/:id" element={<LineagePage />} />}
+            {permissions.includes("audit:read") && <Route path="/audit/recommendations/:id" element={<LineagePage canViewExchange={permissions.includes("llm:read")} />} />}
             {permissions.includes("governance:read") && <Route path="/governance" element={<GovernancePage canRunFixtures={permissions.includes("governance:run")} />} />}
             {permissions.includes("llm:read") && <Route path="/llm-exchanges" element={<ExchangesPage permissions={permissions} />} />}
             <Route path="*" element={<p className="text-ink-2">Select a section. Screens arrive in later tickets.</p>} />

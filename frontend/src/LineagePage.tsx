@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "./api/client";
+import { ExchangeDrawer } from "./ExchangeDrawer";
 import type { components } from "./api/schema";
 import { ErrorLine, Icon, PageHeader, Panel, Pill, Empty } from "./ui";
 
@@ -15,8 +16,15 @@ const STAGES: Record<Stage, string> = {
 const COLUMNS: Stage[][] = [["analysis", "report"], ["insight"], ["research_tilt"], ["recommendation"], ["decision"]];
 const COLUMN_TITLE = ["Report passage", "Insight", "Research Tilt", "Recommendation", "Decisions"];
 
-function NodeCard({ n, refCb }: { n: Node; refCb: (el: HTMLLIElement | null) => void }) {
+/** The Exchange an AI node's event points at, if the event was captured (pre-capture events carry none). */
+export function exchangeIdOf(n: Node): number | null {
+  const id = n.payload.exchange_id;
+  return typeof id === "number" ? id : null;
+}
+
+function NodeCard({ n, refCb, onView }: { n: Node; refCb: (el: HTMLLIElement | null) => void; onView?: (id: number) => void }) {
   const ai = n.actor.model != null;
+  const exchangeId = exchangeIdOf(n);
   return (
     <li
       ref={refCb}
@@ -37,6 +45,9 @@ function NodeCard({ n, refCb }: { n: Node; refCb: (el: HTMLLIElement | null) => 
       </p>
       <p className="mono text-[0.7692rem] text-ink-3">{n.timestamp}</p>
       {ai && <p className="mono text-[0.7692rem] text-ai">{n.actor.model} · {n.actor.prompt_version}</p>}
+      {ai && onView && exchangeId !== null && (
+        <button type="button" className="btn btn-sm mt-1" onClick={() => onView(exchangeId)}>View exchange</button>
+      )}
       {n.source && (
         <blockquote className="mt-1 border-l-[3px] border-line-strong pl-2 text-ink-2 italic">
           &ldquo;{n.source.passage}&rdquo;
@@ -50,7 +61,7 @@ function NodeCard({ n, refCb }: { n: Node; refCb: (el: HTMLLIElement | null) => 
 }
 
 /** Lineage DAG: nodes sit in stage columns, SVG curves follow each parent link measured from the rendered cards. */
-function Dag({ nodes }: { nodes: Node[] }) {
+function Dag({ nodes, onView }: { nodes: Node[]; onView?: (id: number) => void }) {
   const wrap = useRef<HTMLDivElement>(null);
   const els = useRef(new Map<number, HTMLLIElement>());
   const [edges, setEdges] = useState<{ d: string; key: string; override: boolean }[]>([]);
@@ -93,7 +104,7 @@ function Dag({ nodes }: { nodes: Node[] }) {
             <div key={COLUMN_TITLE[i]}>
               <p className="eyebrow mb-1.5">{COLUMN_TITLE[i]}</p>
               <ol className="space-y-2">
-                {col.map((n) => <NodeCard key={n.id} n={n} refCb={(el) => { if (el) els.current.set(n.id, el); else els.current.delete(n.id); }} />)}
+                {col.map((n) => <NodeCard key={n.id} n={n} onView={onView} refCb={(el) => { if (el) els.current.set(n.id, el); else els.current.delete(n.id); }} />)}
                 {col.length === 0 && <li className="rounded-xl border border-dashed border-line-strong p-2 text-ink-3">none</li>}
               </ol>
             </div>
@@ -104,8 +115,9 @@ function Dag({ nodes }: { nodes: Node[] }) {
   );
 }
 
-export function LineagePage() {
+export function LineagePage({ canViewExchange = false }: { canViewExchange?: boolean }) {
   const { id } = useParams();
+  const [exchangeId, setExchangeId] = useState<number | null>(null);
   const lineage = useQuery({
     queryKey: ["lineage", id],
     queryFn: async () => {
@@ -125,9 +137,10 @@ export function LineagePage() {
       {lineage.isError && <ErrorLine>{lineage.error.message}</ErrorLine>}
       {lineage.data && (
         <Panel label="Lineage graph">
-          {lineage.data.nodes.length === 0 ? <Empty>No audit events for this Recommendation.</Empty> : <Dag nodes={lineage.data.nodes} />}
+          {lineage.data.nodes.length === 0 ? <Empty>No audit events for this Recommendation.</Empty> : <Dag nodes={lineage.data.nodes} onView={canViewExchange ? setExchangeId : undefined} />}
         </Panel>
       )}
+      {exchangeId !== null && <ExchangeDrawer id={exchangeId} canLineage onClose={() => setExchangeId(null)} />}
     </div>
   );
 }

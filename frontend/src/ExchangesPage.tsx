@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "./api/client";
+import { ExchangeDrawer } from "./ExchangeDrawer";
 import type { components } from "./api/schema";
 import { Empty, ErrorLine, Icon, PageHeader, Panel, Pill } from "./ui";
 
@@ -102,6 +103,7 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
   const [limit, setLimit] = useState(PAGE);
   const [tail, setTail] = useState(false);
   const [live, setLive] = useState<Exchange[]>([]);
+  const [openId, setOpenId] = useState<number | null>(null);
 
   const listKey = ["llm-exchanges", applied, limit] as const;
   const list = useQuery({
@@ -213,8 +215,11 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
                 const failed = x.outcome === "error";
                 const t = tokenCounts(x.usage);
                 return (
-                  <tr key={x.id} style={{ boxShadow: failed ? "inset 3px 0 var(--color-neg)" : undefined }} className={failed ? "!bg-neg-bg" : ""}>
-                    <td className="num">{x.id}</td>
+                  <tr key={x.id} style={{ boxShadow: failed ? "inset 3px 0 var(--color-neg)" : undefined }} className={`cursor-pointer ${failed ? "!bg-neg-bg" : ""}`}
+                    onClick={(e) => { if (!(e.target as HTMLElement).closest("a, button")) setOpenId(x.id); }}>
+                    <td className="num">
+                      <button type="button" className="mono text-brand hover:underline" aria-label={`Open Exchange ${x.id}`} onClick={() => setOpenId(x.id)}>{x.id}</button>
+                    </td>
                     <td className="mono whitespace-nowrap">{x.created_at}</td>
                     <td className="mono">{x.task}</td>
                     <td className="mono">{x.prompt_version}</td>
@@ -240,6 +245,7 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
           )}
         </Panel>
       )}
+      {openId !== null && <ExchangeDrawer id={openId} canLineage={canLineage} onClose={() => setOpenId(null)} />}
     </div>
   );
 }

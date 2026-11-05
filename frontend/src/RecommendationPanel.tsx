@@ -1,9 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useState } from "react";
-import { createPortal } from "react-dom";
+import { useId, useState } from "react";
 import { api } from "./api/client";
 import type { components } from "./api/schema";
-import { Citations, DeltaBar, Empty, Icon, Pill, RULE_TONE, money, pp, type Tone } from "./ui";
+import { Citations, DeltaBar, Drawer, Empty, Icon, Pill, RULE_TONE, money, pp, type Tone } from "./ui";
 
 type Detail = components["schemas"]["PortfolioDetail"];
 type Rec = components["schemas"]["RecommendationOut"];
@@ -150,25 +149,6 @@ function ResearchSection({ research }: { research: Research }) {
 }
 
 /* ---------- trade modification drawer ---------- */
-function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-  // Portalled to <body>: the glass panels use backdrop-filter, which would otherwise become the containing block of a fixed drawer.
-  return createPortal(
-    <>
-      <div className="scrim" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-modal="true" aria-label={title}>
-        <div className="panel-head !px-4 !py-2.5"><h2 className="!text-[1.0769rem]">{title}</h2><button type="button" className="btn btn-ghost btn-sm ml-auto" onClick={onClose} aria-label="Close"><Icon name="close" /></button></div>
-        <div className="flex-1 space-y-3 overflow-y-auto p-4">{children}</div>
-      </aside>
-    </>,
-    document.body,
-  );
-}
-
 function ModifyEditor({ rec, accounts, lines, onChange }: { rec: Rec; accounts: string[]; lines: LineIn[]; onChange: (l: LineIn[]) => void }) {
   const patch = (i: number, p: Partial<LineIn>) => onChange(lines.map((l, j) => (j === i ? { ...l, ...p } : l)));
   const names = Object.fromEntries(rec.trade_lines.map((l) => [l.symbol, l.name]));
