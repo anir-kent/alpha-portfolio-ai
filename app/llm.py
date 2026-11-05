@@ -21,7 +21,12 @@ TEMPERATURE = 0.0  # reported on the governance model card
 
 
 class LlmError(Exception):
-    pass
+    """A failed LLM call. When capture recorded the failure, `exchange_id`/`exchange_hash` point at the error Exchange."""
+
+    def __init__(self, message: str = "", *, exchange_id: int | None = None, exchange_hash: str | None = None):
+        super().__init__(message)
+        self.exchange_id = exchange_id
+        self.exchange_hash = exchange_hash
 
 
 @dataclass(frozen=True)
@@ -38,6 +43,14 @@ class LlmResponse:
     content: dict
     model: str
     prompt_version: str
+    # Set by the capture wrapper once the Exchange is stored (ADR-0004).
+    exchange_id: int | None = None
+    exchange_hash: str | None = None
+    # Transport detail an adapter may know; absent for a replay.
+    messages: list[dict] | None = None
+    raw_reply: str | None = None
+    usage: dict | None = None
+    latency_ms: int | None = None
 
 
 class LlmClient(Protocol):

@@ -19,13 +19,13 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     "portfolio_manager": frozenset({"portfolio:read", "recommendation:read", "config:read", "insight:read", "grounding:read"}),
     "research_analyst": frozenset({"report:upload", "report:read", "insight:approve", "insight:read"}),
     "compliance_officer": frozenset(
-        {"portfolio:read", "recommendation:read", "compliance:decide", "approvals:read", "config:read", "client:pii", "insight:read", "grounding:read"}
+        {"portfolio:read", "recommendation:read", "compliance:decide", "approvals:read", "config:read", "client:pii", "insight:read", "grounding:read", "llm:read"}
     ),
     "investment_committee": frozenset({"recommendation:read", "committee:decide", "approvals:read"}),
     "auditor": frozenset(
-        {"audit:read", "audit:verify", "governance:read", "governance:run", "recommendation:read", "portfolio:read", "config:read", "insight:read", "grounding:read"}
+        {"audit:read", "audit:verify", "governance:read", "governance:run", "recommendation:read", "portfolio:read", "config:read", "insight:read", "grounding:read", "llm:read"}
     ),
-    "platform_owner": frozenset({"config:read", "config:write", "health:read", "governance:read", "governance:run"}),
+    "platform_owner": frozenset({"config:read", "config:write", "health:read", "governance:read", "governance:run", "llm:read"}),
 }
 
 assert set(PERMISSIONS) == set(ROLES)

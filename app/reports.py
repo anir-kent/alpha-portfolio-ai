@@ -134,6 +134,11 @@ def add_insight(
     return row
 
 
+def _exchange_ref(exchange_id: int | None, exchange_hash: str | None) -> dict:
+    """What an Audit Event carries to anchor an LLM Exchange in the chain (nothing if capture did not store one)."""
+    return {"exchange_id": exchange_id, "exchange_hash": exchange_hash} if exchange_id is not None else {}
+
+
 def ingest(
     db: Session, llm: LlmClient, *, title: str, filename: str, content: bytes, uploader: Actor,
 ) -> tuple[ReportRow, list[InsightRow]]:
@@ -155,6 +160,13 @@ def ingest(
     except (LlmError, ValidationError) as e:
         row.extraction_status, row.extraction_error = "failed", str(e)[:500]
         db.commit()
+        exchange_id = e.exchange_id if isinstance(e, LlmError) else response.exchange_id
+        exchange_hash = e.exchange_hash if isinstance(e, LlmError) else response.exchange_hash
+        audit.record(
+            db, "insight_extracted", Actor.system("insight-extractor", prompt_version=request.prompt_version),
+            {"outcome": "failed", "insight_count": 0, "error": str(e)[:500], **_exchange_ref(exchange_id, exchange_hash)},
+            parents=[ingested], report_id=report_id,
+        )
         return row, []
     kept, dropped = [], []
     for e in extraction.insights:
@@ -169,7 +181,8 @@ def ingest(
     system = Actor.system("insight-extractor", model=response.model, prompt_version=response.prompt_version)
     event = audit.record(
         db, "insight_extracted", system,
-        {"insight_count": len(kept), "dropped": dropped}, parents=[ingested], report_id=report_id,
+        {"outcome": "ok", "insight_count": len(kept), "dropped": dropped,
+         **_exchange_ref(response.exchange_id, response.exchange_hash)}, parents=[ingested], report_id=report_id,
     )
     return row, [add_insight(db, report_id, e, extract_event_id=event) for e in kept]
 
