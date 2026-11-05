@@ -4,12 +4,12 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The Recommendation response carries a per-step summary (mode, latency, grounded and ungrounded counts, outcome) for any role that can read the Recommendation
-- [ ] The summary contains no system text, user prompt, reply text or Exchange id for roles without `llm:read`; roles with `llm:read` also get the Exchange id for an "Open exchange" link
-- [ ] The AI contribution section shows the summary line beside the existing model and prompt version, with a live or recorded pill and monospace figures
-- [ ] A failed step shows as failed with its transport outcome summarised, and the plain rule-based Recommendation is unaffected
-- [ ] Relationship Manager masking is unchanged
-- [ ] The manual E2E guide notes that recorded mode ships recordings only for insight extraction, so the tilt, rationale, memo and narrative steps show failed Exchanges there, and the checklist gains items for this summary
-- [ ] Tests run through the HTTP API with the `login(role)` fixture; `npm run typecheck` and `npm run build` pass
+- [x] The Recommendation response carries a per-step summary (mode, latency, grounded and ungrounded counts, outcome) for any role that can read the Recommendation
+- [x] The summary contains no system text, user prompt, reply text or Exchange id for roles without `llm:read`; roles with `llm:read` also get the Exchange id for an "Open exchange" link
+- [x] The AI contribution section shows the summary line beside the existing model and prompt version, with a live or recorded pill and monospace figures
+- [x] A failed step shows as failed with its transport outcome summarised, and the plain rule-based Recommendation is unaffected
+- [x] Relationship Manager masking is unchanged
+- [x] The manual E2E guide notes that recorded mode ships recordings only for insight extraction, so the tilt, rationale, memo and narrative steps show failed Exchanges there, and the checklist gains items for this summary
+- [x] Tests run through the HTTP API with the `login(role)` fixture; `npm run typecheck` and `npm run build` pass

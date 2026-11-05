@@ -4,14 +4,14 @@
 
 **Blocked by:** 06
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The drawer has Prompt (system text and user prompt), Schema, Reply (raw text with a parsed view), Metadata (hashes, tokens, latency, model, endpoint host, mode) and Used by (referencing Audit Events and the grounding verdict) tabs
-- [ ] Ungrounded Claims are visibly marked next to the reply that produced them
-- [ ] "Download JSON" saves the single Exchange including its hash
-- [ ] AI nodes in the lineage graph show a "View exchange" action for `llm:read` roles that opens the same drawer; it is absent for roles without `llm:read`
-- [ ] The drawer links to the Recommendation's lineage when the Exchange belongs to one
-- [ ] The drawer is portalled so the frosted panels never clip it, closes on Escape and on the scrim, and long content scrolls inside it
-- [ ] Error Exchanges show the error text and any raw reply that was captured
-- [ ] The manual E2E checklist gains items for the drawer, download and lineage link
-- [ ] `npm run typecheck` and `npm run build` pass
+- [x] The drawer has Prompt (system text and user prompt), Schema, Reply (raw text with a parsed view), Metadata (hashes, tokens, latency, model, endpoint host, mode) and Used by (referencing Audit Events and the grounding verdict) tabs
+- [x] Ungrounded Claims are visibly marked next to the reply that produced them
+- [x] "Download JSON" saves the single Exchange including its hash
+- [x] AI nodes in the lineage graph show a "View exchange" action for `llm:read` roles that opens the same drawer; it is absent for roles without `llm:read`
+- [x] The drawer links to the Recommendation's lineage when the Exchange belongs to one
+- [x] The drawer is portalled so the frosted panels never clip it, closes on Escape and on the scrim, and long content scrolls inside it
+- [x] Error Exchanges show the error text and any raw reply that was captured
+- [x] The manual E2E checklist gains items for the drawer, download and lineage link
+- [x] `npm run typecheck` and `npm run build` pass

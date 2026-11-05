@@ -4,12 +4,12 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Verification recomputes the hash of every Exchange referenced by an Audit Event and reports the first event whose Exchange is altered or missing, with a clear reason, alongside the existing chain result
-- [ ] Events with no Exchange reference are skipped as pre-capture and do not fail verification on an existing database
-- [ ] The Governance response includes capture health: total Exchanges, live versus recorded counts, error count, and Exchanges referenced by no Audit Event
-- [ ] The Governance page shows a capture-health panel in the existing glass style, with figures in monospace
-- [ ] The Verify chain badge in the Audit page shows the Exchange result and the tampered-link alert names the Exchange when that is the break
-- [ ] Tests run through the HTTP API, including a tamper test that edits a stored Exchange and expects verification to fail at the first referencing event
-- [ ] `npm run typecheck` and `npm run build` pass
+- [x] Verification recomputes the hash of every Exchange referenced by an Audit Event and reports the first event whose Exchange is altered or missing, with a clear reason, alongside the existing chain result
+- [x] Events with no Exchange reference are skipped as pre-capture and do not fail verification on an existing database
+- [x] The Governance response includes capture health: total Exchanges, live versus recorded counts, error count, and Exchanges referenced by no Audit Event
+- [x] The Governance page shows a capture-health panel in the existing glass style, with figures in monospace
+- [x] The Verify chain badge in the Audit page shows the Exchange result and the tampered-link alert names the Exchange when that is the break
+- [x] Tests run through the HTTP API, including a tamper test that edits a stored Exchange and expects verification to fail at the first referencing event
+- [x] `npm run typecheck` and `npm run build` pass
