@@ -2597,6 +2597,14 @@
             ],
             "title": "Latency Ms"
           },
+          "telemetry": {
+            "type": "string",
+            "enum": [
+              "measured",
+              "not_available_replayed"
+            ],
+            "title": "Telemetry"
+          },
           "outcome": {
             "type": "string",
             "enum": [
@@ -2638,6 +2646,7 @@
           "parsed_content",
           "usage",
           "latency_ms",
+          "telemetry",
           "outcome",
           "error",
           "hash"

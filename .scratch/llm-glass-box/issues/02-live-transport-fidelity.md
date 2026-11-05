@@ -4,12 +4,12 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A live-mode Exchange (exercised through the existing mock-transport pattern) stores the exact request messages, the raw reply text before JSON parsing, token usage, latency and the endpoint host, and is labelled `live`
-- [ ] A recorded-mode Exchange labels tokens and latency as not available (replayed) rather than showing zero
-- [ ] A provider error or timeout produces an error Exchange with the failure text and, where known, the HTTP status
-- [ ] A reply that is not valid JSON produces an error Exchange that keeps the raw text
-- [ ] The API key and request headers never appear in any stored Exchange or in any endpoint response
-- [ ] The Exchange content hash covers the new fields and the response from the single-Exchange endpoint exposes them to `llm:read` roles
-- [ ] Tests run through the HTTP API with no network
+- [x] A live-mode Exchange (exercised through the existing mock-transport pattern) stores the exact request messages, the raw reply text before JSON parsing, token usage, latency and the endpoint host, and is labelled `live`
+- [x] A recorded-mode Exchange labels tokens and latency as not available (replayed) rather than showing zero
+- [x] A provider error or timeout produces an error Exchange with the failure text and, where known, the HTTP status
+- [x] A reply that is not valid JSON produces an error Exchange that keeps the raw text
+- [x] The API key and request headers never appear in any stored Exchange or in any endpoint response
+- [x] The Exchange content hash covers the new fields and the response from the single-Exchange endpoint exposes them to `llm:read` roles
+- [x] Tests run through the HTTP API with no network

@@ -46,18 +46,19 @@ class CapturingLlm:
         self.mode = mode
         self.endpoint_host = endpoint_host
 
-    def _store(self, request: LlmRequest, *, response: LlmResponse | None, error: str | None) -> LlmExchangeRow:
+    def _store(
+        self, request: LlmRequest, *, response: LlmResponse | None, error: LlmError | None = None,
+    ) -> LlmExchangeRow:
+        detail = response or error  # both carry whatever transport detail the adapter knew
         row = LlmExchangeRow(
             created_at=format_ts(datetime.now(timezone.utc)), task=request.task, prompt_version=request.prompt_version,
             model=response.model if response else getattr(self.inner, "model", None), mode=self.mode,
             endpoint_host=self.endpoint_host, system_text=request.system, user_prompt=request.user,
             reply_schema_json=_canonical(request.schema),
-            messages_json=_dump(response.messages if response else None),
-            raw_reply=response.raw_reply if response else None,
+            messages_json=_dump(detail.messages), raw_reply=detail.raw_reply,
             parsed_content_json=_dump(response.content if response else None),
-            usage_json=_dump(response.usage if response else None),
-            latency_ms=response.latency_ms if response else None,
-            outcome="ok" if response else "error", error=error, hash="",
+            usage_json=_dump(detail.usage), latency_ms=detail.latency_ms,
+            outcome="ok" if response else "error", error=str(error) if error else None, hash="",
         )
         row.hash = exchange_digest(row)
         with self.session_factory() as db:
@@ -70,12 +71,12 @@ class CapturingLlm:
             response = self.inner.complete(request)
         except LlmError as e:
             try:
-                row = self._store(request, response=None, error=str(e))
+                row = self._store(request, response=None, error=e)
             except Exception:
                 raise LlmError(f"{e} (the failed call could not be recorded)") from e
             raise LlmError(str(e), exchange_id=row.id, exchange_hash=row.hash) from e
         try:
-            row = self._store(request, response=response, error=None)
+            row = self._store(request, response=response)
         except Exception as e:
             raise LlmError(f"LLM exchange could not be recorded: {e}") from e
         return dataclasses.replace(response, exchange_id=row.id, exchange_hash=row.hash)

@@ -27,6 +27,8 @@ class ExchangeOut(BaseModel):
     parsed_content: dict | None
     usage: dict | None
     latency_ms: int | None
+    # "measured" for a live call; a replay has no real tokens or latency, so they are absent, not zero.
+    telemetry: Literal["measured", "not_available_replayed"]
     outcome: Literal["ok", "error"]
     error: str | None
     hash: str
@@ -42,6 +44,7 @@ def exchange_out(r: LlmExchangeRow) -> ExchangeOut:
         endpoint_host=r.endpoint_host, system_text=r.system_text, user_prompt=r.user_prompt,
         reply_schema=json.loads(r.reply_schema_json), messages=_loads(r.messages_json), raw_reply=r.raw_reply,
         parsed_content=_loads(r.parsed_content_json), usage=_loads(r.usage_json), latency_ms=r.latency_ms,
+        telemetry="measured" if r.mode == "live" else "not_available_replayed",
         outcome=r.outcome, error=r.error, hash=r.hash,
     )
 
