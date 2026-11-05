@@ -1,44 +1,106 @@
 import { useQuery } from "@tanstack/react-query";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "./api/client";
 import type { components } from "./api/schema";
+import { ErrorLine, Icon, PageHeader, Panel, Pill, Empty } from "./ui";
 
 type Node = components["schemas"]["LineageNode"];
+type Stage = Node["stage"];
 
-const STAGES: Record<Node["stage"], string> = {
-  report: "Report", insight: "Insight", research_tilt: "Research Tilt", recommendation: "Recommendation",
-  decision: "Decision", analysis: "Analysis run",
+const STAGES: Record<Stage, string> = {
+  analysis: "Analysis run", report: "Report passage", insight: "Insight", research_tilt: "Research Tilt", recommendation: "Recommendation", decision: "Decisions",
 };
+/** Columns left to right: Report passage → Insight → Tilt → Recommendation → Decisions (analysis runs share the first). */
+const COLUMNS: Stage[][] = [["analysis", "report"], ["insight"], ["research_tilt"], ["recommendation"], ["decision"]];
+const COLUMN_TITLE = ["Report passage", "Insight", "Research Tilt", "Recommendation", "Decisions"];
 
-function NodeCard({ n }: { n: Node }) {
+function NodeCard({ n, refCb }: { n: Node; refCb: (el: HTMLLIElement | null) => void }) {
   const ai = n.actor.model != null;
   return (
     <li
-      className={`rounded border p-3 ${n.override ? "border-amber-500 bg-amber-50" : "border-slate-200"}`}
+      ref={refCb}
+      className={`panel relative z-10 p-2 ${n.override ? "!border-[#d99a2b] !bg-warn-bg" : ""}`}
       aria-label={`${STAGES[n.stage]}: ${n.type}`}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs uppercase tracking-wide text-slate-500">{STAGES[n.stage]}</span>
-        <span className="font-medium">{n.type.replace(/_/g, " ")}</span>
-        <span className="text-xs text-slate-500">#{n.id}</span>
-        {n.override && <span className="rounded bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white">Override</span>}
-        {n.human_verified && <span className="rounded bg-green-700 px-2 py-0.5 text-xs font-semibold text-white">Human-verified</span>}
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="font-semibold">{n.type.replace(/_/g, " ")}</span>
+        <span className="mono ml-auto text-ink-3">#{n.id}</span>
       </div>
-      <p className="mt-1 text-sm">
-        {n.actor.name}
-        {n.actor.role && <span className="text-slate-500"> ({n.actor.role})</span>}
-        <span className="text-slate-500"> · {n.timestamp}</span>
-        {ai && <span className="block text-slate-600">AI event: {n.actor.model} · prompt {n.actor.prompt_version}</span>}
+      <div className="mt-0.5 flex flex-wrap gap-1">
+        {n.override && <Pill tone="warn">Override</Pill>}
+        {n.human_verified && <Pill tone="pos"><Icon name="approvals" size={10} />Human-verified</Pill>}
+        {ai && <Pill tone="ai"><Icon name="spark" size={10} />AI</Pill>}
+      </div>
+      <p className="mt-0.5 text-ink-2">
+        {n.actor.name}{n.actor.role && <span className="text-ink-3"> ({n.actor.role})</span>}
       </p>
+      <p className="mono text-[0.7692rem] text-ink-3">{n.timestamp}</p>
+      {ai && <p className="mono text-[0.7692rem] text-ai">{n.actor.model} · {n.actor.prompt_version}</p>}
       {n.source && (
-        <blockquote className="mt-2 border-l-4 border-slate-300 pl-3 text-sm italic text-slate-700">
-          “{n.source.passage}”
-          <footer className="not-italic text-xs text-slate-500">{n.source.report_title ?? n.source.report_id}, page {n.source.page}</footer>
+        <blockquote className="mt-1 border-l-[3px] border-line-strong pl-2 text-ink-2 italic">
+          &ldquo;{n.source.passage}&rdquo;
+          <footer className="text-[0.7692rem] text-ink-3 not-italic">{n.source.report_title ?? n.source.report_id}, page {n.source.page}</footer>
         </blockquote>
       )}
-      {typeof n.payload.rationale === "string" && <p className="mt-1 text-sm">Rationale: {n.payload.rationale}</p>}
-      <p className="mt-1 text-xs text-slate-500">Derived from: {n.parent_ids.length ? n.parent_ids.map((p) => `#${p}`).join(", ") : "—"}</p>
+      {typeof n.payload.rationale === "string" && <p className="mt-1">Rationale: {n.payload.rationale}</p>}
+      <p className="mt-1 text-[0.7692rem] text-ink-3">Derived from: {n.parent_ids.length ? n.parent_ids.map((p) => `#${p}`).join(", ") : "—"}</p>
     </li>
+  );
+}
+
+/** Lineage DAG: nodes sit in stage columns, SVG curves follow each parent link measured from the rendered cards. */
+function Dag({ nodes }: { nodes: Node[] }) {
+  const wrap = useRef<HTMLDivElement>(null);
+  const els = useRef(new Map<number, HTMLLIElement>());
+  const [edges, setEdges] = useState<{ d: string; key: string; override: boolean }[]>([]);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const box = wrap.current?.getBoundingClientRect();
+      if (!box) return;
+      const next: typeof edges = [];
+      for (const n of nodes) {
+        const to = els.current.get(n.id)?.getBoundingClientRect();
+        if (!to) continue;
+        for (const p of n.parent_ids) {
+          const from = els.current.get(p)?.getBoundingClientRect();
+          if (!from) continue;
+          const x1 = from.right - box.left, y1 = from.top + from.height / 2 - box.top;
+          const x2 = to.left - box.left, y2 = to.top + to.height / 2 - box.top;
+          const mx = Math.max(12, Math.abs(x2 - x1) / 2);
+          next.push({ key: `${p}-${n.id}`, override: n.override, d: `M${x1},${y1} C${x1 + mx},${y1} ${x2 - mx},${y2} ${x2},${y2}` });
+        }
+      }
+      setEdges(next);
+      setSize({ w: box.width, h: box.height });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [nodes]);
+
+  return (
+    <div ref={wrap} className="relative overflow-x-auto">
+      <svg className="pointer-events-none absolute left-0 top-0" width={size.w} height={size.h} aria-hidden="true">
+        {edges.map((e) => <path key={e.key} d={e.d} fill="none" stroke={e.override ? "#d99a2b" : "#8a99b3"} strokeWidth="1.5" />)}
+      </svg>
+      <div className="grid min-w-[62rem] grid-cols-5 gap-x-8">
+        {COLUMNS.map((stages, i) => {
+          const col = nodes.filter((n) => stages.includes(n.stage));
+          return (
+            <div key={COLUMN_TITLE[i]}>
+              <p className="eyebrow mb-1.5">{COLUMN_TITLE[i]}</p>
+              <ol className="space-y-2">
+                {col.map((n) => <NodeCard key={n.id} n={n} refCb={(el) => { if (el) els.current.set(n.id, el); else els.current.delete(n.id); }} />)}
+                {col.length === 0 && <li className="rounded-xl border border-dashed border-line-strong p-2 text-ink-3">none</li>}
+              </ol>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -56,11 +118,16 @@ export function LineagePage() {
   });
   return (
     <div>
-      <p className="mb-2 text-sm"><Link className="underline" to="/audit">← Audit</Link></p>
-      <h1 className="mb-1 text-xl font-semibold">Lineage of Recommendation #{id}</h1>
-      <p className="mb-4 text-sm text-slate-600">Oldest first, from the Report passage to the final Decision.</p>
-      {lineage.isError && <p className="text-red-600">{lineage.error.message}</p>}
-      {lineage.data && <ol className="space-y-2">{lineage.data.nodes.map((n) => <NodeCard key={n.id} n={n} />)}</ol>}
+      <PageHeader
+        title={<>Lineage of Recommendation <span className="mono">#{id}</span></>}
+        sub={<><Link className="text-brand hover:underline" to="/audit">← Audit</Link> · Oldest first, from the Report passage to the final Decision. Amber marks a human override.</>}
+      />
+      {lineage.isError && <ErrorLine>{lineage.error.message}</ErrorLine>}
+      {lineage.data && (
+        <Panel label="Lineage graph">
+          {lineage.data.nodes.length === 0 ? <Empty>No audit events for this Recommendation.</Empty> : <Dag nodes={lineage.data.nodes} />}
+        </Panel>
+      )}
     </div>
   );
 }

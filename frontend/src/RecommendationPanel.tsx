@@ -1,7 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useId, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "./api/client";
 import type { components } from "./api/schema";
+import { Citations, DeltaBar, Empty, Icon, Pill, RULE_TONE, money, pp, type Tone } from "./ui";
 
 type Detail = components["schemas"]["PortfolioDetail"];
 type Rec = components["schemas"]["RecommendationOut"];
@@ -10,12 +12,6 @@ type LineIn = components["schemas"]["TradeLineIn"];
 type Research = NonNullable<Rec["research"]>;
 type Action = "accept" | "reject" | "modify";
 
-const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const BADGE = {
-  pass: "bg-slate-100 text-slate-700",
-  warning: "bg-amber-100 font-semibold text-amber-800",
-  breach: "bg-red-100 font-semibold text-red-800",
-};
 const STATUS_LABEL: Record<Rec["status"], string> = {
   pending_advisor: "Pending Advisor decision",
   pending_compliance: "Pending Compliance (rule breach)",
@@ -24,17 +20,22 @@ const STATUS_LABEL: Record<Rec["status"], string> = {
   rejected: "Rejected",
   superseded: "Superseded",
 };
+const STATUS_TONE: Record<Rec["status"], Tone> = {
+  pending_advisor: "info", pending_compliance: "warn", pending_committee: "warn", approved: "pos", rejected: "neg", superseded: "mute",
+};
 
 function Lines({ rec }: { rec: Rec }) {
   return (
-    <table className="w-full text-left text-sm">
-      <thead><tr className="border-b text-slate-500"><th className="p-1">Side</th><th>Instrument</th><th>Account</th><th>Qty</th><th>Amount</th><th>% of Portfolio</th></tr></thead>
+    <table className="grid-table">
+      <thead><tr><th>Side</th><th>Instrument</th><th>Account</th><th className="num">Qty</th><th className="num">Amount</th><th className="num">% of Portfolio</th></tr></thead>
       <tbody>
         {rec.trade_lines.map((l) => (
-          <tr key={`${l.account_id}-${l.symbol}`} className="border-b">
-            <td className={`p-1 font-medium ${l.side === "sell" ? "text-red-700" : "text-green-700"}`}>{l.side}</td>
-            <td>{l.symbol} <span className="text-slate-500">{l.name}</span></td><td>{l.account_id}</td>
-            <td>{l.quantity}</td><td>{money(l.amount)}</td><td>{l.pct_of_portfolio.toFixed(2)}%</td>
+          <tr key={`${l.account_id}-${l.symbol}`}>
+            <td><Pill tone={l.side === "sell" ? "neg" : "pos"}>{l.side}</Pill></td>
+            <td><span className="mono font-semibold">{l.symbol}</span> <span className="text-ink-3">{l.name}</span></td>
+            <td className="mono">{l.account_id}</td>
+            <td className="num">{l.quantity}</td><td className="num">{money(l.amount)}</td>
+            <td className="num"><span className="inline-flex items-center gap-2"><DeltaBar value={l.side === "sell" ? -l.pct_of_portfolio : l.pct_of_portfolio} max={Math.max(5, ...rec.trade_lines.map((x) => x.pct_of_portfolio))} width="5.5rem" />{l.pct_of_portfolio.toFixed(2)}%</span></td>
           </tr>
         ))}
       </tbody>
@@ -46,16 +47,13 @@ function PostTradeRules({ rec }: { rec: Rec }) {
   const shown = rec.suitability.rules.filter((r) => r.status !== "pass");
   return (
     <div>
-      <p className="text-sm text-slate-500">
-        Post-trade suitability <span className={`rounded px-1.5 py-0.5 ${BADGE[rec.suitability.status]}`}>{rec.suitability.status}</span>
-      </p>
-      {shown.length === 0 ? <p className="text-sm text-slate-600">All seven Suitability Rules pass after these Trade Lines.</p> : (
-        <ul className="mt-1 space-y-1 text-sm">
+      <p className="flex items-center gap-2 text-ink-2">Post-trade suitability <Pill tone={RULE_TONE[rec.suitability.status]}>{rec.suitability.status}</Pill></p>
+      {shown.length === 0 ? <p className="text-ink-2">All seven Suitability Rules pass after these Trade Lines.</p> : (
+        <ul className="mt-1 space-y-1">
           {shown.map((r) => (
-            <li key={r.rule_id} className="rounded border p-2">
-              <span className="font-mono text-xs text-slate-500">{r.rule_id}</span> <span className="font-medium">{r.name}</span>{" "}
-              <span className={`rounded px-1.5 py-0.5 text-xs ${BADGE[r.status]}`}>{r.status}</span>
-              <p className="text-slate-600">{r.message}</p>
+            <li key={r.rule_id} className="panel px-2 py-1">
+              <span className="mono text-ink-3">{r.rule_id}</span> <span className="font-medium">{r.name}</span> <Pill tone={RULE_TONE[r.status]}>{r.status}</Pill>
+              <p className="text-ink-2">{r.message}</p>
             </li>
           ))}
         </ul>
@@ -64,67 +62,85 @@ function PostTradeRules({ rec }: { rec: Rec }) {
   );
 }
 
-const pp = (n: number) => `${n > 0 ? "+" : ""}${n.toFixed(1)} pp`;
-
-type Citation = NonNullable<Research["narrative"]>["claims"][number]["citations"][number];
-
-function citationLabel(c: Citation) {
-  return c.kind === "report" ? `${c.report_id} p.${c.page}: \u201c${c.quote}\u201d` : `engine: ${c.figure}`;
+/** Proposed (hollow) vs allowed (solid) tilt on a track; the shaded span is the engine's ± bound. */
+function TiltTrack({ proposed, allowed, bound }: { proposed: number; allowed: number; bound: number }) {
+  const scale = Math.max(bound, Math.abs(proposed), Math.abs(allowed)) * 1.15;
+  const at = (v: number) => `${50 + (v / scale) * 50}%`;
+  return (
+    <div className="relative h-4 w-44" role="img" aria-label={`Proposed ${pp(proposed)}, allowed ${pp(allowed)}, bound ±${bound} pp`}>
+      <div className="absolute inset-y-1 left-0 right-0 rounded-full bg-sunken" />
+      <div className="absolute inset-y-1 rounded-full bg-ai-bg ring-1 ring-[#a3d6d0]" style={{ left: at(-bound), width: `${(bound / scale) * 100}%` }} title={`Allowed range ±${bound} pp`} />
+      <div className="absolute inset-y-0 w-px bg-ink-3" style={{ left: "50%" }} />
+      <div className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-ink bg-surface" style={{ left: at(proposed) }} title={`AI proposed ${pp(proposed)}`} />
+      <div className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ai" style={{ left: at(allowed) }} title={`Engine allowed ${pp(allowed)}`} />
+    </div>
+  );
 }
 
 function ResearchSection({ research }: { research: Research }) {
   const { tilt, narrative } = research;
+  const grounded = narrative?.claims.filter((c) => c.grounded).length ?? 0;
+  const ungrounded = (narrative?.claims.length ?? 0) - grounded;
   return (
-    <section className="space-y-3 rounded border border-violet-200 bg-violet-50/40 p-3" aria-label="AI contribution">
-      <h3 className="text-sm font-semibold">AI contribution <span className="font-normal text-slate-500">(the AI proposes and explains; the engine owns every number and compliance outcome)</span></h3>
+    <section className="callout callout-ai !block space-y-3 !bg-surface" aria-label="AI contribution">
+      <h3 className="flex flex-wrap items-center gap-2 !text-ink">
+        <Pill tone="ai"><Icon name="spark" size={10} />AI contribution</Pill>
+        <span className="font-normal text-ink-2">The AI proposes and explains; the engine owns every number and compliance outcome.</span>
+      </h3>
+
       {tilt && (
         tilt.status === "failed" ? (
-          <p role="status" className="text-sm text-amber-800">The AI Research Tilt was unavailable, so this is the plain rule-based Recommendation.</p>
+          <p role="status" className="callout callout-warn">The AI Research Tilt was unavailable, so this is the plain rule-based Recommendation.</p>
         ) : tilt.entries.length === 0 ? (
-          <p className="text-sm text-slate-600">The AI proposed no Research Tilt from the approved Insights.</p>
+          <p className="text-ink-2">The AI proposed no Research Tilt from the approved Insights.</p>
         ) : (
-          <table className="w-full text-left text-sm" aria-label="Research Tilt">
-            <thead><tr className="border-b text-slate-500"><th className="p-1">Subject</th><th>Exposure</th><th>AI proposed</th><th>Engine allowed</th><th>Why</th></tr></thead>
-            <tbody>
-              {tilt.entries.map((e) => (
-                <tr key={`${e.subject_kind}-${e.subject}`} className="border-b align-top">
-                  <td className="p-1">{e.subject} <span className="text-xs text-slate-500">{e.subject_kind === "sector" ? "sector" : "asset class"}</span></td>
-                  <td>{e.exposure_pct.toFixed(1)}%</td>
-                  <td>{pp(e.proposed_pp)}</td>
-                  <td className={e.clipped ? "font-semibold text-amber-800" : ""}>{pp(e.allowed_pp)}</td>
-                  <td className="text-slate-600">AI proposed {pp(e.proposed_pp)}, engine allowed {pp(e.allowed_pp)}: {e.reason}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div>
+            <table className="grid-table text-ink" aria-label="Research Tilt">
+              <thead><tr><th>Subject</th><th className="num">Exposure</th><th>Proposed ◇ vs allowed ● (±{tilt.bound_pp} pp)</th><th className="num">AI proposed</th><th className="num">Engine allowed</th><th>Why</th></tr></thead>
+              <tbody>
+                {tilt.entries.map((e) => (
+                  <tr key={`${e.subject_kind}-${e.subject}`}>
+                    <td>{e.subject} <span className="text-ink-3">{e.subject_kind === "sector" ? "sector" : "asset class"}</span></td>
+                    <td className="num">{e.exposure_pct.toFixed(1)}%</td>
+                    <td><TiltTrack proposed={e.proposed_pp} allowed={e.allowed_pp} bound={tilt.bound_pp} /></td>
+                    <td className="num">{pp(e.proposed_pp)}</td>
+                    <td className="num">{e.clipped ? <span className="inline-flex items-center gap-1"><Pill tone="warn">clipped</Pill><strong>{pp(e.allowed_pp)}</strong></span> : pp(e.allowed_pp)}</td>
+                    <td className="text-ink-2">AI proposed {pp(e.proposed_pp)}, engine allowed {pp(e.allowed_pp)}: {e.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-1 text-[0.8461rem] text-ink-3">Bound ±{tilt.bound_pp} pp · <span className="mono">{tilt.model} · {tilt.prompt_version}</span></p>
+          </div>
         )
       )}
-      {tilt?.status === "ok" && <p className="text-xs text-slate-500">Bound \u00b1{tilt.bound_pp} pp · {tilt.model} · {tilt.prompt_version}</p>}
+
       {narrative && (
         narrative.status === "failed" ? (
-          <p role="status" className="text-sm text-amber-800">The AI rationale and memo were unavailable for this Recommendation.</p>
+          <p role="status" className="callout callout-warn">The AI rationale and memo were unavailable for this Recommendation.</p>
         ) : (
           <>
             <div>
-              <h4 className="text-sm font-medium">Rationale and citations</h4>
-              <ul className="mt-1 space-y-1 text-sm">
+              <h4 className="mb-1 flex items-center gap-2 font-semibold">Grounding inspector
+                <Pill tone="pos"><Icon name="approvals" size={11} />{grounded} verified</Pill>{ungrounded > 0 && <Pill tone="neg"><Icon name="alert" size={11} />{ungrounded} ungrounded</Pill>}
+              </h4>
+              <ul className="space-y-1.5">
                 {narrative.claims.map((c) => (
-                  <li key={c.index} className={`rounded border p-2 ${c.grounded ? "bg-white" : "border-red-300 bg-red-50"}`}>
-                    <span className={`mr-2 rounded px-1.5 py-0.5 text-xs ${c.grounded ? BADGE.pass : BADGE.breach}`}>{c.grounded ? "grounded" : "ungrounded: excluded from memo"}</span>
-                    {c.text}
-                    <ul className="ml-4 list-disc text-xs text-slate-600">
-                      {c.citations.map((x, i) => <li key={i}>{citationLabel(x)}</li>)}
-                      {c.citations.length === 0 && <li>no citation</li>}
-                    </ul>
-                    {c.issues.map((i) => <p key={i.code + i.message} className="text-xs text-red-700">{i.message}</p>)}
+                  <li key={c.index} className={`rounded-xl border px-2 py-1.5 ${c.grounded ? "border-line bg-surface" : "border-[#f1b8b3] bg-neg-bg"}`}>
+                    <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
+                      <Pill tone={c.grounded ? "pos" : "neg"}><Icon name={c.grounded ? "approvals" : "alert"} size={11} />{c.grounded ? "grounded" : "ungrounded: excluded from memo"}</Pill>
+                      <span className="min-w-0 flex-1 text-ink">{c.text}</span>
+                    </div>
+                    <div className="mt-1"><Citations citations={c.citations} /></div>
+                    {c.issues.map((i) => <p key={i.code + i.message} className="mt-0.5 flex items-center gap-1 text-neg"><Icon name="alert" size={12} />{i.message}</p>)}
                   </li>
                 ))}
               </ul>
             </div>
             <div>
-              <h4 className="text-sm font-medium">Advisor memo</h4>
-              <pre className="mt-1 whitespace-pre-wrap rounded border bg-white p-2 text-sm">{narrative.memo}</pre>
-              <p className="text-xs text-slate-500">{narrative.model} · {narrative.prompt_version}</p>
+              <h4 className="mb-1 font-semibold">Advisor memo <span className="font-normal text-ink-3">(grounded claims only)</span></h4>
+              <pre className="whitespace-pre-wrap rounded-xl border border-line bg-sunken p-2 font-sans text-ink">{narrative.memo}</pre>
+              <p className="text-[0.8461rem] text-ink-3"><span className="mono">{narrative.model} · {narrative.prompt_version}</span></p>
             </div>
           </>
         )
@@ -133,37 +149,58 @@ function ResearchSection({ research }: { research: Research }) {
   );
 }
 
-function ModifyEditor({ rec, accounts, onChange }: { rec: Rec; accounts: string[]; onChange: (l: LineIn[]) => void }) {
-  const [lines, setLines] = useState<LineIn[]>(rec.trade_lines.map(({ account_id, symbol, side, quantity }) => ({ account_id, symbol, side, quantity })));
-  const update = (next: LineIn[]) => { setLines(next); onChange(next); };
-  const patch = (i: number, p: Partial<LineIn>) => update(lines.map((l, j) => (j === i ? { ...l, ...p } : l)));
+/* ---------- trade modification drawer ---------- */
+function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  // Portalled to <body>: the glass panels use backdrop-filter, which would otherwise become the containing block of a fixed drawer.
+  return createPortal(
+    <>
+      <div className="scrim" onClick={onClose} />
+      <aside className="drawer" role="dialog" aria-modal="true" aria-label={title}>
+        <div className="panel-head !px-4 !py-2.5"><h2 className="!text-[1.0769rem]">{title}</h2><button type="button" className="btn btn-ghost btn-sm ml-auto" onClick={onClose} aria-label="Close"><Icon name="close" /></button></div>
+        <div className="flex-1 space-y-3 overflow-y-auto p-4">{children}</div>
+      </aside>
+    </>,
+    document.body,
+  );
+}
+
+function ModifyEditor({ rec, accounts, lines, onChange }: { rec: Rec; accounts: string[]; lines: LineIn[]; onChange: (l: LineIn[]) => void }) {
+  const patch = (i: number, p: Partial<LineIn>) => onChange(lines.map((l, j) => (j === i ? { ...l, ...p } : l)));
+  const names = Object.fromEntries(rec.trade_lines.map((l) => [l.symbol, l.name]));
   return (
     <div className="space-y-2">
-      <p className="text-sm text-slate-600">Edit the full set of Trade Lines. The Suitability Rules re-run as soon as you submit.</p>
-      {lines.map((l, i) => (
-        <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
-          <select aria-label="Side" className="rounded border p-1" value={l.side} onChange={(e) => patch(i, { side: e.target.value as LineIn["side"] })}>
-            <option value="buy">buy</option><option value="sell">sell</option>
-          </select>
-          <input aria-label="Symbol" className="w-24 rounded border p-1" value={l.symbol} onChange={(e) => patch(i, { symbol: e.target.value.toUpperCase() })} />
-          <select aria-label="Account" className="rounded border p-1" value={l.account_id} onChange={(e) => patch(i, { account_id: e.target.value })}>
-            {accounts.map((a) => <option key={a}>{a}</option>)}
-          </select>
-          <input aria-label="Quantity" type="number" min={1} className="w-28 rounded border p-1" value={l.quantity} onChange={(e) => patch(i, { quantity: Math.trunc(Number(e.target.value)) })} />
-          <button type="button" className="text-slate-500 underline" onClick={() => update(lines.filter((_, j) => j !== i))}>Remove</button>
-        </div>
-      ))}
-      <button type="button" className="text-sm underline" onClick={() => update([...lines, { account_id: accounts[0], symbol: "", side: "buy", quantity: 1 }])}>Add Trade Line</button>
+      <p className="callout callout-info">Edit the full set of Trade Lines. The Suitability Rules re-run as soon as you submit, and the result is saved as a new linked version.</p>
+      <table className="grid-table">
+        <thead><tr><th>Side</th><th>Symbol</th><th>Account</th><th className="num">Quantity</th><th /></tr></thead>
+        <tbody>
+          {lines.map((l, i) => (
+            <tr key={i}>
+              <td><select aria-label="Side" className="field" value={l.side} onChange={(e) => patch(i, { side: e.target.value as LineIn["side"] })}><option value="buy">buy</option><option value="sell">sell</option></select></td>
+              <td><input aria-label="Symbol" className="field mono w-24" value={l.symbol} title={names[l.symbol]} onChange={(e) => patch(i, { symbol: e.target.value.toUpperCase() })} /></td>
+              <td><select aria-label="Account" className="field mono" value={l.account_id} onChange={(e) => patch(i, { account_id: e.target.value })}>{accounts.map((a) => <option key={a}>{a}</option>)}</select></td>
+              <td className="num"><input aria-label="Quantity" type="number" min={1} className="field mono w-28 text-right" value={l.quantity} onChange={(e) => patch(i, { quantity: Math.trunc(Number(e.target.value)) })} /></td>
+              <td><button type="button" className="btn btn-ghost btn-sm" onClick={() => onChange(lines.filter((_, j) => j !== i))}>Remove</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button type="button" className="btn btn-sm" onClick={() => onChange([...lines, { account_id: accounts[0], symbol: "", side: "buy", quantity: 1 }])}>Add Trade Line</button>
     </div>
   );
 }
 
-function DecisionForm({ rec, accounts, portfolioId }: { rec: Rec; accounts: string[]; portfolioId: string }) {
+function DecisionForm({ rec, accounts, portfolioId, onModified }: { rec: Rec; accounts: string[]; portfolioId: string; onModified: (b: Rule[]) => void }) {
   const qc = useQueryClient();
+  const formId = useId();
   const [action, setAction] = useState<Action>("accept");
   const [rationale, setRationale] = useState("");
-  const [lines, setLines] = useState<LineIn[]>([]);
-  const [newBreaches, setNewBreaches] = useState<Rule[]>([]);
+  const [lines, setLines] = useState<LineIn[]>(rec.trade_lines.map(({ account_id, symbol, side, quantity }) => ({ account_id, symbol, side, quantity })));
+  const [drawer, setDrawer] = useState(false);
   const decide = useMutation({
     mutationFn: async () => {
       const body = { action, rationale: rationale.trim() || null, trade_lines: action === "modify" ? lines : null };
@@ -175,34 +212,36 @@ function DecisionForm({ rec, accounts, portfolioId }: { rec: Rec; accounts: stri
       return data;
     },
     onSuccess: (r) => {
-      setNewBreaches(r.new_breaches);
+      onModified(r.new_breaches);
       setRationale("");
+      setDrawer(false);
       qc.invalidateQueries({ queryKey: ["portfolio", portfolioId] });
     },
   });
   const needsWhy = action !== "accept";
+  const choose = (a: Action) => { setAction(a); setDrawer(a === "modify"); };
+  const submit = <>
+    <label className="label">Rationale {needsWhy ? <span className="text-neg">(required)</span> : <span className="font-normal text-ink-3">(optional)</span>}
+      <textarea className="field" rows={2} value={rationale} onChange={(e) => setRationale(e.target.value)} />
+    </label>
+    <button form={formId} className="btn btn-primary" disabled={decide.isPending || (needsWhy && !rationale.trim()) || (action === "modify" && lines.length === 0)}>Record Decision</button>
+    {decide.isError && <p role="alert" className="callout callout-neg">{decide.error.message}</p>}
+  </>;
   return (
-    <form className="space-y-3 rounded border p-3" onSubmit={(e) => { e.preventDefault(); decide.mutate(); }} aria-label="Decision">
-      <fieldset className="flex gap-4 text-sm">
-        <legend className="sr-only">Decision</legend>
+    <form id={formId} className="panel space-y-2 p-3" onSubmit={(e) => { e.preventDefault(); decide.mutate(); }} aria-label="Decision">
+      <div className="seg" role="group" aria-label="Decision action">
         {(["accept", "modify", "reject"] as const).map((a) => (
-          <label key={a}><input type="radio" name="action" checked={action === a} onChange={() => setAction(a)} /> <span className="capitalize">{a}</span></label>
+          <button key={a} type="button" aria-pressed={action === a} onClick={() => choose(a)} className="capitalize">{a}</button>
         ))}
-      </fieldset>
-      {action === "modify" && <ModifyEditor rec={rec} accounts={accounts} onChange={setLines} />}
-      <label className="block text-sm">
-        Rationale {needsWhy ? <span className="text-red-700">(required)</span> : <span className="text-slate-500">(optional)</span>}
-        <textarea className="mt-1 w-full rounded border p-2" rows={2} value={rationale} onChange={(e) => setRationale(e.target.value)} />
-      </label>
-      <button className="rounded bg-slate-800 px-3 py-1.5 text-sm text-white disabled:opacity-50" disabled={decide.isPending || (needsWhy && !rationale.trim())}>
-        Record Decision
-      </button>
-      {decide.isError && <p role="alert" className="text-sm text-red-600">{decide.error.message}</p>}
-      {newBreaches.length > 0 && (
-        <div role="alert" className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-800">
-          <p className="font-semibold">The modified version breaches {newBreaches.length === 1 ? "a Suitability Rule" : "Suitability Rules"} the earlier version did not:</p>
-          <ul className="list-disc pl-5">{newBreaches.map((r) => <li key={r.rule_id}>{r.rule_id} {r.name}: {r.message}</li>)}</ul>
-        </div>
+      </div>
+      {action === "modify" ? (
+        <button type="button" className="btn btn-sm block" onClick={() => setDrawer(true)}>Edit Trade Lines ({lines.length})…</button>
+      ) : submit}
+      {drawer && (
+        <Drawer title="Modify Trade Lines" onClose={() => setDrawer(false)}>
+          <ModifyEditor rec={rec} accounts={accounts} lines={lines} onChange={setLines} />
+          <div className="space-y-2 border-t border-line pt-3">{submit}</div>
+        </Drawer>
       )}
     </form>
   );
@@ -211,42 +250,48 @@ function DecisionForm({ rec, accounts, portfolioId }: { rec: Rec; accounts: stri
 export function RecommendationPanel({ p, canDecide }: { p: Detail; canDecide: boolean }) {
   const rec = p.recommendation;
   const accounts = [...new Set(p.holdings.map((h) => h.account_id))].sort();
+  const [newBreaches, setNewBreaches] = useState<Rule[]>([]);
   return (
-    <div className="space-y-4">
-      <p className="rounded border border-sky-200 bg-sky-50 p-2 text-sm text-sky-900">
-        Nothing is executed from this system. Approved means the Recommendation is cleared to act on outside this system.
-      </p>
-      {!rec ? <p className="text-slate-600">{p.drift ? "No Recommendation: every Asset Class is within its Tolerance Band." : "No analysis run yet; run an analysis from the queue."}</p> : (
+    <div className="space-y-3">
+      <p className="callout callout-info"><Icon name="lock" size={14} />Nothing is executed from this system. Approved means the Recommendation is cleared to act on outside this system.</p>
+      {newBreaches.length > 0 && (
+        <div role="alert" className="callout callout-neg !block">
+          <p className="font-semibold">Compliance impact: the modified version breaches {newBreaches.length === 1 ? "a Suitability Rule" : "Suitability Rules"} the earlier version did not, so it now needs Compliance sign-off.</p>
+          <ul className="list-disc pl-5">{newBreaches.map((r) => <li key={r.rule_id}><span className="mono">{r.rule_id}</span> {r.name}: {r.message}</li>)}</ul>
+        </div>
+      )}
+      {!rec ? <Empty>{p.drift ? "No Recommendation: every Asset Class is within its Tolerance Band." : "No analysis run yet; run an analysis from the queue."}</Empty> : (
         <>
           <div>
-            <p className="text-sm">
-              <span className="font-semibold">Version {rec.version}</span> · <span aria-label="Recommendation status">{STATUS_LABEL[rec.status]}</span> ·
-              turnover {rec.turnover_pct.toFixed(1)}% of {money(rec.total_value)} · by {rec.created_by}
+            <p className="flex flex-wrap items-center gap-2">
+              <strong>Version {rec.version}</strong><span aria-label="Recommendation status"><Pill tone={STATUS_TONE[rec.status]}>{STATUS_LABEL[rec.status]}</Pill></span>
+              <span className="text-ink-2">turnover <span className="mono">{rec.turnover_pct.toFixed(1)}%</span> of <span className="mono">{money(rec.total_value)}</span> · by {rec.created_by}</span>
             </p>
-            <p className="text-sm text-slate-600">{rec.summary}</p>
+            <p className="text-ink-2">{rec.summary}</p>
           </div>
           {(rec.status === "pending_advisor" || rec.status === "pending_compliance" || rec.status === "pending_committee") && (
-            <p className="text-sm text-slate-600">
+            <p className="text-ink-2">
               Approval path: {rec.approval.required_steps.join(" → ")} → Approved.
-              {rec.approval.reasons.map((x) => <span key={x} className="block text-violet-800">{x}</span>)}
+              {rec.approval.reasons.map((x) => <span key={x} className="block font-medium text-warn">{x}</span>)}
             </p>
           )}
-          <Lines rec={rec} />
+          <div className="panel overflow-hidden"><Lines rec={rec} /></div>
           <PostTradeRules rec={rec} />
           {rec.research && <ResearchSection research={rec.research} />}
-          {rec.status === "pending_advisor" && canDecide && <DecisionForm key={rec.id} rec={rec} accounts={accounts} portfolioId={p.portfolio_id} />}
+          {rec.status === "pending_advisor" && canDecide && <DecisionForm key={rec.id} rec={rec} accounts={accounts} portfolioId={p.portfolio_id} onModified={setNewBreaches} />}
         </>
       )}
       <div>
-        <h3 className="mb-1 text-sm font-semibold">Version history</h3>
-        {p.history.versions.length === 0 ? <p className="text-sm text-slate-600">No Recommendations yet.</p> : (
-          <ol className="space-y-1 text-sm">
+        <h3 className="mb-1 font-semibold">Version history</h3>
+        {p.history.versions.length === 0 ? <Empty>No Recommendations yet.</Empty> : (
+          <ol className="space-y-1.5 border-l-2 border-line pl-3">
             {p.history.versions.map((v) => (
               <li key={v.id}>
-                v{v.version} · {STATUS_LABEL[v.status]} · {v.created_at.slice(0, 16).replace("T", " ")} · by {v.created_by}
-                {v.parent_id && <span className="text-slate-500"> · modified from #{v.parent_id}</span>}
-                {" "}<span className={`rounded px-1.5 py-0.5 text-xs ${BADGE[v.suitability_status]}`}>{v.suitability_status}</span>
-                <ul className="ml-4 list-disc text-slate-600">
+                <span className="mono font-semibold">v{v.version}</span> <Pill tone={STATUS_TONE[v.status]}>{STATUS_LABEL[v.status]}</Pill>{" "}
+                <span className="text-ink-2">{v.created_at.slice(0, 16).replace("T", " ")} · by {v.created_by}</span>
+                {v.parent_id && <span className="text-ink-3"> · modified from #{v.parent_id}</span>}{" "}
+                <Pill tone={RULE_TONE[v.suitability_status]}>{v.suitability_status}</Pill>
+                <ul className="ml-4 list-disc text-ink-2">
                   {p.history.decisions.filter((d) => d.recommendation_id === v.id).map((d) => (
                     <li key={d.id}>{d.action.replace("_", " ")} by {d.actor_name} ({d.actor_role}){d.rationale ? `: ${d.rationale}` : ""}</li>
                   ))}
