@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app import audit, grounding, portfolio_view, reports
 from app.db import AuditEventRow, PriorityNarrativeRow, PriorityResultRow
-from app.llm import LlmClient, LlmError, LlmRequest
+from app.llm import LlmClient, LlmError, LlmRequest, exchange_ref
 from app.market_data import MarketData
 from app.narrative import citation_label
 from app.opportunity import relevant_insights
@@ -85,6 +85,7 @@ def generate(db: Session, llm: LlmClient, result: PriorityResultRow, market: Mar
     scored = _scored_event_id(db, result.run_id, result.client_id)
     parents = [scored] if scored else []
     fig = figures(result, sector_pct)
+    response = None
     try:
         response = llm.complete(_request(result, fig, insights))
         reply = NarrativeReply.model_validate(response.content)
@@ -97,7 +98,8 @@ def generate(db: Session, llm: LlmClient, result: PriorityResultRow, market: Mar
         db.commit()
         audit.record(
             db, "priority_narrative_generated", audit.Actor.system("priority-narrator", prompt_version=PRIORITY_NARRATIVE.label),
-            {"run_id": result.run_id, "status": "failed", "error": row.error, "insight_ids": offered}, parents=parents, **scope,
+            {"run_id": result.run_id, "status": "failed", "error": row.error, "insight_ids": offered,
+             **exchange_ref(e if isinstance(e, LlmError) else response)}, parents=parents, **scope,
         )
         return row
     check_id, results = grounding.validate_figures(
@@ -113,7 +115,7 @@ def generate(db: Session, llm: LlmClient, result: PriorityResultRow, market: Mar
         db, "priority_narrative_generated",
         audit.Actor.system("priority-narrator", model=response.model, prompt_version=response.prompt_version),
         {"run_id": result.run_id, "status": "complete", "check_id": check_id, "summary": grounding.summarise(results),
-         "insight_ids": offered},
+         "insight_ids": offered, **exchange_ref(response)},
         parents=parents, **scope,
     )
     return row

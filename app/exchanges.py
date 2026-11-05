@@ -11,7 +11,7 @@ import json
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.audit import format_ts
 from app.db import LlmExchangeRow
@@ -45,6 +45,14 @@ class CapturingLlm:
         self.session_factory = session_factory
         self.mode = mode
         self.endpoint_host = endpoint_host
+        self._db: Session | None = None
+
+    def bind(self, db: Session) -> "CapturingLlm":
+        """A view of this client that stores Exchanges through the caller's own open session. A caller in the middle of
+        a write transaction (the analysis run) needs this: a second connection could not write until it committed."""
+        bound = CapturingLlm(self.inner, self.session_factory, mode=self.mode, endpoint_host=self.endpoint_host)
+        bound._db = db
+        return bound
 
     def _store(
         self, request: LlmRequest, *, response: LlmResponse | None, error: LlmError | None = None,
@@ -61,6 +69,11 @@ class CapturingLlm:
             outcome="ok" if response else "error", error=str(error) if error else None, hash="",
         )
         row.hash = exchange_digest(row)
+        if self._db is not None:
+            with self._db.begin_nested():  # a failed write rolls back alone, leaving the caller's transaction usable
+                self._db.add(row)
+                self._db.flush()
+            return row
         with self.session_factory() as db:
             db.add(row)
             db.commit()

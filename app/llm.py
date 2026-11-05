@@ -63,6 +63,15 @@ class LlmResponse:
     latency_ms: int | None = None
 
 
+def exchange_ref(outcome: "LlmResponse | LlmError | None") -> dict:
+    """What an Audit Event carries to anchor an LLM Exchange in the chain: pass the response or the error the call
+    produced. Empty if capture did not store one, so a step needs no other change to inherit capture (ADR-0004)."""
+    exchange_id = getattr(outcome, "exchange_id", None)
+    if exchange_id is None:
+        return {}
+    return {"exchange_id": exchange_id, "exchange_hash": outcome.exchange_hash}
+
+
 class LlmClient(Protocol):
     def complete(self, request: LlmRequest) -> LlmResponse: ...
 
