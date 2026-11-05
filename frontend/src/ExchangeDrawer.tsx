@@ -66,7 +66,7 @@ function Claims({ verdicts }: { verdicts: Verdict[] }) {
       {verdicts.map((v) => (
         <div key={v.check_id} className="space-y-1">
           <p className="text-ink-2">
-            Grounding check <span className="mono">{v.check_id}</span>: {v.summary.grounded} of {v.summary.total} grounded
+            Grounding verdict <span className="mono">{v.check_id}</span>: {v.summary.grounded} of {v.summary.total} grounded
             {v.summary.ungrounded > 0 && <> · <span className="font-semibold text-neg">{v.summary.ungrounded} ungrounded</span></>}
           </p>
           <ul className="space-y-1">
@@ -134,7 +134,7 @@ function Body({ d, tab, canLineage }: { d: Detail; tab: Tab; canLineage: boolean
     case "Metadata":
       return (
         <dl>
-          <Field label="Exchange">#{d.id}</Field>
+          <Field label="LLM Exchange">#{d.id}</Field>
           <Field label="Recorded (UTC)">{d.created_at}</Field>
           <Field label="Task">{d.task}</Field>
           <Field label="Prompt version">{d.prompt_version}</Field>
@@ -159,12 +159,12 @@ function Body({ d, tab, canLineage }: { d: Detail; tab: Tab; canLineage: boolean
             </p>
           )}
           {d.used_by.length === 0
-            ? <p className="text-ink-3">No Audit Event references this Exchange.</p>
+            ? <p className="text-ink-3">No Audit Event references this LLM Exchange.</p>
             : (
               <ul className="space-y-1">
                 {d.used_by.map((e) => (
                   <li key={e.id} className="rounded-xl border border-line p-2">
-                    <span className="font-semibold">{e.type.replace(/_/g, " ")}</span> <span className="mono text-ink-3">event #{e.id}</span>
+                    <span className="font-semibold">{e.type.replace(/_/g, " ")}</span> <span className="mono text-ink-3">Audit Event #{e.id}</span>
                     <p className="mono text-[0.7692rem] text-ink-3">{e.timestamp} · {e.actor.name}</p>
                   </li>
                 ))}
@@ -190,14 +190,14 @@ export function ExchangeDrawer({ id, canLineage, onClose }: { id: number; canLin
     queryKey: ["llm-exchange", id],
     queryFn: async () => {
       const { data, error } = await api.GET("/api/llm/exchanges/{exchange_id}", { params: { path: { exchange_id: id } } });
-      if (error || !data) throw new Error(`Could not load Exchange #${id}`);
+      if (error || !data) throw new Error(`Could not load LLM Exchange #${id}`);
       return data;
     },
   });
   const d = q.data;
   return (
     <Drawer title={`LLM Exchange #${id}`} onClose={onClose}>
-      {q.isLoading && <p role="status" className="text-ink-3">Loading Exchange…</p>}
+      {q.isLoading && <p role="status" className="text-ink-3">Loading LLM Exchange…</p>}
       {q.isError && <ErrorLine>{q.error.message}</ErrorLine>}
       {d && (
         <>
@@ -209,7 +209,7 @@ export function ExchangeDrawer({ id, canLineage, onClose }: { id: number; canLin
           </div>
           <div role="tablist" aria-label="Exchange sections" className="seg">
             {TABS.map((t) => (
-              <button key={t} type="button" role="tab" aria-selected={tab === t} aria-pressed={tab === t} onClick={() => setTab(t)}>
+              <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
                 {t}
                 {t === "Reply" && d.grounding.some((v) => v.summary.ungrounded > 0) && <span className="ml-1 text-neg" title="This reply produced ungrounded Claims"><Icon name="alert" size={10} /><span className="sr-only"> has ungrounded Claims</span></span>}
               </button>

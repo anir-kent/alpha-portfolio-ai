@@ -46,7 +46,7 @@ function NodeCard({ n, refCb, onView }: { n: Node; refCb: (el: HTMLLIElement | n
       <p className="mono text-[0.7692rem] text-ink-3">{n.timestamp}</p>
       {ai && <p className="mono text-[0.7692rem] text-ai">{n.actor.model} · {n.actor.prompt_version}</p>}
       {ai && onView && exchangeId !== null && (
-        <button type="button" className="btn btn-sm mt-1" onClick={() => onView(exchangeId)}>View exchange</button>
+        <button type="button" className="btn btn-sm mt-1" onClick={() => onView(exchangeId)}>View LLM Exchange</button>
       )}
       {n.source && (
         <blockquote className="mt-1 border-l-[3px] border-line-strong pl-2 text-ink-2 italic">

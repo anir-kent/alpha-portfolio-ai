@@ -70,7 +70,7 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] Used by lists the referencing Audit Events and the grounding verdict, and links to the Recommendation's lineage
 - [ ] "Download JSON" saves `llm-exchange-<id>.json` containing the Exchange and its `hash`
 - [ ] A failed Exchange shows the error text and any raw reply that was captured
-- [ ] Lineage page, as a role with `llm:read`: AI nodes show "View exchange" and open the same drawer; as a role without `llm:read` the button is absent
+- [ ] Lineage page, as a role with `llm:read`: AI nodes show "View LLM Exchange" and open the same drawer; as a role without `llm:read` the button is absent
 
 ## Supersession and clean portfolio
 - [ ] Rerun analysis: open recommendations become Superseded

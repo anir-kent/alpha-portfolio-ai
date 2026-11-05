@@ -164,7 +164,7 @@
   .seg button { height: 1.7rem; padding: 0 0.85rem; border-radius: 999px; font-size: 0.8461rem; font-weight: 600; color: var(--color-ink-2); transition: background-color 140ms, color 140ms, box-shadow 140ms, transform 140ms; cursor: pointer; }
   .seg button:hover { color: var(--color-ink); }
   .seg button:active { transform: scale(0.97); }
-  .seg button[aria-pressed="true"] {
+  .seg button[aria-pressed="true"], .seg button[aria-selected="true"] {
     background: linear-gradient(to bottom, #fff, rgb(240 243 248)); color: var(--color-ink);
     box-shadow: 0 3px 8px -2px rgb(31 38 135 / 0.22), 0 1px 2px rgb(31 38 80 / 0.12), inset 0 1px 0 #fff;
   }
