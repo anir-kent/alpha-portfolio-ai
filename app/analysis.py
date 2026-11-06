@@ -23,13 +23,25 @@ from app.run_steps import NullReporter, RunStepReporter, run_step
 SYSTEM = audit.Actor.system("priority-engine")
 
 
+def open_run(db: Session, market: MarketData, actor: audit.Actor) -> AnalysisRunRow:
+    """Add a new, not yet completed Analysis Run row (flushed, not committed)."""
+    run = AnalysisRunRow(
+        started_at=audit.format_ts(datetime.now(timezone.utc)), actor_name=actor.name, as_of=market.as_of[:10],
+        config_json=get_config(db).model_dump_json(),
+    )
+    db.add(run)
+    db.flush()
+    return run
+
+
 def run_analysis(
     db: Session, market: MarketData, actor: audit.Actor, llm: LlmClient | None = None,
-    reporter: RunStepReporter | None = None,
+    reporter: RunStepReporter | None = None, run_id: int | None = None,
 ) -> tuple[int, int]:
     """Score every Portfolio. Returns (run_id, portfolios scored). With an `llm`, a Portfolio being rebalanced also gets an
     engine-bounded Research Tilt from approved Insights (a failing LLM only means no tilt). A `reporter` is told about
-    each Run Step as it goes (ADR-0005); without one, progress goes nowhere."""
+    each Run Step as it goes (ADR-0005); without one, progress goes nowhere. `run_id` names a run row already committed
+    by `open_run` (the background run); without one, the row is added in this run's transaction."""
     reporter = reporter or NullReporter()
     with run_step(reporter, "load_inputs"):
         cfg = get_config(db)
@@ -42,11 +54,8 @@ def run_analysis(
             targets[t.client_id][t.asset_class] = t.weight
         clients = list(db.scalars(select(ClientRow).order_by(ClientRow.id)))
 
-        run = AnalysisRunRow(
-            started_at=audit.format_ts(datetime.now(timezone.utc)), actor_name=actor.name, as_of=as_of.isoformat(),
-            config_json=cfg.model_dump_json(),
-        )
-        db.add(run)
+        run = db.get_one(AnalysisRunRow, run_id) if run_id is not None else open_run(db, market, actor)
+        run.as_of, run.config_json = as_of.isoformat(), cfg.model_dump_json()  # what this run actually used
         db.flush()
         insights = reports.approved_insights(db)  # the only research that can raise a score
         stale = recommendations.open_ids(db)  # superseded once this run is on record
@@ -133,6 +142,8 @@ def run_analysis(
                 tilted = [research_tilt.audit_assessment(db, rec, tilt)] if tilt is not None else []
                 recommendations.audit_draft(db, rec, parents=[started, evaluated, *tilted])
         run.completed = True
+        if run_id is None:  # a run with no background runner to record its outcome (the CLI, the seeder)
+            run.outcome, run.finished_at = "completed", audit.format_ts(datetime.now(timezone.utc))
         db.commit()
     if llm is None:
         reporter.step_skipped("priority_narratives")

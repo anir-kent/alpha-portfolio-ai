@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
+from app.analysis_runs import AnalysisRuns
 from app.exchanges import CapturingLlm, endpoint_host
 from app.llm import build_llm
 from app.db import User, make_session_factory
@@ -30,6 +31,7 @@ def create_app(settings: Settings | None = None, *, llm_transport: httpx.BaseTra
     app.state.session_factory = make_session_factory(settings.database_url)
     app.state.llm = CapturingLlm(
         build_llm(settings, llm_transport), app.state.session_factory, mode=settings.llm_mode, endpoint_host=endpoint_host(settings))
+    app.state.analysis_runs = AnalysisRuns(app.state.session_factory)
     seed_users(app.state.session_factory, settings.seed_user_password)
     app.add_middleware(
         CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,

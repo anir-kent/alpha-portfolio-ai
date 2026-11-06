@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app import audit
+from app.analysis_runs import AnalysisRuns
 from app.market_data import MarketData
 from app.db import SessionRow, User
 from app.rbac import PERMISSIONS
@@ -72,3 +73,7 @@ def get_market(request: Request) -> MarketData:
 
 def get_llm(request: Request):
     return request.app.state.llm
+
+
+def get_analysis_runs(request: Request) -> AnalysisRuns:
+    return request.app.state.analysis_runs

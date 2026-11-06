@@ -1,26 +1,22 @@
 import json
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import audit, grounding
-from app.analysis import run_analysis
+from app.analysis_runs import AnalysisRuns, RunSnapshot
 from app.db import AnalysisRunRow, ClientRow, PriorityNarrativeRow, PriorityResultRow, User
-from app.deps import get_db, get_llm, get_market, require
+from app.deps import get_analysis_runs, get_db, get_llm, get_market, require
 from app.market_data import MarketData
 from app.rbac import PERMISSIONS
 
 router = APIRouter(prefix="/api", tags=["queue"])
 
 Label = Literal["High", "Medium", "Low"]
-
-
-class RunOut(BaseModel):
-    run_id: int
-    portfolios_scored: int
 
 
 class ComponentOut(BaseModel):
@@ -89,13 +85,40 @@ class Queue(BaseModel):
     items: list[QueueRow]
 
 
-@router.post("/analysis/runs", response_model=RunOut, operation_id="runAnalysis")
+@router.post(
+    "/analysis/runs", response_model=RunSnapshot, status_code=202, operation_id="runAnalysis",
+    responses={409: {"model": RunSnapshot, "description": "A run is already in flight: its snapshot"}},
+)
 def start_run(
-    user: User = Depends(require("analysis:run")), db: Session = Depends(get_db), market: MarketData = Depends(get_market),
-    llm=Depends(get_llm),
+    user: User = Depends(require("analysis:run")), market: MarketData = Depends(get_market), llm=Depends(get_llm),
+    runs: AnalysisRuns = Depends(get_analysis_runs),
 ):
-    run_id, n = run_analysis(db, market, audit.Actor.user(user.username, user.role), llm)
-    return RunOut(run_id=run_id, portfolios_scored=n)
+    """Start an Analysis Run in the background (ADR-0005). Only one runs at a time: while one is in flight, `409` with it."""
+    snapshot, started = runs.start(market, audit.Actor.user(user.username, user.role), llm)
+    if not started:
+        return JSONResponse(snapshot.model_dump(), status_code=409)
+    return snapshot
+
+
+@router.get(
+    "/analysis/runs/current", response_model=RunSnapshot, operation_id="getCurrentAnalysisRun",
+    responses={204: {"description": "No run in flight"}},
+)
+def current_run(user: User = Depends(require("analysis:run")), runs: AnalysisRuns = Depends(get_analysis_runs)):
+    snapshot = runs.in_flight()
+    return snapshot if snapshot is not None else Response(status_code=204)
+
+
+@router.get("/analysis/runs/{run_id}", response_model=RunSnapshot, operation_id="getAnalysisRun")
+def get_run(
+    run_id: int, user: User = Depends(require("analysis:run")), db: Session = Depends(get_db),
+    runs: AnalysisRuns = Depends(get_analysis_runs),
+):
+    """The run's live state while it is in flight, its saved result once it has finished."""
+    snapshot = runs.snapshot(db, run_id)
+    if snapshot is None:
+        raise HTTPException(404, "Analysis Run not found")
+    return snapshot
 
 
 def _narrative(db: Session, n: PriorityNarrativeRow | None) -> QueueNarrative | None:

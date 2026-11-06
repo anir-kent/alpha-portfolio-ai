@@ -15,6 +15,16 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 
 - [x] Nav shows no Audit, Governance or Config
 - [x] Run analysis; all 25 portfolios scored
+
+## Advisor: Run Analysis modal
+
+- [ ] Run analysis opens the modal at once, listing Load inputs, Score Portfolios, Record run, Priority narratives, Recommendation narratives
+- [ ] Each Run Step goes pending -> running -> done with its time; the active one has a ticking timer; the header total keeps counting
+- [ ] Score Portfolios counts up `n/25`
+- [ ] Without an LLM configured, both narrative steps show skipped and the run ends Completed
+- [ ] On Completed the Queue behind refreshes (new run number in the subtitle); View updated queue closes the modal on it
+- [ ] Focus lands in the modal and Tab stays inside; Escape hides it; focus returns to Run analysis
+- [ ] With "reduce motion" on in the OS, the running indicator is a still ring, not a spinner
 - [x] Score 0-100, High/Medium/Low label, 4-part breakdown, SLA flag, cited narrative
 - [x] Filter by label and risk profile; sort by review-due
 - [x] C001-C004 rank above C005; C005 is Low

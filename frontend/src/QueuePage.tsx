@@ -1,7 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "./api/client";
+import { RunAnalysisModal, type RunSnapshot } from "./RunAnalysisModal";
 import { Citations, DeltaBar, DRIFT_TONE, Empty, ErrorLine, HoverPeek, Icon, LABEL_TONE, PageHeader, Panel, Pill, ScoreDial, pp, useQueue, type QueueParams } from "./ui";
 
 const COMPONENT_COLOR = { drift: "#2253d4", risk: "#475569", opportunity: "#0f766e", urgency: "#b7791f" } as const;
@@ -79,15 +80,19 @@ function Narrative({ r }: { r: Item }) {
 }
 
 export function QueuePage() {
-  const qc = useQueryClient();
   const [filters, setFilters] = useState<QueueParams>({ sort: "score" });
   const queue = useQueue(filters);
+  const [watching, setWatching] = useState<RunSnapshot | null>(null);
+  const runButton = useRef<HTMLButtonElement>(null);
   const run = useMutation({
+    // Starts the run in the background; a run already in flight (409) is followed instead of a new one.
     mutationFn: async () => {
-      const { error } = await api.POST("/api/analysis/runs");
-      if (error) throw new Error("Analysis run failed");
+      const { data, error, response } = await api.POST("/api/analysis/runs");
+      if (data) return data;
+      if (response.status === 409 && error) return error as RunSnapshot;
+      throw new Error("Could not start the analysis run");
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["queue"] }),
+    onSuccess: setWatching,
   });
   const set = (patch: Partial<QueueParams>) => setFilters((f) => ({ ...f, ...patch }));
   const items = queue.data?.items ?? [];
@@ -97,9 +102,10 @@ export function QueuePage() {
       <PageHeader
         title="Priority queue"
         sub={queue.data?.as_of ? <>Run <span className="mono">#{queue.data.run_id}</span>, as of <span className="mono">{queue.data.as_of}</span> · score = drift 40% + risk 30% + opportunity 20% + urgency 10%</> : "Score = drift 40% + risk 30% + opportunity 20% + urgency 10%"}
-        actions={<button className="btn btn-primary" onClick={() => run.mutate()} disabled={run.isPending}>{run.isPending ? "Running…" : "Run analysis"}</button>}
+        actions={<button ref={runButton} className="btn btn-primary" onClick={() => run.mutate()} disabled={run.isPending}>{run.isPending ? "Starting…" : "Run analysis"}</button>}
       />
       {run.isError && <ErrorLine>{run.error.message}</ErrorLine>}
+      {watching && <RunAnalysisModal key={watching.run_id} initial={watching} trigger={runButton} onClose={() => setWatching(null)} />}
 
       <div className="panel mb-3 flex flex-wrap items-end gap-x-4 gap-y-2 px-3 py-2" role="search" aria-label="Queue filters">
         <div className="label">Priority
