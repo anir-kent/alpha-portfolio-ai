@@ -62,4 +62,7 @@ PERMISSIONS: dict[str, frozenset[str]] = {
     ),
 }
 
+# Every role may ask the Assistant; what it sees is still filtered by the role's other permissions (sme-assistant spec).
+PERMISSIONS = {role: perms | {"assistant:use"} for role, perms in PERMISSIONS.items()}
+
 assert set(PERMISSIONS) == set(ROLES)

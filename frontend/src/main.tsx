@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 import { api } from "./api/client";
 import { ApprovalsPage } from "./ApprovalsPage";
+import { AssistantDrawer } from "./AssistantDrawer";
 import { AuditPage } from "./AuditPage";
 import { LineagePage } from "./LineagePage";
 import { ExchangesPage } from "./ExchangesPage";
@@ -296,11 +297,31 @@ function Shell({ username, role, permissions }: { username: string; role: string
       qc.invalidateQueries({ queryKey: ["me"] });
     },
   });
+  const canAsk = permissions.includes("assistant:use");
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const assistantTrigger = useRef<HTMLButtonElement>(null);
   return (
     <div className="flex min-h-screen">
       <Capsule username={username} role={role} permissions={permissions} onLogout={() => logout.mutate()} />
       <div className="flex min-w-0 flex-1 flex-col gap-3 p-3">
-        <StatusStrip permissions={permissions} />
+        <div className="flex items-stretch gap-2">
+          <div className="min-w-0 flex-1">
+            <StatusStrip permissions={permissions} />
+          </div>
+          {canAsk && (
+            <button
+              type="button"
+              ref={assistantTrigger}
+              className="btn"
+              onClick={() => setAssistantOpen((o) => !o)}
+              aria-expanded={assistantOpen}
+              aria-controls="assistant-drawer"
+            >
+              <Icon name="spark" />
+              Assistant
+            </button>
+          )}
+        </div>
         <main className="min-w-0 flex-1 px-1">
           <Routes>
             {permissions.includes("queue:read") && <Route path="/queue" element={<QueuePage />} />}
@@ -336,6 +357,16 @@ function Shell({ username, role, permissions }: { username: string; role: string
           </Routes>
         </main>
       </div>
+      {/* Kept mounted while closed, so its turns survive closing and reopening. */}
+      {canAsk && (
+        <AssistantDrawer
+          open={assistantOpen}
+          onClose={() => {
+            setAssistantOpen(false);
+            assistantTrigger.current?.focus();
+          }}
+        />
+      )}
     </div>
   );
 }

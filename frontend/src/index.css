@@ -523,6 +523,37 @@
       inset 0 1px 0 #fff;
   }
 
+  /* Assistant: a non-modal column in the app shell, so it stays open across navigation. */
+  .assistant {
+    position: sticky;
+    top: 0.75rem;
+    align-self: flex-start;
+    margin: 0.75rem 0.75rem 0.75rem 0;
+    height: calc(100vh - 1.5rem);
+    width: min(26rem, 40vw);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .assistant[hidden] {
+    display: none;
+  }
+  .assistant-md > * + * {
+    margin-top: 0.5rem;
+  }
+  .assistant-md ul {
+    list-style: disc;
+    padding-left: 1.25rem;
+  }
+  .assistant-md ol {
+    list-style: decimal;
+    padding-left: 1.25rem;
+  }
+  .assistant-md code {
+    font-family: var(--font-mono, ui-monospace, monospace);
+  }
+
   /* Run Analysis modal: the drawer's glass, centred. */
   .run-modal {
     position: fixed;

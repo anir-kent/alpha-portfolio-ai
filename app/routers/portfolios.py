@@ -93,16 +93,12 @@ class PortfolioDetail(BaseModel):
     history: HistoryOut
 
 
-@router.get("/portfolios/{portfolio_id}", response_model=PortfolioDetail, operation_id="getPortfolio")
-def portfolio(
-    portfolio_id: str,
-    user: User = Depends(require("portfolio:read")),
-    db: Session = Depends(get_db),
-    market: MarketData = Depends(get_market),
-):
+def portfolio_detail(db: Session, market: MarketData, portfolio_id: str, user: User) -> PortfolioDetail | None:
+    """What the Portfolio screen shows `user` for one Portfolio, or None if it does not exist. The Assistant's Portfolio
+    Screen Context is built from this same result, so it never sees more than the screen."""
     c = db.get(ClientRow, portfolio_id)
     if c is None:
-        raise HTTPException(404, "Portfolio not found")
+        return None
     rows = portfolio_view.holdings(db, market, c.id)
     total = sum(r["market_value"] for r in rows)
     for r in rows:
@@ -156,3 +152,16 @@ def portfolio(
         recommendation=to_out(latest, get_config(db), db, user) if latest and latest.status != "superseded" else None,
         history=history_for(db, c.id),
     )
+
+
+@router.get("/portfolios/{portfolio_id}", response_model=PortfolioDetail, operation_id="getPortfolio")
+def portfolio(
+    portfolio_id: str,
+    user: User = Depends(require("portfolio:read")),
+    db: Session = Depends(get_db),
+    market: MarketData = Depends(get_market),
+):
+    detail = portfolio_detail(db, market, portfolio_id, user)
+    if detail is None:
+        raise HTTPException(404, "Portfolio not found")
+    return detail

@@ -35,3 +35,8 @@ def test_every_role_is_known_to_the_permission_matrix(login):
     for role in ROLES:
         me = login(role).get("/api/auth/me").json()
         assert isinstance(me["permissions"], list) and me["permissions"]
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_every_role_may_use_the_assistant(login, role):
+    assert "assistant:use" in login(role).get("/api/auth/me").json()["permissions"]

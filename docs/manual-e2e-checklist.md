@@ -51,6 +51,14 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] "Approved = cleared to act outside this system" is clear
 - [ ] `relationship_manager` sees masked client fields; `advisor` sees them
 
+## Assistant (Portfolio screen)
+
+- [ ] The Assistant button shows next to the status strip for every role; it opens the drawer (`aria-expanded` true), the close button or Escape hides it and focus returns to the Assistant button, it stays open while moving between screens, and closing then reopening keeps the turns
+- [ ] On `/portfolios/C001` the drawer header reads "Portfolio C001"; off a Portfolio it reads "No context on this screen" and the Question box is disabled
+- [ ] Ask "Which asset class drives the drift?" on C001: "Thinking…" shows, then the Answer renders as Markdown (bold, lists) with no raw HTML; follow-up questions fill the Question box when clicked
+- [ ] Ask "Should I buy NVDA?": the fixed refusal shows ("I can only help with questions about this platform…"), never the model's text
+- [ ] As auditor, the turn's LLM Exchange (task `assistant_answer`, `assistant_answer@v1`) is listed on LLM Exchanges with no Client name or email in its prompt, an `assistant.answered` or `assistant.refused` Audit Event references it, and Verify chain passes
+
 ## Approvals
 
 - [ ] C002/C003 (no breach, not high-impact): Advisor accept -> Approved

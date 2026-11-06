@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Engine, ForeignKey, String, Text, create_engine, inspect, text
+from sqlalchemy import DateTime, Engine, ForeignKey, String, Text, UniqueConstraint, create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -330,6 +330,37 @@ class PriorityNarrativeRow(Base):
     model: Mapped[str | None] = mapped_column(String, nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[str] = mapped_column(String)
+
+
+class ConversationRow(Base):
+    """One user's Assistant Conversation within one login session (ADR-0006). It ends at logout or session expiry and
+    is never resumed; `session_token_hash` names the server-side session row it belongs to."""
+
+    __tablename__ = "conversations"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    session_token_hash: Mapped[str] = mapped_column(String, index=True)
+    started_at: Mapped[str] = mapped_column(String)
+    ended_at: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class AssistantTurnRow(Base):
+    """One Question and its outcome (ADR-0006). Append-only: written once, never updated or deleted."""
+
+    __tablename__ = "assistant_turns"
+    __table_args__ = (UniqueConstraint("conversation_id", "seq"),)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    seq: Mapped[int] = mapped_column()  # 1-based within the Conversation
+    created_at: Mapped[str] = mapped_column(String)
+    question: Mapped[str] = mapped_column(Text)
+    screen_json: Mapped[str] = mapped_column(Text)  # the screen identity the browser sent
+    screen_context_hash: Mapped[str | None] = mapped_column(String, nullable=True)  # None when nothing was readable
+    outcome: Mapped[str] = mapped_column(String, index=True)  # answered | refused | failed
+    answer_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    grounding_check_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    exchange_id: Mapped[int | None] = mapped_column(nullable=True)
+    exchange_hash: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 def make_session_factory(url: str) -> sessionmaker:

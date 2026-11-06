@@ -40,6 +40,9 @@ EVENT_TYPES = (
     "exception_approved",
     "exception_blocked",
     "access_denied",
+    "assistant.answered",
+    "assistant.refused",
+    "assistant.failed",
 )
 
 GENESIS_HASH = "0" * 64

@@ -10,4 +10,4 @@
 
 ## Consequences
 
-History reaches the model as a labelled transcript block inside the single `user` prompt (last N Question/Answer pairs, text only), so the LLM interface, recording key and Exchange capture are unchanged. Screen Contexts carry Client ids and pseudonyms only, never names or emails, even for users holding `client:pii`, so ADR-0004's prompt-PII guard still holds.
+A turn that fails writes `assistant.failed`, with the error Exchange's reference when capture stored one. A Question about an entity the user cannot read, or one that does not exist, is refused without calling the model, so its `assistant.refused` event carries no Exchange reference and its turn no Screen Context hash; verification treats it like any event without a reference. History reaches the model as a labelled transcript block inside the single `user` prompt (last N Question/Answer pairs, text only), so the LLM interface, recording key and Exchange capture are unchanged. Screen Contexts carry Client ids and pseudonyms only, never names or emails, even for users holding `client:pii`, so ADR-0004's prompt-PII guard still holds.

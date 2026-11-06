@@ -11,6 +11,7 @@ from app.rbac import ROLES
 from app.routers import (
     analysis,
     approvals,
+    assistant,
     audit,
     auth,
     config,
@@ -63,6 +64,7 @@ def create_app(settings: Settings | None = None, *, llm_transport: httpx.BaseTra
         auth.router,
         analysis.router,
         approvals.router,
+        assistant.router,
         audit.router,
         config.router,
         governance.router,

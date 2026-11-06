@@ -417,6 +417,47 @@
         }
       }
     },
+    "/api/assistant/questions": {
+      "post": {
+        "tags": [
+          "assistant"
+        ],
+        "summary": "Ask",
+        "operationId": "askAssistant",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Turn"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/audit/events": {
       "get": {
         "tags": [
@@ -453,7 +494,10 @@
                     "decision_recorded",
                     "exception_approved",
                     "exception_blocked",
-                    "access_denied"
+                    "access_denied",
+                    "assistant.answered",
+                    "assistant.refused",
+                    "assistant.failed"
                   ],
                   "type": "string"
                 },
@@ -1857,6 +1901,35 @@
         ],
         "title": "AiStepOut",
         "description": "How far to rely on one AI step. No prompt or reply text; the Exchange id only for roles holding `llm:read`."
+      },
+      "Answer": {
+        "properties": {
+          "markdown": {
+            "type": "string",
+            "title": "Markdown"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            },
+            "type": "array",
+            "title": "Claims"
+          },
+          "follow_up_questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Follow Up Questions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "markdown",
+          "claims",
+          "follow_up_questions"
+        ],
+        "title": "Answer"
       },
       "ApprovalItem": {
         "properties": {
@@ -4529,6 +4602,24 @@
         ],
         "title": "Quality"
       },
+      "QuestionIn": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Question"
+          },
+          "screen": {
+            "$ref": "#/components/schemas/ScreenIdentity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question",
+          "screen"
+        ],
+        "title": "QuestionIn"
+      },
       "Queue": {
         "properties": {
           "run_id": {
@@ -5242,6 +5333,40 @@
         ],
         "title": "RunStepOut"
       },
+      "ScreenIdentity": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "portfolio",
+            "title": "Kind"
+          },
+          "entity_ids": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Entity Ids"
+          },
+          "selected_item": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Item"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "entity_ids"
+        ],
+        "title": "ScreenIdentity",
+        "description": "Which screen the Question was asked on: its kind, the entity ids it shows and an optional selected item."
+      },
       "SectorExposureOut": {
         "properties": {
           "sector": {
@@ -5779,6 +5904,92 @@
           "pct_of_portfolio"
         ],
         "title": "TradeLineOut"
+      },
+      "Turn": {
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "answered",
+              "refused",
+              "failed"
+            ],
+            "title": "Outcome"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Answer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "screen": {
+            "$ref": "#/components/schemas/ScreenIdentity"
+          },
+          "context_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Label"
+          },
+          "exchange_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exchange Id"
+          },
+          "exchange_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exchange Hash"
+          }
+        },
+        "type": "object",
+        "required": [
+          "seq",
+          "outcome",
+          "answer",
+          "message",
+          "screen",
+          "context_label",
+          "exchange_id",
+          "exchange_hash"
+        ],
+        "title": "Turn"
       },
       "ValidationError": {
         "properties": {
