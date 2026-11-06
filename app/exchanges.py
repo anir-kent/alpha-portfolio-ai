@@ -58,6 +58,7 @@ class CapturingLlm:
         self, request: LlmRequest, *, response: LlmResponse | None, error: LlmError | None = None,
     ) -> LlmExchangeRow:
         detail = response or error  # both carry whatever transport detail the adapter knew
+        assert detail is not None, "an Exchange is stored for a response or an error"
         row = LlmExchangeRow(
             created_at=format_ts(datetime.now(timezone.utc)), task=request.task, prompt_version=request.prompt_version,
             model=response.model if response else getattr(self.inner, "model", None), mode=self.mode,

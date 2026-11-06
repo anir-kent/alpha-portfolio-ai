@@ -82,7 +82,7 @@ def pending_approvals(
     )
     items = []
     for rec in recs:
-        c = db.get(ClientRow, rec.client_id)
+        c = db.get_one(ClientRow, rec.client_id)
         restrictions = db.scalars(select(RestrictionRow).where(RestrictionRow.client_id == c.id).order_by(RestrictionRow.id))
         items.append(ApprovalItem(
             step=approvals.STEP_OF[rec.status], status=rec.status, portfolio_id=c.id, client_name=c.name if pii else None,

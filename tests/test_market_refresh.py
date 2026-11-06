@@ -53,7 +53,8 @@ def test_refresh_writes_a_snapshot_the_adapter_can_load(tmp_path):
 
 
 def test_refresh_respects_free_tier_rate_limit(tmp_path):
-    calls, sleeps = [], []
+    calls: list = []
+    sleeps: list = []
     _run(tmp_path, _handler(calls=calls), sleeps)
     assert max(len(c) for c in calls) <= 8
     assert len(sleeps) == len(calls) - 1 and all(s >= 60 for s in sleeps)
@@ -74,7 +75,8 @@ def test_snapshot_names_come_from_the_universe_since_the_api_has_none(tmp_path):
 
 
 def test_refresh_waits_and_retries_when_rate_limited(tmp_path):
-    state, sleeps = {"n": 0}, []
+    state = {"n": 0}
+    sleeps: list = []
 
     def handle(request):
         state["n"] += 1

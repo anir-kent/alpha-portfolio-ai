@@ -162,22 +162,22 @@ def ingest(
         )
         return row, []
     kept, dropped = [], []
-    for e in extraction.insights:
-        if not valid_subject(e.subject_kind, e.subject):
-            dropped.append({"subject": e.subject, "reason": "subject not in taxonomy"})
-        elif not 1 <= e.page <= len(pages):
-            dropped.append({"subject": e.subject, "reason": "cited page does not exist"})
-        elif not passage_on_page(e.passage, pages[e.page - 1]):
-            dropped.append({"subject": e.subject, "reason": "passage not found on cited page"})
+    for ins in extraction.insights:
+        if not valid_subject(ins.subject_kind, ins.subject):
+            dropped.append({"subject": ins.subject, "reason": "subject not in taxonomy"})
+        elif not 1 <= ins.page <= len(pages):
+            dropped.append({"subject": ins.subject, "reason": "cited page does not exist"})
+        elif not passage_on_page(ins.passage, pages[ins.page - 1]):
+            dropped.append({"subject": ins.subject, "reason": "passage not found on cited page"})
         else:
-            kept.append(e)
+            kept.append(ins)
     system = Actor.system("insight-extractor", model=response.model, prompt_version=response.prompt_version)
     event = audit.record(
         db, "insight_extracted", system,
         {"outcome": "ok", "insight_count": len(kept), "dropped": dropped,
          **exchange_ref(response)}, parents=[ingested], report_id=report_id,
     )
-    return row, [add_insight(db, report_id, e, extract_event_id=event) for e in kept]
+    return row, [add_insight(db, report_id, ins, extract_event_id=event) for ins in kept]
 
 
 def decide(db: Session, insight: InsightRow, actor: Actor, action: Literal["approve", "reject"], note: str | None) -> InsightRow:

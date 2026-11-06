@@ -24,7 +24,7 @@ def sf(tmp_path):
 def dump(sf):
     with sf() as db:
         return [
-            [tuple(getattr(r, c.name) for c in r.__table__.columns) for r in db.scalars(select(m).order_by(*m.__table__.primary_key.columns))]
+            [tuple(getattr(r, c.name) for c in r.__table__.columns) for r in db.scalars(select(m).order_by(*m.__mapper__.primary_key))]
             for m in (ClientRow, AccountRow, HoldingRow, TargetRow, RestrictionRow)
         ]
 
@@ -36,7 +36,7 @@ def portfolio(sf, md, client_id):
             select(HoldingRow, AccountRow).join(AccountRow, HoldingRow.account_id == AccountRow.id)
             .where(AccountRow.client_id == client_id)
         ).all()
-        values = defaultdict(float)
+        values: defaultdict[str, float] = defaultdict(float)
         for h, _ in rows:
             values[h.symbol] += h.quantity * md.instrument(h.symbol).price
         target = {t.asset_class: t.weight for t in db.scalars(select(TargetRow).where(TargetRow.client_id == client_id))}
@@ -45,14 +45,14 @@ def portfolio(sf, md, client_id):
 
 
 def class_weights(md, values, total):
-    w = defaultdict(float)
+    w: defaultdict[str, float] = defaultdict(float)
     for s, v in values.items():
         w[md.instrument(s).asset_class] += v / total
     return w
 
 
 def sector_weights(md, values, total):
-    w = defaultdict(float)
+    w: defaultdict[str, float] = defaultdict(float)
     for s, v in values.items():
         for sec, x in md.sector_weights(s).items():
             w[sec] += v / total * x

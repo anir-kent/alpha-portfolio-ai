@@ -11,6 +11,7 @@ at every required step.
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -49,7 +50,7 @@ def _now() -> str:
 
 def client_inputs(db: Session, client_id: str) -> tuple[ClientRow, dict[str, float], list[tuple[str, str]], dict[str, str]]:
     """The Client, Target Allocation, Restrictions and the tax status of each Account."""
-    client = db.get(ClientRow, client_id)
+    client = db.get_one(ClientRow, client_id)
     targets = {t.asset_class: t.weight for t in db.scalars(select(TargetRow).where(TargetRow.client_id == client_id))}
     restrictions = [(r.kind, r.value) for r in db.scalars(select(RestrictionRow).where(RestrictionRow.client_id == client_id))]
     tax = {a.id: a.tax_status for a in db.scalars(select(AccountRow).where(AccountRow.client_id == client_id))}
@@ -62,7 +63,7 @@ def evaluate_lines(
 ) -> Evaluation:
     """Price the Trade Lines and run the Suitability Rules and drift on the post-trade Portfolio."""
     total = sum(r["market_value"] for r in rows)
-    out = []
+    out: list[dict[str, Any]] = []
     for l in lines:
         inst = market.instrument(l.symbol)
         amount = l.quantity * inst.price
@@ -128,15 +129,15 @@ def draft(
     An engine-bounded Research Tilt (already clipped, see app.research_tilt) shifts the Asset-Class targets the Trade Lines
     aim at and adds sector switches inside equity; tolerance and post-trade drift are still measured against the real target."""
     restricted = {v for k, v in restrictions if k == "instrument"}
-    usable = tilt is not None and tilt.status == "ok"
-    aim = research_tilt.tilted_targets(targets, tilt.allowed("asset_class"), tilt.bound_pp) if usable else targets
+    usable = tilt if tilt is not None and tilt.status == "ok" else None
+    aim = research_tilt.tilted_targets(targets, usable.allowed("asset_class"), usable.bound_pp) if usable is not None else targets
     lines = rebalance.plan(rows, aim, restricted, market, drift)
     if not lines:
         return None
-    if usable and tilt.allowed("sector"):
+    if usable is not None and usable.allowed("sector"):
         post = rebalance.apply(lines, rows, tax, market)
         sleeve = rebalance.sector_sleeve(
-            post, tilt.allowed("sector"), restricted, {v for k, v in restrictions if k == "sector"}, market,
+            post, usable.allowed("sector"), restricted, {v for k, v in restrictions if k == "sector"}, market,
             sum(r["market_value"] for r in rows),
         )
         lines = rebalance.merge(lines, sleeve)
@@ -239,6 +240,7 @@ def decide(
     db.flush()
     new_breaches: list[dict] = []
     if new is not None:
+        assert new_ev is not None  # set together with `new` on modify
         new.root_id = rec.root_id
         decision.resulting_recommendation_id = new.id
         before = {r["rule_id"] for r in json.loads(rec.suitability_json) if r["status"] == "breach"}

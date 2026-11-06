@@ -54,5 +54,6 @@ class MarketData:
         cash and bond funds map to 'Cash' / 'Fixed Income'."""
         inst = self._instruments[symbol]
         if inst.kind == "equity":
+            assert inst.sector is not None, f"equity {symbol} has no sector in the universe"
             return {inst.sector: 1.0}
         return dict(self._look_through[symbol])

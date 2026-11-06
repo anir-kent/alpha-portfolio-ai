@@ -86,16 +86,16 @@ def generate(db: Session, llm: LlmClient, rec: RecommendationRow) -> Recommendat
         )
         return row
     check_id, results = grounding.validate(db, rec, reply.claims)
+    memo = build_memo(rec, db.get(RecommendationTiltRow, rec.id), results)
     row = RecommendationNarrativeRow(
         recommendation_id=rec.id, status="complete", check_id=check_id, model=response.model,
-        prompt_version=response.prompt_version, created_at=now,
-        memo=build_memo(rec, db.get(RecommendationTiltRow, rec.id), results),
+        prompt_version=response.prompt_version, created_at=now, memo=memo,
     )
     db.add(row)
     db.commit()
     audit.record(
         db, "memo_generated", audit.Actor.system("memo-writer", model=response.model, prompt_version=response.prompt_version),
-        {"status": "complete", "check_id": check_id, "summary": grounding.summarise(results), "memo_chars": len(row.memo), **exchange_ref(response)},
+        {"status": "complete", "check_id": check_id, "summary": grounding.summarise(results), "memo_chars": len(memo), **exchange_ref(response)},
         parents=[p for p in [recommendations.last_event_id(db, rec.id)] if p], **scope,
     )
     return row

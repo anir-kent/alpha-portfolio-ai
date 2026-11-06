@@ -91,7 +91,12 @@ def test_each_queue_row_shows_grounded_claims_and_flags_the_rest(ai):
 def test_the_model_is_offered_only_engine_figures_and_approved_insights(ai):
     ai.approve("Information Technology")
     seen = []
-    ai.stub.priority_narrative = lambda p: seen.append(p) or {"claims": []}
+
+    def reply(p):
+        seen.append(p)
+        return {"claims": []}
+
+    ai.stub.priority_narrative = reply
     item = relevant(run(ai))[0]
     payload = next(p for p in seen if p["portfolio_id"] == item["client_id"])
     assert payload["figures"]["priority_score"] == item["score"]
@@ -138,7 +143,12 @@ def test_narrative_generation_and_flags_are_audited_with_model_and_prompt_versio
 def test_a_portfolio_with_no_relevant_insight_gets_no_narrative_and_no_llm_call(ai):
     ai.approve("Information Technology")
     seen = []
-    ai.stub.priority_narrative = lambda p: seen.append(p["portfolio_id"]) or {"claims": []}
+
+    def reply(p):
+        seen.append(p["portfolio_id"])
+        return {"claims": []}
+
+    ai.stub.priority_narrative = reply
     items = run(ai)
     quiet = [i for i in items if opportunity(i)["raw"] == 0]
     assert quiet and all(i["narrative"] is None for i in quiet)

@@ -130,7 +130,8 @@ def read_stream(app, c, last_event_id=None, seconds=0.6, while_open=None):
     r = c.get("/api/llm/exchanges/stream", headers={"Last-Event-ID": str(last_event_id)} if last_event_id is not None else {})
     assert r.status_code == 200, r.text
     assert r.headers["content-type"].startswith("text/event-stream")
-    events, current = [], {}
+    events: list[tuple[int, dict]] = []
+    current: dict[str, str] = {}
     for line in r.text.splitlines():
         if line.startswith(":"):
             continue

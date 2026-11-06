@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import Any
+
 from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -19,7 +22,7 @@ class SessionRow(Base):
     __tablename__ = "sessions"
     token_hash: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    expires_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class ConfigRow(Base):
@@ -316,7 +319,7 @@ class PriorityNarrativeRow(Base):
 
 
 def make_session_factory(url: str) -> sessionmaker:
-    kwargs = {}
+    kwargs: dict[str, Any] = {}
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
         if url in ("sqlite://", "sqlite:///:memory:"):

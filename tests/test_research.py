@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -205,7 +206,7 @@ def test_recorded_llm_raises_when_nothing_was_recorded(tmp_path):
 
 
 def test_openai_compatible_llm_parses_replies_and_can_record_them(tmp_path):
-    seen = {}
+    seen: dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["url"], seen["auth"], seen["body"] = str(request.url), request.headers["authorization"], json.loads(request.content)

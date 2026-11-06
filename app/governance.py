@@ -87,6 +87,7 @@ def prompt_log(db: Session) -> list[PromptUse]:
         select(AuditEventRow.prompt_version, AuditEventRow.model, AuditEventRow.timestamp)
         .where(AuditEventRow.prompt_version.is_not(None)).order_by(AuditEventRow.id)
     ):
+        assert version is not None  # the query keeps only events with a prompt version
         u = uses.setdefault(version, {"models": set(), "calls": 0, "first": ts, "last": ts})
         u["calls"] += 1
         u["last"] = max(u["last"], ts)

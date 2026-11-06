@@ -169,10 +169,15 @@ def test_pending_and_rejected_insights_cannot_influence_a_tilt(app, ai):
     ai.approve("Information Technology")  # Utilities (pending) and equity (pending) are not approved
     tilt_for(ai, Information_Technology=1.0)
     sent = []
-    ai.stub.tilt = lambda p: sent.append(p) or {"tilts": [
-        {"insight_id": ai.ids["Utilities"], "impact": "headwind", "tilt_pp": -2.0},
-        {"insight_id": ai.ids["equity"], "impact": "tailwind", "tilt_pp": 2.0},
-        {"insight_id": ai.ids["Information Technology"], "impact": "tailwind", "tilt_pp": 1.0}]}
+
+    def reply(p):
+        sent.append(p)
+        return {"tilts": [
+            {"insight_id": ai.ids["Utilities"], "impact": "headwind", "tilt_pp": -2.0},
+            {"insight_id": ai.ids["equity"], "impact": "tailwind", "tilt_pp": 2.0},
+            {"insight_id": ai.ids["Information Technology"], "impact": "tailwind", "tilt_pp": 1.0}]}
+
+    ai.stub.tilt = reply
     rec = ai.run()
     assert {i["id"] for i in sent[0]["insights"]} == {ai.ids["Information Technology"]}  # the LLM is only shown approved
     assert [e["subject"] for e in rec["research"]["tilt"]["entries"]] == ["Information Technology"]
@@ -258,7 +263,12 @@ def test_tilt_figures_are_citable_engine_figures(ai):
     ai.approve("equity")
     tilt_for(ai, equity=5.0)
     seen = []
-    ai.stub.narrative = lambda p: seen.append(p) or {"claims": []}
+
+    def reply(p):
+        seen.append(p)
+        return {"claims": []}
+
+    ai.stub.narrative = reply
     ai.run()
     figures = seen[0]["figures"]
     assert figures["tilt.equity.proposed_pp"] == 5.0 and figures["tilt.equity.allowed_pp"] == 2.0

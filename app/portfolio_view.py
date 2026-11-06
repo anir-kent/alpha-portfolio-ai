@@ -3,6 +3,7 @@
 Numbers come from the deterministic engines (ADR-0001); this module only assembles them.
 """
 from collections import defaultdict
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,7 +18,7 @@ def holdings(db: Session, market: MarketData, client_id: str) -> list[dict]:
         select(HoldingRow, AccountRow).join(AccountRow, HoldingRow.account_id == AccountRow.id)
         .where(AccountRow.client_id == client_id)
     )
-    out = []
+    out: list[dict[str, Any]] = []
     for h, a in rows:
         inst = market.instrument(h.symbol)
         out.append({
