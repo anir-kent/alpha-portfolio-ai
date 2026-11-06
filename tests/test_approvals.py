@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app import audit
 from app.db import AuditEventRow
+from tests.runs import run_and_wait
 from tests.test_portfolio import url
 from tests.test_queue import seeded  # noqa: F401  (fixture)
 from tests.test_recommendations import breaching_lines, decide, rec
@@ -21,7 +22,7 @@ NEVER = {"approval_thresholds": {"turnover_pct": 100, "trade_line_pct": 100}}  #
 @pytest.fixture
 def advisor(login, seeded):  # noqa: F811
     c = login("advisor")
-    assert c.post("/api/analysis/runs").status_code == 200
+    run_and_wait(c)
     return c
 
 
@@ -168,7 +169,7 @@ def test_thresholds_are_read_from_config(advisor, login, thresholds, high):
 
 def test_superseded_recommendations_cannot_be_decided_at_any_step(advisor, compliance, committee, login):
     r_id = breach_pending(advisor)
-    assert advisor.post("/api/analysis/runs").status_code == 200  # supersedes the pending one
+    run_and_wait(advisor)  # supersedes the pending one
     assert act(compliance, "compliance", r_id, "approve", "ok").status_code == 409
     assert act(committee, "committee", r_id, "approve", "ok").status_code == 409
     assert decide(advisor, r_id, "accept").status_code == 409
@@ -179,7 +180,7 @@ def test_a_run_supersedes_recommendations_waiting_on_the_committee(advisor, comm
     r = rec(advisor, "C003")
     decide(advisor, r["id"], "accept")
     assert status(advisor) == "pending_committee"
-    advisor.post("/api/analysis/runs")
+    run_and_wait(advisor)
     assert act(committee, "committee", r["id"], "approve", "late").status_code == 409
     assert advisor.get(f"/api/recommendations/{r['id']}").json()["status"] == "superseded"
 

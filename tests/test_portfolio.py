@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from app.db import AuditEventRow
 from app.seeder import PLANTED
+from tests.runs import run_and_wait
 from tests.test_queue import QUEUE, seeded  # noqa: F401  (fixture)
 
 
@@ -14,7 +15,7 @@ def url(cid):
 @pytest.fixture
 def advisor(login, seeded):  # noqa: F811
     c = login("advisor")
-    assert c.post("/api/analysis/runs").status_code == 200
+    run_and_wait(c)
     return c
 
 

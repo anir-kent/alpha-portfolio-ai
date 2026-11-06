@@ -7,6 +7,7 @@ import json
 
 import pytest
 
+from tests.runs import run_and_wait
 from tests.test_ai_recommendations import StubLlm, ai  # noqa: F401  (fixtures)
 from tests.test_queue import rows, seeded  # noqa: F401  (fixture)
 
@@ -36,7 +37,7 @@ def narrative_reply(payload):
 
 
 def run(ai):  # noqa: F811
-    assert ai.advisor.post("/api/analysis/runs").status_code == 200
+    run_and_wait(ai.advisor)
     return rows(ai.advisor)
 
 

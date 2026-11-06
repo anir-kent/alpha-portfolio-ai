@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app import grounding
 from app.db import AuditEventRow, GroundingResultRow
+from tests.runs import run_and_wait
 from tests.test_queue import seeded  # noqa: F401  (fixture)
 from tests.test_research import upload
 
@@ -16,7 +17,7 @@ QUOTE = "We are constructive on technology."
 @pytest.fixture
 def ctx(login, seeded):  # noqa: F811
     advisor = login("advisor")
-    assert advisor.post("/api/analysis/runs").status_code == 200
+    run_and_wait(advisor)
     rec = advisor.get("/api/portfolios/C003").json()["recommendation"]
     report = upload(login("research_analyst")).json()
     return advisor, rec, report["id"]

@@ -13,6 +13,7 @@ from sqlalchemy import select
 from app import research_tilt
 from app.db import AuditEventRow
 from app.llm import LlmError, LlmResponse, RecordedLlm
+from tests.runs import run_and_wait
 from tests.test_portfolio import url
 from tests.test_queue import seeded  # noqa: F401  (fixture)
 from tests.test_research import upload
@@ -55,7 +56,7 @@ def ai(app, login, seeded):  # noqa: F811
             assert analyst.post(f"/api/insights/{ids[s]}/decision", json={"action": "approve", "note": "ok"}).status_code == 200
 
     def run():
-        assert state.advisor.post("/api/analysis/runs").status_code == 200
+        run_and_wait(state.advisor)
         return state.advisor.get(url("C003")).json()["recommendation"]
 
     state.approve, state.run = approve, run

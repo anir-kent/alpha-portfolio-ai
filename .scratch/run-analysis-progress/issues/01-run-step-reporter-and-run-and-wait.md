@@ -4,11 +4,11 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The Analysis Run accepts an optional progress reporter; with none, behaviour, return value and Audit Events are exactly as today
-- [ ] With a reporter, a test run reports the five Run Steps in order. Score Portfolios reports `done`/`total` after each Portfolio. With no LLM, both narrative steps are reported as skipped
-- [ ] Run Step keys and labels are defined once and shared, ready for the API snapshot
-- [ ] Every existing test that starts a run through the API uses `run_and_wait`; no test checks the start status code directly any more
-- [ ] The command-line analysis run and the seeder work unchanged
-- [ ] Full test suite green; no Audit Event payload changes
+- [x] The Analysis Run accepts an optional progress reporter; with none, behaviour, return value and Audit Events are exactly as today
+- [x] With a reporter, a test run reports the five Run Steps in order. Score Portfolios reports `done`/`total` after each Portfolio. With no LLM, both narrative steps are reported as skipped
+- [x] Run Step keys and labels are defined once and shared, ready for the API snapshot
+- [x] Every existing test that starts a run through the API uses `run_and_wait`; no test checks the start status code directly any more
+- [x] The command-line analysis run and the seeder work unchanged
+- [x] Full test suite green; no Audit Event payload changes

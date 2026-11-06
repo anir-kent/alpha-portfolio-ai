@@ -12,6 +12,7 @@ from sqlalchemy import select
 from app import audit
 from app.db import AuditEventRow
 from app.seeder import PLANTED
+from tests.runs import run_and_wait
 from tests.test_portfolio import url
 from tests.test_queue import QUEUE, seeded  # noqa: F401  (fixture)
 
@@ -22,7 +23,7 @@ def advisor(login, seeded):  # noqa: F811
     # Nothing is high-impact here: these tests cover the Advisor's own path (tiered approvals: test_approvals.py).
     never = {"approval_thresholds": {"turnover_pct": 100, "trade_line_pct": 100}}
     assert login("platform_owner").patch("/api/config", json=never).status_code == 200
-    assert c.post("/api/analysis/runs").status_code == 200
+    run_and_wait(c)
     return c
 
 
@@ -231,7 +232,7 @@ def test_new_run_supersedes_pending_but_not_decided_recommendations(advisor):
     pending = rec(advisor, PLANTED["overweight_energy"])
     approved = rec(advisor, PLANTED["cash_drag"])
     decide(advisor, approved["id"], "accept")
-    assert advisor.post("/api/analysis/runs").status_code == 200
+    run_and_wait(advisor)
     fresh = rec(advisor, PLANTED["overweight_energy"])
     assert fresh["id"] != pending["id"] and fresh["status"] == "pending_advisor" and fresh["version"] == 1
     assert decide(advisor, pending["id"], "accept").status_code == 409
@@ -273,7 +274,7 @@ def test_restricted_instruments_are_never_bought(advisor, app):
     with app.state.session_factory() as db:  # restrict SHY for the cash-drag Client, then re-run
         db.add(RestrictionRow(client_id="C003", kind="instrument", value="SHY"))
         db.commit()
-    assert advisor.post("/api/analysis/runs").status_code == 200
+    run_and_wait(advisor)
     buys = lines_by(rec(advisor, "C003"), "buy")
     assert "SHY" not in buys and "AGG" in buys
 
@@ -282,5 +283,5 @@ def test_configured_tolerance_band_decides_who_gets_a_recommendation(advisor, lo
     owner = login("platform_owner")
     wide = {"conservative": {"warn": 30, "breach": 40}, "moderate": {"warn": 30, "breach": 40}}
     assert owner.patch("/api/config", json={"tolerance_bands": wide}).status_code == 200
-    assert advisor.post("/api/analysis/runs").status_code == 200
+    run_and_wait(advisor)
     assert rec(advisor, PLANTED["cash_drag"]) is None and rec(advisor, PLANTED["overweight_energy"]) is None
