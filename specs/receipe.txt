@@ -8,3 +8,26 @@ Q2 - Yes
 Q3 - Yes ok
 Q4 - Yes
 Q5 - Yes
+
+
+
+1. Click the **Run Analysis** button on the **Queue** screen.
+2. The system opens a modal window.
+3. The modal window shows the sequential steps of the analysis workflow.
+4. The system synchronizes the modal window with the backend execution.
+5. The system shows the status of each step.
+6. The system shows that a step is complete immediately after the backend process finishes that step.
+7. Design the user interface and user experience with standard industry methods.
+8. Select the best technical architecture to implement this function from end to end.
+9. Ensure that the design updates the screen near realtime.
+
+
+
+
+1. Develop a conversational assistant for the system.
+2. The assistant must answer user questions with the data and metadata from the screen and the database.
+3. System does not use standard Retrieval-Augmented Generation (RAG).
+4. Send prompts directly to the Large Language Model (LLM) to generate answers.
+5. Store the conversation history during the active session.
+6. Target the assistant for subject matter experts (SMEs) who ask complex questions.
+7. Apply guardrails to keep all answers within the defined project scope.

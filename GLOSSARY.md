@@ -105,3 +105,33 @@ A Claim whose Report citations quote a real Report page verbatim, whose engine c
 **LLM Exchange**:
 One request and reply through the single LLM interface: the full prompt, reply schema, raw reply, model, prompt version, timing, token counts and outcome, labelled live or recorded. An Audit Event can point to the Exchange that produced it.
 _Avoid_: Log entry, trace, transcript
+
+### Assistant
+
+**Assistant**:
+The read-only conversational helper available on every screen that answers Questions about the platform's own data and workings, using only what the asking user is permitted to see. It never acts and never produces figures the engine did not compute.
+_Avoid_: Chatbot, copilot, agent
+
+**Conversation**:
+The sequence of Questions and Answers one user has with the Assistant during one login session; it ends at logout or session expiry and cannot be resumed.
+_Avoid_: Chat, thread, session
+
+**Question**:
+One message a user sends to the Assistant, together with the Screen Context current when it was asked.
+_Avoid_: Prompt, query
+
+**Answer**:
+The Assistant's reply to one Question, made of Claims that are grounding-checked like any other LLM output.
+_Avoid_: Response, completion
+
+**Screen Context**:
+The data and metadata behind the screen the user is on, rebuilt by the server from the screen's identity and the user's permissions, never taken from what the browser displays.
+_Avoid_: Page data, context window
+
+**Suggested Question**:
+A predefined Question offered on a screen, whose Answer is recorded so it also works when the platform replays recordings.
+_Avoid_: Canned question, FAQ
+
+**Out-of-Scope Refusal**:
+The fixed Answer given to a Question outside the platform's domain, such as general investment advice, market predictions or Clients the user cannot see.
+_Avoid_: Rejection, block
