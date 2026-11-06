@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: true
       - run: uv sync --locked
@@ -39,7 +39,7 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10  # the API types are generated from the backend's OpenAPI schema
+      - uses: astral-sh/setup-uv@v10.3.3  # the API types are generated from the backend's OpenAPI schema
         with:
           enable-cache: true
       - run: uv sync --locked
@@ -62,7 +62,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3
       - run: uvx pre-commit run --all-files --show-diff-on-failure
         env:
           SKIP: ruff-check,ruff-format,mypy,prettier,eslint,tsc  # the jobs above run these against the locked versions
