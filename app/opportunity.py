@@ -4,7 +4,7 @@ A sector with an approved positive or negative Insight is a reason to talk to th
 not. Each such sector counts once, at the Portfolio's look-through weight in it. The sum saturates at OPPORTUNITY_FULL_PCT
 points of Portfolio value. The LLM plays no part.
 """
-from typing import Iterable
+from collections.abc import Iterable
 
 OPPORTUNITY_FULL_PCT = 30.0
 

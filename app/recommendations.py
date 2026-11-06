@@ -10,7 +10,7 @@ at every required step.
 """
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -45,7 +45,7 @@ class Evaluation:
 
 
 def _now() -> str:
-    return audit.format_ts(datetime.now(timezone.utc))
+    return audit.format_ts(datetime.now(UTC))
 
 
 def client_inputs(db: Session, client_id: str) -> tuple[ClientRow, dict[str, float], list[tuple[str, str]], dict[str, str]]:
@@ -64,11 +64,11 @@ def evaluate_lines(
     """Price the Trade Lines and run the Suitability Rules and drift on the post-trade Portfolio."""
     total = sum(r["market_value"] for r in rows)
     out: list[dict[str, Any]] = []
-    for l in lines:
-        inst = market.instrument(l.symbol)
-        amount = l.quantity * inst.price
+    for line in lines:
+        inst = market.instrument(line.symbol)
+        amount = line.quantity * inst.price
         out.append({
-            "account_id": l.account_id, "symbol": l.symbol, "name": inst.name, "side": l.side, "quantity": l.quantity,
+            "account_id": line.account_id, "symbol": line.symbol, "name": inst.name, "side": line.side, "quantity": line.quantity,
             "price": inst.price, "currency": inst.currency, "amount": round(amount, 2),
             "pct_of_portfolio": round(amount / total * 100, 2) if total else 0.0,
         })
@@ -96,7 +96,7 @@ def _summary(drift_rows: list[dict], ev: Evaluation, tilt: "research_tilt.Assess
         f"{d['asset_class']} {d['actual_pct']:.1f}% vs {d['target_pct']:.1f}% target ({d['signed_pp']:+.1f} pp, {d['status']})"
         for d in drift_rows
     )
-    sells = sum(1 for l in ev.trade_lines if l["side"] == "sell")
+    sells = sum(1 for line in ev.trade_lines if line["side"] == "sell")
     applied = [e for e in tilt.entries if e.allowed_pp] if tilt and tilt.status == "ok" else []
     basis = (
         "Rule-based and band-based, with an engine-bounded Research Tilt on "
@@ -219,7 +219,7 @@ def decide(
         try:
             rebalance.validate(lines, rows, set(tax), market)
         except ValueError as e:
-            raise DecisionError(422, str(e))
+            raise DecisionError(422, str(e)) from e
         new_ev = evaluate_lines(lines, rows, client, targets, restrictions, tax, cfg, market)
         new = _row(rec.client_id, rec.run_id, rec.version + 1, rec, actor.name, "", new_ev)
         new.summary = f"Modified by {actor.name} from version {rec.version}: {rationale}"

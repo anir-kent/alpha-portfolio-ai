@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from app import research_tilt
 from app.db import AuditEventRow
-from app.llm import LlmError, LlmResponse, RecordedLlm
+from app.llm import LlmError, LlmResponse
 from tests.runs import run_and_wait
 from tests.test_portfolio import url
 from tests.test_queue import seeded  # noqa: F401  (fixture)
@@ -78,7 +78,7 @@ def tilt_for(ai, **by_subject):
 
 
 def equity_buy_pct(rec):
-    return sum(l["pct_of_portfolio"] for l in rec["trade_lines"] if l["side"] == "buy" and l["symbol"] in EQUITY_FUNDS)
+    return sum(line["pct_of_portfolio"] for line in rec["trade_lines"] if line["side"] == "buy" and line["symbol"] in EQUITY_FUNDS)
 
 
 def entry(rec, subject):
@@ -158,11 +158,11 @@ def test_sector_tilt_within_bound_switches_spy_into_the_sector_etf(ai):
     e = entry(rec, "Information Technology")
     assert (e["proposed_pp"], e["allowed_pp"], e["clipped"], e["subject_kind"]) == (1.5, 1.5, False, "sector")
     assert e["exposure_pct"] == pytest.approx(0.10 * 0.31 * 100, abs=0.5)  # C003 holds 10% SPY; SPY is ~31% technology
-    buys = {l["symbol"]: l for l in rec["trade_lines"] if l["side"] == "buy"}
-    sells = {l["symbol"]: l for l in rec["trade_lines"] if l["side"] == "sell"}
+    buys = {line["symbol"]: line for line in rec["trade_lines"] if line["side"] == "buy"}
+    sells = {line["symbol"]: line for line in rec["trade_lines"] if line["side"] == "sell"}
     assert buys["XLK"]["pct_of_portfolio"] == pytest.approx(1.5, abs=0.2)
     assert sells["SPY"]["pct_of_portfolio"] == pytest.approx(1.5, abs=0.2)
-    assert not ({l["symbol"] for l in rec["trade_lines"] if l["side"] == "buy"} & {"SPY"})
+    assert not ({line["symbol"] for line in rec["trade_lines"] if line["side"] == "buy"} & {"SPY"})
 
 
 def test_pending_and_rejected_insights_cannot_influence_a_tilt(app, ai):

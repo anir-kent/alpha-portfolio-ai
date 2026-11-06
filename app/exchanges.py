@@ -8,7 +8,7 @@ closed with the existing `LlmError`: no model output exists without a record.
 import dataclasses
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -60,7 +60,7 @@ class CapturingLlm:
         detail = response or error  # both carry whatever transport detail the adapter knew
         assert detail is not None, "an Exchange is stored for a response or an error"
         row = LlmExchangeRow(
-            created_at=format_ts(datetime.now(timezone.utc)), task=request.task, prompt_version=request.prompt_version,
+            created_at=format_ts(datetime.now(UTC)), task=request.task, prompt_version=request.prompt_version,
             model=response.model if response else getattr(self.inner, "model", None), mode=self.mode,
             endpoint_host=self.endpoint_host, system_text=request.system, user_prompt=request.user,
             reply_schema_json=_canonical(request.schema),

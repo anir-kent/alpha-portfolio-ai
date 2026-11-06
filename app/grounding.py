@@ -11,15 +11,23 @@ visible to the Advisor.
 import json
 import re
 import uuid
-from datetime import datetime, timezone
-from typing import Annotated, Iterable, Literal
+from collections.abc import Iterable
+from datetime import UTC, datetime
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import audit
-from app.db import GroundingResultRow, PriorityResultRow, RecommendationRow, RecommendationTiltRow, ReportPageRow, ReportRow
+from app.db import (
+    GroundingResultRow,
+    PriorityResultRow,
+    RecommendationRow,
+    RecommendationTiltRow,
+    ReportPageRow,
+    ReportRow,
+)
 from app.reports import passage_on_page
 
 VALIDATOR = audit.Actor.system("grounding-validator")
@@ -177,7 +185,7 @@ def validate_figures(
     """Validate, store and audit claims against any engine figure set (a Recommendation's, or a priority result's)."""
     results = [validate_claim(db, c, i, figures) for i, c in enumerate(claims)]
     check_id = "GRD-" + uuid.uuid4().hex[:8]
-    now = audit.format_ts(datetime.now(timezone.utc))
+    now = audit.format_ts(datetime.now(UTC))
     db.add_all(
         GroundingResultRow(
             check_id=check_id, recommendation_id=recommendation_id, run_id=run_id, client_id=client_id, claim_index=r.index,

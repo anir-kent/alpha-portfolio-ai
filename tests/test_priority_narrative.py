@@ -3,7 +3,6 @@
 Opportunity is computed by the engine from look-through exposure and approved Insights. The LLM writes a cited narrative
 per queue row that the grounding validator holds to citations; it can never change a score or the ranking.
 """
-import json
 
 import pytest
 
@@ -51,7 +50,7 @@ def test_opportunity_is_zero_without_approved_insights_and_rises_with_relevant_e
     raw = {c: opportunity(i)["raw"] for c, i in after.items()}
     assert any(r > 0 for r in raw.values()) and all(0 <= r <= 100 for r in raw.values())
     earlier = {i["client_id"]: i for i in before}
-    for c, r in raw.items():
+    for c in raw:
         assert after[c]["score"] == pytest.approx(earlier[c]["score"] + opportunity(after[c])["points"], abs=0.02)
     ai.approve("Utilities")
     more = {i["client_id"]: opportunity(i)["raw"] for i in run(ai)}

@@ -6,15 +6,16 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import ai_steps, approvals, audit, grounding, lineage as lineage_view, recommendations
+from app import ai_steps, approvals, audit, grounding, recommendations
+from app import lineage as lineage_view
 from app.config_service import Config, get_config
 from app.db import DecisionRow, RecommendationNarrativeRow, RecommendationRow, RecommendationTiltRow, User
 from app.deps import get_db, get_market, require
 from app.market_data import MarketData
 from app.rbac import PERMISSIONS
 from app.rebalance import TradeLine
-from app.routers.audit import ActorOut
 from app.routers.analysis import ClassDriftOut, RuleOut
+from app.routers.audit import ActorOut
 from app.routers.grounding import ClaimResultOut
 
 router = APIRouter(prefix="/api", tags=["recommendations"])
@@ -289,14 +290,14 @@ def decide(
     market: MarketData = Depends(get_market),
 ):
     cfg = get_config(db)
-    lines = [TradeLine(l.account_id, l.symbol, l.side, l.quantity) for l in body.trade_lines] if body.trade_lines is not None else None
+    lines = [TradeLine(line.account_id, line.symbol, line.side, line.quantity) for line in body.trade_lines] if body.trade_lines is not None else None
     try:
         rec, decision, new_breaches = recommendations.decide(
             db, market, cfg, recommendation_id, body.action, body.rationale, lines,
             audit.Actor.user(user.username, user.role),
         )
     except recommendations.DecisionError as e:
-        raise HTTPException(e.status, str(e))
+        raise HTTPException(e.status, str(e)) from e
     return DecisionResult(decision=_decision_out(decision), recommendation=to_out(rec, cfg, db, user), new_breaches=new_breaches)
 
 
@@ -322,7 +323,7 @@ def _step(db: Session, recommendation_id: int, step: str, action: str, rationale
             db, cfg, recommendation_id, step, action, rationale, audit.Actor.user(user.username, user.role),
         )
     except recommendations.DecisionError as e:
-        raise HTTPException(e.status, str(e))
+        raise HTTPException(e.status, str(e)) from e
     return StepResult(decision=_decision_out(decision), recommendation=to_out(rec, cfg, db, user))
 
 

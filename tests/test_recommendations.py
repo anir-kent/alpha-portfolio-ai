@@ -39,7 +39,7 @@ def decide(c, rec_id, action, rationale=None, trade_lines=None):
 
 
 def lines_by(r, side):
-    return {(l["symbol"]): l for l in r["trade_lines"] if l["side"] == side}
+    return {(line["symbol"]): line for line in r["trade_lines"] if line["side"] == side}
 
 
 # A modification that pushes a conservative Client to 30%+ equity: sell all SGOV, buy XLK.
@@ -72,10 +72,10 @@ def test_cash_drag_scenario_yields_expected_trade_lines(advisor):
     assert buys["AGG"]["pct_of_portfolio"] == pytest.approx(15.6, abs=0.3)
     assert buys["SHY"]["pct_of_portfolio"] == pytest.approx(9.4, abs=0.3)
     assert r["turnover_pct"] == pytest.approx(25, abs=0.3)
-    for l in r["trade_lines"]:  # percent and currency both present and consistent
-        assert l["amount"] == pytest.approx(l["quantity"] * l["price"], abs=0.01)
-        assert l["pct_of_portfolio"] == pytest.approx(l["amount"] / r["total_value"] * 100, abs=0.01)
-        assert l["currency"] == "USD" and l["quantity"] > 0
+    for line in r["trade_lines"]:  # percent and currency both present and consistent
+        assert line["amount"] == pytest.approx(line["quantity"] * line["price"], abs=0.01)
+        assert line["pct_of_portfolio"] == pytest.approx(line["amount"] / r["total_value"] * 100, abs=0.01)
+        assert line["currency"] == "USD" and line["quantity"] > 0
 
 
 def test_energy_overweight_scenario_yields_expected_trade_lines(advisor):
@@ -94,9 +94,9 @@ def test_energy_overweight_scenario_yields_expected_trade_lines(advisor):
 def test_never_sells_more_than_held_and_returns_portfolio_to_target(advisor):
     p = advisor.get(url(PLANTED["overweight_energy"])).json()
     held = {(h["account_id"], h["symbol"]): h["quantity"] for h in p["holdings"]}
-    for l in p["recommendation"]["trade_lines"]:
-        if l["side"] == "sell":
-            assert l["quantity"] <= held[(l["account_id"], l["symbol"])]
+    for line in p["recommendation"]["trade_lines"]:
+        if line["side"] == "sell":
+            assert line["quantity"] <= held[(line["account_id"], line["symbol"])]
     assert all(c["drift_pp"] < 0.5 for c in p["recommendation"]["post_trade_drift"])
 
 

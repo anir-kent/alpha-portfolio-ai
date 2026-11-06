@@ -72,7 +72,7 @@ def _random_weights(rng: random.Random, profile: str, market: MarketData, banned
         pool = [i.symbol for i in market.instruments() if i.asset_class == cls and i.symbol not in banned]
         picks = rng.sample(pool, min(len(pool), rng.randint(4, 7) if cls == "equity" else rng.randint(1, 3)))
         raw = [rng.uniform(0.5, 1.5) for _ in picks]
-        for s, r in zip(picks, raw):
+        for s, r in zip(picks, raw, strict=True):
             weights[s] = w * r / sum(raw)
     return weights
 

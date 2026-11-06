@@ -9,7 +9,7 @@ import hashlib
 import json
 import threading
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
@@ -65,7 +65,7 @@ class Actor:
 
 
 def format_ts(dt: datetime) -> str:
-    return as_utc(dt).astimezone(timezone.utc).strftime(_TS_FORMAT)
+    return as_utc(dt).astimezone(UTC).strftime(_TS_FORMAT)
 
 
 def _canonical(value) -> str:
@@ -106,7 +106,7 @@ def record(
         row = AuditEventRow(
             type=type, actor_kind=actor.kind, actor_name=actor.name, actor_role=actor.role,
             model=actor.model, prompt_version=actor.prompt_version,
-            timestamp=format_ts(datetime.now(timezone.utc)),
+            timestamp=format_ts(datetime.now(UTC)),
             payload_json=_canonical(payload or {}), parent_ids_json=_canonical(parent_ids),
             portfolio_id=portfolio_id, client_id=client_id,
             recommendation_id=recommendation_id, report_id=report_id,

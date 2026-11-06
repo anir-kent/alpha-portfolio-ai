@@ -8,7 +8,7 @@ are saved on the run row.
 import json
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -51,7 +51,7 @@ class RunSnapshot(BaseModel):
 
 
 def _now() -> str:
-    return audit.format_ts(datetime.now(timezone.utc))
+    return audit.format_ts(datetime.now(UTC))
 
 
 class ProgressRegistry:

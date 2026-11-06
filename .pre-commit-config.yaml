@@ -1,0 +1,52 @@
+# Runs the fast checks from CODING_STANDARDS.md on each commit. The full test suite runs in CI.
+# Setup once: `uv run pre-commit install`. Run everything by hand: `uv run pre-commit run --all-files`.
+# Hooks are local so they use the versions pinned in uv.lock and frontend/package-lock.json.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.md$
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+        exclude: ^frontend/tsconfig\.json$  # tsconfig allows comments
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix --force-exclude
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
+      - id: mypy
+        name: mypy
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false  # whole-program: the files come from [tool.mypy] in pyproject.toml
+      - id: prettier
+        name: prettier
+        entry: frontend/node_modules/.bin/prettier --write --ignore-unknown
+        language: system
+        files: ^frontend/
+        exclude: ^frontend/(src/api/schema\.d\.ts|openapi\.json|package-lock\.json)$
+      - id: eslint
+        name: eslint
+        entry: bash -c 'cd frontend && npx eslint .'
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js)$
+        pass_filenames: false
+      - id: tsc
+        name: tsc
+        entry: bash -c 'cd frontend && npx tsc --noEmit'
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false

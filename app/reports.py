@@ -7,7 +7,7 @@ its passage really appears on the cited page; the full grounding validator (tick
 import io
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ValidationError
@@ -48,7 +48,7 @@ EXTRACTION_SCHEMA = Extraction.model_json_schema()
 
 
 def _now() -> str:
-    return format_ts(datetime.now(timezone.utc))
+    return format_ts(datetime.now(UTC))
 
 
 def normalise(text: str) -> str:
@@ -75,13 +75,13 @@ def extract_pages(filename: str, content: bytes) -> tuple[str, list[str]]:
         try:
             pages = [(p.extract_text() or "") for p in PdfReader(io.BytesIO(content)).pages]
         except (PyPdfError, ValueError, KeyError) as e:
-            raise ReportError(f"Could not read PDF: {e}")
+            raise ReportError(f"Could not read PDF: {e}") from e
         kind = "pdf"
     elif name.endswith((".txt", ".md")):
         try:
             text = content.decode("utf-8")
         except UnicodeDecodeError:
-            raise ReportError("Text Reports must be UTF-8")
+            raise ReportError("Text Reports must be UTF-8") from None
         pages = text.split("\f")
         kind = "text"
     else:

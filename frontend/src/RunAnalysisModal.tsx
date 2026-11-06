@@ -57,7 +57,7 @@ function useRunProgress(initial: RunSnapshot) {
 
   useEffect(() => {
     opened.current = Date.now();
-    setStream("connecting");
+    setStream("connecting"); // eslint-disable-line react-hooks/set-state-in-effect -- resetting the connection state is part of (re)subscribing
     const es = new EventSource(`/api/analysis/runs/${runId}/events`, { withCredentials: true });
     es.onopen = () => setStream("live");
     es.addEventListener("progress", (e) => {
@@ -160,6 +160,7 @@ export function RunAnalysisModal({ initial, onClose, trigger }: { initial: RunSn
 
   useEffect(() => {
     dialog.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately the trigger at close time
     return () => trigger.current?.focus(); // the trigger, not whatever had focus: it was disabled while the run started
   }, [trigger]);
 

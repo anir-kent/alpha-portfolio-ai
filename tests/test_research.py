@@ -231,9 +231,9 @@ def test_openai_compatible_llm_surfaces_provider_errors():
 
 @pytest.mark.skipif(not os.environ.get("LLM_LIVE"), reason="live smoke test: set LLM_LIVE=1 and APP_LLM_API_KEY")
 def test_live_smoke_extraction():
+    from app.llm import build_llm
     from app.reports import extract_pages, extraction_request
     from app.settings import Settings
-    from app.llm import build_llm
 
     s = Settings(llm_mode="live")
     _, pages = extract_pages("v.txt", (FIXTURES / "house_view_demo.txt").read_bytes())

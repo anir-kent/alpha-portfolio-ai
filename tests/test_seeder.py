@@ -136,4 +136,3 @@ def test_clean_portfolio_is_on_target_diversified_and_unrestricted(sf, md):
     assert max(x for sym, x in v.items() if md.instrument(sym).asset_class == "equity") / t <= 0.10
     assert max(x for k, x in sector_weights(md, v, t).items() if k in GICS_SECTORS) <= 0.30
     assert not {val for kind, val in restr if kind == "instrument"} & set(v)
-

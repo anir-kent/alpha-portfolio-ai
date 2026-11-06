@@ -7,7 +7,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -68,7 +68,7 @@ def refresh_snapshot(api_key: str, out_path, client: httpx.Client | None = None,
         for s in batch:
             instruments[s] = _parse(s, body.get(s))
     snapshot = {
-        "as_of": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "as_of": datetime.now(UTC).isoformat(timespec="seconds"),
         "source": "Twelve Data (free tier) via app.market_refresh",
         "instruments": instruments,
     }

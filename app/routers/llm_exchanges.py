@@ -1,7 +1,8 @@
 import json
 import time
-from datetime import datetime, timezone
-from typing import Iterator, Literal
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -165,7 +166,7 @@ def _sse(summary: ExchangeSummary) -> str:
 
 def _awaiting_link(row: LlmExchangeRow, events: dict[int, list[AuditEventRow]]) -> bool:
     """A fresh Exchange whose event is not written yet: streaming it now would show it with no linked Recommendation."""
-    age = (datetime.now(timezone.utc) - datetime.strptime(row.created_at, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)).total_seconds()
+    age = (datetime.now(UTC) - datetime.strptime(row.created_at, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=UTC)).total_seconds()
     return row.id not in events and age < LINK_GRACE_SECONDS
 
 

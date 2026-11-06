@@ -61,7 +61,10 @@ def test_urgency_only_counts_days_past_due_and_flags_sla_breach_at_sla_days():
     not_due = score_portfolio(d, BAND, W, days_past_due=-5, sla_days=30)
     late = score_portfolio(d, BAND, W, days_past_due=10, sla_days=30)
     breached = score_portfolio(d, BAND, W, days_past_due=45, sla_days=30)
-    urg = lambda s: next(c for c in s.components if c.name == "urgency")
+
+    def urg(s):
+        return next(c for c in s.components if c.name == "urgency")
+
     assert urg(not_due).raw == 0 and not not_due.sla_breached
     assert urg(late).raw == pytest.approx(100 / 3) and not late.sla_breached
     assert urg(breached).raw == 100 and breached.sla_breached

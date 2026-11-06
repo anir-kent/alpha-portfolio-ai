@@ -1,11 +1,12 @@
 import json
 import time
-from typing import Iterator, Literal
+from collections.abc import Iterator
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import audit, grounding, sse

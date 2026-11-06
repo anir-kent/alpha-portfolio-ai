@@ -1,0 +1,68 @@
+# The checks in CODING_STANDARDS.md, on every push and pull request.
+name: CI
+
+on:
+  push:
+    branches: [development, main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (ruff, mypy, pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check --output-format=github
+      - run: uv run ruff format --check
+      - run: uv run mypy
+      - run: uv run pytest -q
+
+  frontend:
+    name: Frontend (eslint, prettier, tsc, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10  # the API types are generated from the backend's OpenAPI schema
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+        working-directory: .
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run gen:api  # src/api/schema.d.ts is generated, not committed
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npx vite build
+
+  pre-commit:
+    name: Repo hygiene (pre-commit-hooks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - run: uvx pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: ruff-check,ruff-format,mypy,prettier,eslint,tsc  # the jobs above run these against the locked versions

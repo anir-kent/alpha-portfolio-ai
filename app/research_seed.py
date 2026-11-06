@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app import audit, reports
 from app.audit import Actor
-from app.db import InsightRow, ReportRow
+from app.db import ReportRow
 
 SEED = Actor.system("seed")
 _DIRECTION = {"overweight": "positive", "neutral": "neutral", "underweight": "negative"}

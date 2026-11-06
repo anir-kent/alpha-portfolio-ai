@@ -5,12 +5,22 @@ CLI: uv run python -m app.analysis
 """
 import json
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import audit, narrative, portfolio_view, priority_narrative, rebalance, recommendations, reports, research_tilt, suitability
+from app import (
+    audit,
+    narrative,
+    portfolio_view,
+    priority_narrative,
+    rebalance,
+    recommendations,
+    reports,
+    research_tilt,
+    suitability,
+)
 from app.config_service import get_config
 from app.db import AnalysisRunRow, ClientRow, PriorityResultRow, RestrictionRow, SuitabilityResultRow, TargetRow
 from app.drift import compute_drift
@@ -26,7 +36,7 @@ SYSTEM = audit.Actor.system("priority-engine")
 def open_run(db: Session, market: MarketData, actor: audit.Actor) -> AnalysisRunRow:
     """Add a new, not yet completed Analysis Run row (flushed, not committed)."""
     run = AnalysisRunRow(
-        started_at=audit.format_ts(datetime.now(timezone.utc)), actor_name=actor.name, as_of=market.as_of[:10],
+        started_at=audit.format_ts(datetime.now(UTC)), actor_name=actor.name, as_of=market.as_of[:10],
         config_json=get_config(db).model_dump_json(),
     )
     db.add(run)
@@ -143,7 +153,7 @@ def run_analysis(
                 recommendations.audit_draft(db, rec, parents=[started, evaluated, *tilted])
         run.completed = True
         if run_id is None:  # a run with no background runner to record its outcome (the CLI, the seeder)
-            run.outcome, run.finished_at = "completed", audit.format_ts(datetime.now(timezone.utc))
+            run.outcome, run.finished_at = "completed", audit.format_ts(datetime.now(UTC))
         db.commit()
     if llm is None:
         for key in AI_STEP_KEYS:

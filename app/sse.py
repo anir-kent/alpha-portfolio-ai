@@ -1,6 +1,6 @@
 """What the server-sent event streams (LLM Exchanges, Analysis Runs) share: the keepalive interval, how a `Last-Event-ID`
 is read, and the response that carries the events."""
-from typing import Iterator
+from collections.abc import Iterator
 
 from fastapi.responses import StreamingResponse
 

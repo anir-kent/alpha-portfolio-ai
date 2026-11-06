@@ -1,15 +1,22 @@
 import json
-
-from fastapi import APIRouter, Depends, HTTPException
 from typing import Literal
 
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import portfolio_view
 from app.config_service import Band, get_config
-from app.db import AnalysisRunRow, ClientRow, PriorityResultRow, RecommendationRow, RestrictionRow, SuitabilityResultRow, User
+from app.db import (
+    AnalysisRunRow,
+    ClientRow,
+    PriorityResultRow,
+    RecommendationRow,
+    RestrictionRow,
+    SuitabilityResultRow,
+    User,
+)
 from app.deps import get_db, get_market, require
 from app.market_data import MarketData
 from app.rbac import PERMISSIONS

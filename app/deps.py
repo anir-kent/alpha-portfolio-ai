@@ -1,12 +1,12 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app import audit
 from app.analysis_runs import AnalysisRuns
-from app.market_data import MarketData
 from app.db import SessionRow, User
+from app.market_data import MarketData
 from app.rbac import PERMISSIONS
 from app.security import token_digest
 from app.timeutil import as_utc
@@ -29,7 +29,7 @@ def find_session(db: Session, request: Request) -> SessionRow | None:
     row = db.get(SessionRow, token_digest(token)) if token else None
     if row is None:
         return None
-    if as_utc(row.expires_at) < datetime.now(timezone.utc):
+    if as_utc(row.expires_at) < datetime.now(UTC):
         db.delete(row)
         db.commit()
         return None
@@ -67,7 +67,7 @@ def get_market(request: Request) -> MarketData:
         try:
             state.market = MarketData.load(s.market_data_snapshot_path, s.fund_lookthrough_path)
         except FileNotFoundError as e:
-            raise HTTPException(503, str(e))
+            raise HTTPException(503, str(e)) from e
     return state.market
 
 

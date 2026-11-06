@@ -245,7 +245,7 @@ def test_compliance_view_shows_rule_limit_actual_affected_lines_and_restrictions
     sr01 = next(r for r in item["rules"] if r["rule_id"] == "SR-01")
     f = sr01["findings"][0]
     assert sr01["status"] == "breach" and f["limit"] == 30 and f["actual"] > 30 and f["subject"] == "equity"
-    assert "XLK" in [l["symbol"] for l in f["affected_trade_lines"]]
+    assert "XLK" in [line["symbol"] for line in f["affected_trade_lines"]]
     assert all(r["status"] != "pass" for r in item["rules"])  # breaches and warnings, not passes
     assert {"kind": "sector", "value": "Energy"} in item["restrictions"]
     assert item["portfolio_id"] == "C003" and item["client_name"]  # compliance sees names (client:pii)
@@ -291,4 +291,4 @@ def test_findings_on_measures_name_the_trade_lines_that_drive_them(advisor, comp
     breach_pending(advisor)
     item = compliance.get("/api/approvals").json()["items"][0]
     by_subject = {f["subject"]: f for r in item["rules"] for f in r["findings"]}
-    assert {l["symbol"] for l in by_subject["equity"]["affected_trade_lines"]} >= {"XLK"}
+    assert {line["symbol"] for line in by_subject["equity"]["affected_trade_lines"]} >= {"XLK"}

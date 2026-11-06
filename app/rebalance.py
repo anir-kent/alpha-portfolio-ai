@@ -54,7 +54,7 @@ def plan(
                     sells.append(TradeLine(r["account_id"], r["symbol"], "sell", qty))
         elif delta > 0:
             buys += _buys(cls, delta, members, restricted, rows, market)
-    key = lambda l: (l.symbol, l.account_id)  # noqa: E731
+    key = lambda line: (line.symbol, line.account_id)  # noqa: E731
     return sorted(sells, key=key) + sorted(buys, key=key)
 
 
@@ -85,11 +85,11 @@ def merge(*sets: list[TradeLine]) -> list[TradeLine]:
     """One Trade Line per (account, symbol): opposite sides net against each other."""
     net: dict[tuple[str, str], int] = {}
     for lines in sets:
-        for l in lines:
-            net[(l.account_id, l.symbol)] = net.get((l.account_id, l.symbol), 0) + (l.quantity if l.side == "buy" else -l.quantity)
+        for line in lines:
+            net[(line.account_id, line.symbol)] = net.get((line.account_id, line.symbol), 0) + (line.quantity if line.side == "buy" else -line.quantity)
     sells = [TradeLine(a, s, "sell", -q) for (a, s), q in net.items() if q < 0]
     buys = [TradeLine(a, s, "buy", q) for (a, s), q in net.items() if q > 0]
-    key = lambda l: (l.symbol, l.account_id)  # noqa: E731
+    key = lambda line: (line.symbol, line.account_id)  # noqa: E731
     return sorted(sells, key=key) + sorted(buys, key=key)
 
 
@@ -138,42 +138,42 @@ def validate(lines: list[TradeLine], rows: list[dict], accounts: set[str], marke
         raise ValueError("A modification needs at least one Trade Line")
     held = {(r["account_id"], r["symbol"]): r["quantity"] for r in rows}
     seen: set[tuple[str, str]] = set()
-    for l in lines:
-        key = (l.account_id, l.symbol)
+    for line in lines:
+        key = (line.account_id, line.symbol)
         try:
-            market.instrument(l.symbol)
+            market.instrument(line.symbol)
         except KeyError:
-            raise ValueError(f"Unknown Instrument {l.symbol}")
-        if l.account_id not in accounts:
-            raise ValueError(f"Unknown account {l.account_id} for this Portfolio")
-        if l.quantity <= 0:
-            raise ValueError(f"Quantity for {l.symbol} must be a positive whole number")
+            raise ValueError(f"Unknown Instrument {line.symbol}") from None
+        if line.account_id not in accounts:
+            raise ValueError(f"Unknown account {line.account_id} for this Portfolio")
+        if line.quantity <= 0:
+            raise ValueError(f"Quantity for {line.symbol} must be a positive whole number")
         if key in seen:
-            raise ValueError(f"Duplicate Trade Line for {l.symbol} in {l.account_id}")
+            raise ValueError(f"Duplicate Trade Line for {line.symbol} in {line.account_id}")
         seen.add(key)
-        if l.side == "sell" and l.quantity > held.get(key, 0):
-            raise ValueError(f"Cannot sell {l.quantity} {l.symbol} in {l.account_id}: more than held ({held.get(key, 0)})")
+        if line.side == "sell" and line.quantity > held.get(key, 0):
+            raise ValueError(f"Cannot sell {line.quantity} {line.symbol} in {line.account_id}: more than held ({held.get(key, 0)})")
 
 
 def apply(lines: list[TradeLine], rows: list[dict], tax_status: dict[str, str], market: MarketData) -> list[dict]:
     """The Holdings after the Trade Lines, in the shape suitability.evaluate takes. New units carry a cost basis at price."""
     out = [dict(r) for r in rows]
     index = {(r["account_id"], r["symbol"]): r for r in out}
-    for l in lines:
-        inst = market.instrument(l.symbol)
-        r = index.get((l.account_id, l.symbol))
+    for line in lines:
+        inst = market.instrument(line.symbol)
+        r = index.get((line.account_id, line.symbol))
         if r is None:
             r = {
                 "symbol": inst.symbol, "name": inst.name, "asset_class": inst.asset_class, "kind": inst.kind,
-                "account_id": l.account_id, "tax_status": tax_status[l.account_id], "quantity": 0, "price": inst.price,
+                "account_id": line.account_id, "tax_status": tax_status[line.account_id], "quantity": 0, "price": inst.price,
                 "market_value": 0.0, "cost_basis_per_unit": inst.price,
             }
             out.append(r)
-            index[(l.account_id, l.symbol)] = r
-        if l.side == "buy":
-            r["cost_basis_per_unit"] = (r["quantity"] * r["cost_basis_per_unit"] + l.quantity * inst.price) / (r["quantity"] + l.quantity)
-            r["quantity"] += l.quantity
+            index[(line.account_id, line.symbol)] = r
+        if line.side == "buy":
+            r["cost_basis_per_unit"] = (r["quantity"] * r["cost_basis_per_unit"] + line.quantity * inst.price) / (r["quantity"] + line.quantity)
+            r["quantity"] += line.quantity
         else:
-            r["quantity"] -= l.quantity
+            r["quantity"] -= line.quantity
         r["market_value"] = r["quantity"] * r["price"]
     return [r for r in out if r["quantity"] > 0]

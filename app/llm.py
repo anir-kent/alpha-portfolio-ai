@@ -17,7 +17,6 @@ from typing import Protocol
 
 import httpx
 
-
 TEMPERATURE = 0.0  # reported on the governance model card
 
 
@@ -116,7 +115,7 @@ def parse_json_reply(text: str) -> dict:
     try:
         value = json.loads(_FENCE.sub("", text.strip()))
     except ValueError as e:
-        raise LlmError(f"LLM reply was not valid JSON: {e}")
+        raise LlmError(f"LLM reply was not valid JSON: {e}") from e
     if not isinstance(value, dict):
         raise LlmError("LLM reply was not a JSON object")
     return value

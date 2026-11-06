@@ -3,8 +3,8 @@ stored grounding results, the prompt/version log is read from audit events, the 
 config, and the adversarial fixture results from the latest stored run of the real grounding validator."""
 import json
 from collections import Counter
-from datetime import datetime, timezone
-from typing import Iterable
+from collections.abc import Iterable
+from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel
@@ -12,9 +12,16 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import audit, config_service, grounding, llm, prompts
-from app.db import AuditEventRow, FixtureRunRow, LlmExchangeRow, GroundingResultRow, ReportPageRow, ReportRow, make_session_factory
+from app.db import (
+    AuditEventRow,
+    FixtureRunRow,
+    GroundingResultRow,
+    LlmExchangeRow,
+    ReportPageRow,
+    ReportRow,
+    make_session_factory,
+)
 from app.settings import Settings
-
 
 # --- AI quality panel ---------------------------------------------------------------------------------------------
 
@@ -199,7 +206,7 @@ def run_fixtures(claims: Iterable[Fixture] = FIXTURES) -> list[FixtureResult]:
     try:
         with factory() as scratch:
             scratch.add(ReportRow(id=_REPORT, title="Adversarial fixture", filename="fixture.txt", kind="text", uploaded_by="governance",
-                                  uploaded_at=audit.format_ts(datetime.now(timezone.utc)), page_count=1, human_verified=True,
+                                  uploaded_at=audit.format_ts(datetime.now(UTC)), page_count=1, human_verified=True,
                                   extraction_status="seeded"))
             scratch.add(ReportPageRow(report_id=_REPORT, page=1, text=f"Fixture house view. {_QUOTE} Nothing else."))
             scratch.commit()
@@ -222,7 +229,7 @@ def _run_out(row: FixtureRunRow) -> FixtureRun:
 
 def record_run(db: Session, actor: audit.Actor) -> FixtureRun:
     results = run_fixtures()
-    row = FixtureRunRow(ran_at=audit.format_ts(datetime.now(timezone.utc)), ran_by=actor.name,
+    row = FixtureRunRow(ran_at=audit.format_ts(datetime.now(UTC)), ran_by=actor.name,
                         results_json=json.dumps([r.model_dump() for r in results]))
     db.add(row)
     db.commit()

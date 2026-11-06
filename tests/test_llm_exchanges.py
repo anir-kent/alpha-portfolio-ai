@@ -74,6 +74,7 @@ def test_failing_to_save_the_exchange_fails_the_ai_step_but_not_deterministic_fe
 
 def test_exchange_table_is_created_on_an_existing_database(settings):
     import sqlite3
+
     from app.main import create_app
 
     create_app(settings)
@@ -110,6 +111,7 @@ GOOD_REPLY = '```json\n{"insights": []}\n```'
 def live_app(tmp_path):
     """Returns a builder: live-mode app whose provider is `handler`, plus the requests the provider saw."""
     import httpx
+
     from app.main import create_app
     from app.settings import Settings
 

@@ -17,7 +17,9 @@ dependencies = [
 [dependency-groups]
 dev = [
     "mypy>=2.4.1",
+    "pre-commit>=4.7.0",
     "pytest>=9.2.0",
+    "ruff>=0.17.4",
 ]
 
 [tool.mypy]
@@ -28,3 +30,19 @@ check_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 strict_equality = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+# pycodestyle (PEP 8), Pyflakes, isort, flake8-bugbear, pyupgrade, flake8-simplify
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = ["E501"]  # line length is the formatter's job; long comments and strings are left alone
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI declares dependencies and parameters as call defaults; `require(permission)` builds one
+extend-immutable-calls = ["app.deps.require", "fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.File", "fastapi.Form", "fastapi.Path", "fastapi.Body", "fastapi.Security"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["F811"]  # a pytest fixture imported from another test module is redefined by its use as an argument

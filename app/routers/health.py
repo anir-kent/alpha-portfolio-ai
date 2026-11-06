@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Request
@@ -41,7 +41,7 @@ def _market_data(path: str) -> MarketDataHealth:
         with open(path) as f:
             as_of = datetime.fromisoformat(json.load(f)["as_of"])
         as_of = as_utc(as_of)
-        age = (datetime.now(timezone.utc) - as_of).total_seconds() / 3600
+        age = (datetime.now(UTC) - as_of).total_seconds() / 3600
         return MarketDataHealth(status="ok", snapshot_age_hours=round(age, 2))
     except (OSError, ValueError, KeyError, TypeError):
         return MarketDataHealth(status="error", snapshot_age_hours=None)

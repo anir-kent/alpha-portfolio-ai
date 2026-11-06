@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "./api/client";
 import { ExchangeDrawer } from "./ExchangeDrawer";
@@ -50,8 +50,9 @@ export function mergeRows(live: Exchange[], fetched: Exchange[]): Exchange[] {
 function useLiveTail(enabled: boolean, onRow: (x: Exchange) => void, onDrop: () => void, onOpen: () => void): StreamState {
   const [state, setState] = useState<StreamState>("idle");
   const handlers = useRef({ onRow, onDrop, onOpen });
-  handlers.current = { onRow, onDrop, onOpen }; // the open connection always calls the latest filters, not those at connect time
+  useLayoutEffect(() => { handlers.current = { onRow, onDrop, onOpen }; }); // the open connection always calls the latest filters, not those at connect time
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting the connection state is part of (re)subscribing
     if (!enabled) { setState("idle"); return; }
     setState("connecting");
     // The browser resends Last-Event-ID itself when it reconnects, so a dropped connection resumes without gaps or repeats.

@@ -6,7 +6,7 @@ assembled here, by the engine, from the *grounded* claims only; flagged claims s
 A failing LLM leaves the queue row exactly as it was.
 """
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
@@ -75,7 +75,7 @@ def _scored_event_id(db: Session, run_id: int, client_id: str) -> int | None:
 
 def generate(db: Session, llm: LlmClient, result: PriorityResultRow, market: MarketData) -> PriorityNarrativeRow | None:
     """None (and no LLM call) when no approved Insight is relevant to the Portfolio's holdings."""
-    now = audit.format_ts(datetime.now(timezone.utc))
+    now = audit.format_ts(datetime.now(UTC))
     scope = dict(portfolio_id=result.client_id, client_id=result.client_id)
     sector_pct = portfolio_view.sector_pct(portfolio_view.holdings(db, market, result.client_id), market)
     insights = relevant_insights(sector_pct, reports.approved_insights(db))

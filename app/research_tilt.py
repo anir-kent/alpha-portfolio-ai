@@ -10,7 +10,6 @@ Both the proposed and the allowed tilt are stored and audited. An Asset-Class ti
 number and never a compliance outcome; if it fails, the Recommendation is the plain rule-based one.
 """
 import json
-import math
 from dataclasses import dataclass, field
 
 from pydantic import BaseModel, Field, ValidationError

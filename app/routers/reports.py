@@ -91,7 +91,7 @@ async def upload_report(
             uploader=Actor.user(user.username, user.role),
         )
     except reports.ReportError as e:
-        raise HTTPException(422, str(e))
+        raise HTTPException(422, str(e)) from e
     return _report(db, row)
 
 
@@ -134,5 +134,5 @@ def decide_insight(
     try:
         reports.decide(db, row, Actor.user(user.username, user.role), body.action, body.note)
     except reports.ReportError as e:
-        raise HTTPException(409, str(e))
+        raise HTTPException(409, str(e)) from e
     return _insight(row)

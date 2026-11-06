@@ -4,11 +4,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 from app.analysis_runs import AnalysisRuns, mark_stranded_runs_interrupted
+from app.db import User, make_session_factory
 from app.exchanges import CapturingLlm, endpoint_host
 from app.llm import build_llm
-from app.db import User, make_session_factory
 from app.rbac import ROLES
-from app.routers import analysis, approvals, audit, auth, config, governance, grounding, health, llm_exchanges, portfolios, recommendations, reports
+from app.routers import (
+    analysis,
+    approvals,
+    audit,
+    auth,
+    config,
+    governance,
+    grounding,
+    health,
+    llm_exchanges,
+    portfolios,
+    recommendations,
+    reports,
+)
 from app.security import hash_password
 from app.settings import Settings
 

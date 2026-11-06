@@ -33,10 +33,10 @@ def plan(rec: RecommendationRow, cfg: Config) -> Plan:
     reasons = []
     if rec.turnover_pct >= t.turnover_pct:
         reasons.append(f"Turnover {rec.turnover_pct:.1f}% of the Portfolio is at or above the {t.turnover_pct:g}% threshold")
-    for l in json.loads(rec.trade_lines_json):
-        if l["pct_of_portfolio"] >= t.trade_line_pct:
+    for line in json.loads(rec.trade_lines_json):
+        if line["pct_of_portfolio"] >= t.trade_line_pct:
             reasons.append(
-                f"{l['side']} {l['symbol']} is {l['pct_of_portfolio']:.1f}% of the Portfolio, at or above the "
+                f"{line['side']} {line['symbol']} is {line['pct_of_portfolio']:.1f}% of the Portfolio, at or above the "
                 f"{t.trade_line_pct:g}% single Trade Line threshold"
             )
     return Plan(rec.suitability_status == "breach", bool(reasons), t, reasons)
@@ -54,10 +54,8 @@ def affected_lines(subject: str, trade_lines: list[dict], market: MarketData) ->
     """The Trade Lines that bear on a rule finding: the Instrument itself, or those in the sector or asset class
     (look-through included) the finding is about."""
     out = []
-    for l in trade_lines:
-        inst = market.instrument(l["symbol"])
-        if subject in (inst.symbol, inst.asset_class, inst.sector) or subject in market.sector_weights(inst.symbol):
-            out.append(l)
-        elif subject == "taxable gains" and l["side"] == "sell":
-            out.append(l)
+    for line in trade_lines:
+        inst = market.instrument(line["symbol"])
+        if subject in (inst.symbol, inst.asset_class, inst.sector) or subject in market.sector_weights(inst.symbol) or subject == "taxable gains" and line["side"] == "sell":
+            out.append(line)
     return out

@@ -5,7 +5,7 @@ through the grounding validator. The Advisor sees all claims, flagged ones inclu
 engine, from the engine's own figures plus the *grounded* claims only. A failing LLM leaves the Recommendation untouched.
 """
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
@@ -47,7 +47,7 @@ def citation_label(c) -> str:
 def build_memo(rec: RecommendationRow, tilt: RecommendationTiltRow | None, results: list[grounding.ClaimResult]) -> str:
     """Deterministic: engine figures first, then only the grounded claims with their citations."""
     lines = json.loads(rec.trade_lines_json)
-    sells = sum(1 for l in lines if l["side"] == "sell")
+    sells = sum(1 for line in lines if line["side"] == "sell")
     out = [
         f"Advisor memo: Portfolio {rec.client_id}, Recommendation version {rec.version}.",
         f"Engine: {len(lines)} Trade Lines ({sells} sell, {len(lines) - sells} buy), turnover {rec.turnover_pct:.1f}% of "
@@ -67,7 +67,7 @@ def build_memo(rec: RecommendationRow, tilt: RecommendationTiltRow | None, resul
 
 
 def generate(db: Session, llm: LlmClient, rec: RecommendationRow) -> RecommendationNarrativeRow:
-    now = audit.format_ts(datetime.now(timezone.utc))
+    now = audit.format_ts(datetime.now(UTC))
     scope = dict(portfolio_id=rec.client_id, client_id=rec.client_id, recommendation_id=str(rec.id))
     response = None
     try:

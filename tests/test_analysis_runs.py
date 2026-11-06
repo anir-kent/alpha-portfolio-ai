@@ -15,9 +15,9 @@ from app.analysis import run_analysis
 from app.db import AuditEventRow, PriorityResultRow, RecommendationRow, SuitabilityResultRow
 from app.deps import get_market
 from app.llm import LlmError, LlmRequest, LlmResponse, RecordedLlm
-from app.prompts import PRIORITY_NARRATIVE, RECOMMENDATION_NARRATIVE
 from app.main import create_app
 from app.market_data import MarketData
+from app.prompts import PRIORITY_NARRATIVE, RECOMMENDATION_NARRATIVE
 from app.research_seed import seed_research
 from app.seeder import seed_clients
 from tests.conftest import ROLES, SEED_PASSWORD

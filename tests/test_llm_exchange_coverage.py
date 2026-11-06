@@ -7,7 +7,6 @@ import re
 import pytest
 from sqlalchemy import select, text
 
-from app import audit
 from app.db import AuditEventRow, ClientRow
 from app.exchanges import CapturingLlm
 from tests.runs import run_and_wait

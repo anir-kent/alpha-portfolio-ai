@@ -1,7 +1,7 @@
 """Seam: the HTTP API. Exchange list, detail and live stream for `llm:read` roles (ADR-0004). No network."""
 import json
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
@@ -178,7 +178,7 @@ def test_stream_needs_a_session(client):
 
 def now_ts():
     from app.audit import format_ts
-    return format_ts(datetime.now(timezone.utc))
+    return format_ts(datetime.now(UTC))
 
 
 def test_stream_waits_for_the_referencing_event_so_the_linked_portfolio_is_not_lost(app, login):
