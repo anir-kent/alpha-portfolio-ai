@@ -45,7 +45,8 @@ def test_watching_a_run_shows_the_frozen_mid_run_state_then_the_outcome_in_seque
     assert outcomes(first) == ["done", "running", "pending", "pending", "pending"] and first["outcome"] is None
     scoring = first["steps"][1]
     assert scoring["total"] == 25 and 0 <= scoring["done"] < 25
-    assert last["outcome"] == "completed" and outcomes(last) == ["done"] * 5
+    assert last["outcome"] == "completed_with_warnings"  # the frozen run's LLM fails every call
+    assert outcomes(last) == ["done", "done", "done", "failed", "failed"]
     assert all(s["outcome"] is None for _, s in events[:-1])  # the stream ends with the first snapshot that has an outcome
     assert last == wait_for_outcome(advisor, run_id)
     assert elapsed < 25  # closed by the outcome, not by the stream's maximum duration
@@ -59,7 +60,7 @@ def test_a_reconnect_with_the_current_sequence_number_gets_no_unchanged_snapshot
     assert read_run_stream(app, advisor, run_id, last_event_id=seq, seconds=0.3)[0] == []  # nothing changed meanwhile
     llm.release.set()
     resumed, _ = read_run_stream(app, advisor, run_id, last_event_id=seq)
-    assert resumed and all(i > seq for i, _ in resumed) and resumed[-1][1]["outcome"] == "completed"
+    assert resumed and all(i > seq for i, _ in resumed) and resumed[-1][1]["outcome"] == "completed_with_warnings"
     final_seq = resumed[-1][0]
     assert read_run_stream(app, advisor, run_id, last_event_id=final_seq)[0] == []  # already has the final snapshot
     assert read_run_stream(app, advisor, run_id, last_event_id=seq)[0] == [resumed[-1]]  # behind: only the latest

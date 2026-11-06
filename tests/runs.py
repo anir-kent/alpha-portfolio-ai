@@ -1,5 +1,6 @@
-"""Starting an Analysis Run from a test. Every test that starts a run through the API goes through `run_and_wait`: the run
-is started in the background (ADR-0005) and its snapshot is polled until it has an outcome."""
+"""Starting an Analysis Run from a test. Every test that starts a run through the API goes through `start_and_wait` (any
+outcome) or `run_and_wait` (results recorded): the run is started in the background (ADR-0005) and its snapshot is
+polled until it has an outcome."""
 import time
 
 from fastapi.testclient import TestClient
@@ -20,11 +21,15 @@ def wait_for_outcome(c: TestClient, run_id: int, timeout: float = 60) -> dict:
         time.sleep(0.02)
 
 
-def run_and_wait(c: TestClient) -> int:
-    """Start an Analysis Run as `c` and return its id once it has finished with its results recorded."""
+def start_and_wait(c: TestClient) -> dict:
+    """Start an Analysis Run as `c` and return its final snapshot, whatever its outcome."""
     r = c.post(RUNS)
     assert r.status_code == 202, r.text
-    run_id = r.json()["run_id"]
-    snap = wait_for_outcome(c, run_id)
+    return wait_for_outcome(c, r.json()["run_id"])
+
+
+def run_and_wait(c: TestClient) -> int:
+    """Start an Analysis Run as `c` and return its id once it has finished with its results recorded."""
+    snap = start_and_wait(c)
     assert snap["outcome"] in ("completed", "completed_with_warnings"), snap
-    return run_id
+    return snap["run_id"]

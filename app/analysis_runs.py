@@ -19,7 +19,7 @@ from app.analysis import open_run, run_analysis
 from app.db import AnalysisRunRow
 from app.llm import LlmClient
 from app.market_data import MarketData
-from app.run_steps import RUN_STEP_KEYS, RUN_STEPS, RunStepKey
+from app.run_steps import RUN_STEP_KEYS, RUN_STEPS, RunStepKey, step
 
 log = logging.getLogger(__name__)
 
@@ -117,6 +117,7 @@ class SnapshotReporter:
         self._end(key, "done")
 
     def step_failed(self, key: RunStepKey) -> None:
+        self._step(key).error = step(key).failure_message
         self._end(key, "failed")
 
     def step_skipped(self, key: RunStepKey) -> None:
@@ -132,6 +133,9 @@ class SnapshotReporter:
         step = self._step(key)
         step.outcome, step.finished_at = outcome, _now()
         self._publish()
+
+    def failed_step_label(self) -> str | None:
+        return next((s.label for s in self.snapshot.steps if s.outcome == "failed"), None)
 
     def outcome(self) -> RunOutcome:
         """Completed only if the results were recorded; with warnings if a later (AI) step failed."""
@@ -207,7 +211,8 @@ class AnalysisRuns:
             with self._session_factory() as db:
                 run_analysis(db, market, actor, llm, reporter=reporter, run_id=run_id)
         except Exception:
-            log.exception("Analysis Run %s failed", run_id)
+            # The traceback goes to the log, keyed by run id; the snapshot only carries the failed step's fixed message.
+            log.exception("Analysis Run %s: %s failed", run_id, reporter.failed_step_label() or "the run")
         finally:  # whatever ends the run, it must leave flight, or every later start would get 409
             self._finish(run_id, reporter)
 

@@ -26,6 +26,7 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] Stream refused (any non-200 on `events`): the modal shows "Live updates unavailable; checking every 1s" and keeps updating by polling the snapshot; if polling fails too (e.g. session cookie cleared) it shows "Could not load the run's progress. Retrying…"
 - [ ] Without an LLM configured, both narrative steps show skipped and the run ends Completed
 - [ ] On Completed the Queue behind refreshes (new run number in the subtitle); View updated queue closes the modal on it
+- [ ] Completed with warnings, recorded LLM mode: with approved research in place (`uv run python -m app.research_seed`), move every `data/llm_recordings/priority_narrative-*.json` aside, then Run analysis. Priority narratives shows failed with "Narrative unavailable (AI step failed; scores are unaffected).", Recommendation narratives still runs and shows done, the header reads "Completed with warnings", the Queue refreshes to the new run and View updated queue is offered. Put the recordings back
 - [ ] Focus lands in the modal and Tab stays inside; Escape hides it; focus returns to Run analysis
 - [ ] With "reduce motion" on in the OS, the running indicator is a still ring, not a spinner
 - [x] Score 0-100, High/Medium/Low label, 4-part breakdown, SLA flag, cited narrative

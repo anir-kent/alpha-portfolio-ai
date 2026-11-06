@@ -121,6 +121,10 @@ def generate(db: Session, llm: LlmClient, result: PriorityResultRow, market: Mar
     return row
 
 
-def generate_for_run(db: Session, llm: LlmClient, run_id: int, market: MarketData) -> None:
+def generate_for_run(db: Session, llm: LlmClient, run_id: int, market: MarketData) -> int:
+    """A narrative for each of the run's Portfolios with relevant approved research. Returns how many failed."""
+    failed = 0
     for result in db.scalars(select(PriorityResultRow).where(PriorityResultRow.run_id == run_id).order_by(PriorityResultRow.client_id)).all():
-        generate(db, llm, result, market)
+        row = generate(db, llm, result, market)
+        failed += row is not None and row.status == "failed"
+    return failed

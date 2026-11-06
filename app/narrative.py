@@ -101,11 +101,10 @@ def generate(db: Session, llm: LlmClient, rec: RecommendationRow) -> Recommendat
     return row
 
 
-def generate_for_run(db: Session, llm: LlmClient, run_id: int) -> None:
-    """A memo for each of the run's Recommendations that had approved research in play."""
+def generate_for_run(db: Session, llm: LlmClient, run_id: int) -> int:
+    """A memo for each of the run's Recommendations that had approved research in play. Returns how many failed."""
     recs = db.scalars(
         select(RecommendationRow).join(RecommendationTiltRow, RecommendationTiltRow.recommendation_id == RecommendationRow.id)
         .where(RecommendationRow.run_id == run_id).order_by(RecommendationRow.id)
     ).all()
-    for rec in recs:
-        generate(db, llm, rec)
+    return sum(generate(db, llm, rec).status == "failed" for rec in recs)

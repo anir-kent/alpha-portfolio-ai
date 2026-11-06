@@ -104,8 +104,9 @@ function StepIcon({ outcome }: { outcome: Step["outcome"] }) {
   );
 }
 
-/** Inside the live region only outcome changes are read out: the ticking timer and the n/N count are hidden from it. */
-function StepRow({ step, now }: { step: Step; now: number }) {
+/** Inside the live region only outcome changes are read out: the ticking timer and the n/N count are hidden from it.
+ * `inlineError` shows a failed step's message under it; a Failed run says it once, below the list, instead. */
+function StepRow({ step, now, inlineError }: { step: Step; now: number; inlineError: boolean }) {
   const time = step.started_at && step.finished_at ? duration(step.started_at, step.finished_at)
     : step.outcome === "running" && step.started_at ? duration(step.started_at, now) : null;
   const count = step.total != null ? `${step.done ?? 0}/${step.total}` : null;
@@ -116,6 +117,7 @@ function StepRow({ step, now }: { step: Step; now: number }) {
         {step.label}
         {count && <span className="mono ml-2 text-ink-3" aria-hidden="true">{count}</span>}
         <span className="sr-only">: {step.outcome}</span>
+        {inlineError && step.outcome === "failed" && step.error && <span className="block font-normal text-neg">{step.error}</span>}
       </span>
       {step.outcome === "skipped" ? <span className="text-ink-3">skipped</span>
         : time && <span className="mono text-ink-3" aria-hidden={step.outcome === "running"}>{time}</span>}
@@ -126,6 +128,12 @@ function StepRow({ step, now }: { step: Step; now: number }) {
 const HEADLINE: Record<NonNullable<RunSnapshot["outcome"]>, string> = {
   completed: "Completed", completed_with_warnings: "Completed with warnings", failed: "Failed", interrupted: "Interrupted",
 };
+
+/** What a Failed run tells the user: the failed Run Step, that nothing changed, and a reference for the server log. */
+function failedMessage(snap: RunSnapshot): string {
+  const step = snap.steps.find((s) => s.outcome === "failed");
+  return `${step?.label ?? "The run"} failed. The Queue still shows the previous run. Reference: run #${snap.run_id}`;
+}
 
 /**
  * Follows one Analysis Run's Run Steps (ADR-0005). An accessible dialog: focus moves in on open and back to the trigger on
@@ -185,11 +193,12 @@ export function RunAnalysisModal({ initial, onClose, trigger }: { initial: RunSn
         </div>
         <div className="space-y-3 p-4">
           <ol className="space-y-1" aria-live="polite" aria-label="Run Steps">
-            {snap.steps.map((s) => <StepRow key={s.key} step={s} now={now} />)}
+            {snap.steps.map((s) => <StepRow key={s.key} step={s} now={now} inlineError={snap.outcome !== "failed"} />)}
           </ol>
           <p role="status" className={finished ? "font-semibold" : "text-ink-3"}>
             {snap.outcome ? HEADLINE[snap.outcome] : "Running… You can close this; the run carries on."}
           </p>
+          {snap.outcome === "failed" && <p className="text-neg">{failedMessage(snap)}</p>}
           {!finished && STREAM_NOTE[stream] && (
             <p className="text-ink-3">{pollFailed ? "Could not load the run's progress. Retrying…" : STREAM_NOTE[stream]}</p>
           )}

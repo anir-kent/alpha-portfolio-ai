@@ -1,24 +1,27 @@
 """Seam: the Analysis Run lifecycle through the HTTP API (ADR-0005). A run starts in the background; its Run Steps are read
 back as snapshots. Timing is controlled only through the LLM the app is given."""
 import json
+import logging
 import shutil
 import sqlite3
 import threading
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app import audit
 from app.analysis import run_analysis
-from app.db import AuditEventRow
-from app.llm import LlmError, LlmRequest, LlmResponse
+from app.db import AuditEventRow, PriorityResultRow, RecommendationRow, SuitabilityResultRow
+from app.deps import get_market
+from app.llm import LlmError, LlmRequest, LlmResponse, RecordedLlm
+from app.prompts import PRIORITY_NARRATIVE, RECOMMENDATION_NARRATIVE
 from app.main import create_app
 from app.market_data import MarketData
 from app.research_seed import seed_research
 from app.seeder import seed_clients
 from tests.conftest import ROLES, SEED_PASSWORD
-from tests.runs import RUNS, run_and_wait, wait_for_outcome
+from tests.runs import RUNS, run_and_wait, start_and_wait, wait_for_outcome
 from tests.test_market_data import LOOKTHROUGH, SNAPSHOT
 from tests.test_queue import seeded  # noqa: F401  (fixture)
 
@@ -55,7 +58,8 @@ def test_a_run_ends_completed_with_every_run_step_done_and_timed(advisor):
 
 class BlockingLlm:
     """Holds the first LLM call until released. With approved research seeded, that is a Research Tilt inside Score
-    Portfolios, so the run freezes part-way through scoring. Every call then fails, which costs only the AI output."""
+    Portfolios, so the run freezes part-way through scoring. Every call then fails, which costs only the AI output: the
+    run ends Completed with warnings."""
 
     def __init__(self):
         self.entered, self.release = threading.Event(), threading.Event()
@@ -93,8 +97,9 @@ def test_a_frozen_run_shows_the_earlier_steps_done_and_the_active_one_running(ad
     assert scoring["total"] == 25 and 0 <= scoring["done"] < 25
     assert scoring["started_at"] and scoring["finished_at"] is None
     llm.release.set()
-    final = wait_for_outcome(advisor, run_id)
-    assert final["outcome"] == "completed" and outcomes(final) == ["done"] * 5
+    final = wait_for_outcome(advisor, run_id)  # every LLM call failed: the results stand, the narratives are missing
+    assert final["outcome"] == "completed_with_warnings"
+    assert outcomes(final) == ["done", "done", "done", "failed", "failed"]
 
 
 def test_current_is_the_in_flight_run_and_204_when_idle(advisor, frozen):
@@ -207,3 +212,116 @@ def test_a_database_from_before_run_outcomes_gets_them_and_its_completed_runs_re
     assert c.post("/api/auth/login", json={"username": "advisor", "password": SEED_PASSWORD}).status_code == 200
     snap = c.get(f"{RUNS}/1").json()
     assert snap["outcome"] == "completed" and outcomes(snap) == ["done"] * 5
+
+
+class BrokenMarket(MarketData):
+    """Market data that breaks as soon as a Portfolio is valued: Score Portfolios raises."""
+
+    def instrument(self, symbol):
+        raise RuntimeError("secret internal detail: market data is broken")
+
+
+@pytest.fixture
+def broken_market(app):
+    """Call it to break the market data the next run is given; the override is removed on teardown."""
+    market = MarketData.load(SNAPSHOT, LOOKTHROUGH)
+
+    def break_it():
+        app.dependency_overrides[get_market] = lambda: BrokenMarket(market.as_of, market.source, {}, {})
+
+    yield break_it
+    app.dependency_overrides.pop(get_market, None)
+
+
+def test_broken_market_data_fails_score_portfolios_and_skips_the_later_steps_with_a_safe_error(advisor, broken_market):
+    broken_market()
+    snap = start_and_wait(advisor)
+    assert snap["outcome"] == "failed" and snap["finished_at"]
+    assert outcomes(snap) == ["done", "failed", "skipped", "skipped", "skipped"]
+    scoring = snap["steps"][1]
+    assert scoring["error"] == "Scoring failed"
+    assert "secret" not in json.dumps(snap) and "RuntimeError" not in json.dumps(snap)
+
+
+def test_a_failed_run_keeps_nothing_supersedes_nothing_and_the_queue_still_serves_the_previous_run(app, advisor, broken_market):
+    seed_research(app.state.session_factory)
+    previous = run_and_wait(advisor)
+    queue = advisor.get("/api/queue").json()
+    ids = [row["portfolio_id"] for row in queue["items"]]
+    portfolios = {p: advisor.get(f"/api/portfolios/{p}").json() for p in ids}
+    assert any(v["recommendation"] and v["recommendation"]["status"] == "pending_advisor" for v in portfolios.values())
+    with app.state.session_factory() as db:
+        events_before = db.scalar(select(func.count()).select_from(AuditEventRow))
+
+    broken_market()
+    failed = start_and_wait(advisor)
+    assert failed["outcome"] == "failed"
+    app.dependency_overrides.pop(get_market)
+
+    assert advisor.get("/api/queue").json() == queue and queue["run_id"] == previous
+    assert {p: advisor.get(f"/api/portfolios/{p}").json() for p in ids} == portfolios
+    with app.state.session_factory() as db:
+        assert db.scalar(select(func.count()).select_from(AuditEventRow)) == events_before
+        for table in (PriorityResultRow, SuitabilityResultRow, RecommendationRow):
+            assert db.scalar(select(func.count()).select_from(table).where(table.run_id == failed["run_id"])) == 0
+
+
+def test_a_failed_run_logs_its_traceback_by_run_id_keeps_its_row_and_a_new_run_starts_straight_away(
+    app, advisor, broken_market, caplog,
+):
+    broken_market()
+    with caplog.at_level(logging.ERROR, logger="app.analysis_runs"):
+        failed = start_and_wait(advisor)
+    logged = [r for r in caplog.records if r.exc_info and f"Analysis Run {failed['run_id']}" in r.getMessage()]
+    assert logged and "market data is broken" in str(logged[0].exc_info[1])
+
+    app.dependency_overrides.pop(get_market)
+    assert run_and_wait(advisor) == failed["run_id"] + 1
+    assert advisor.get(f"{RUNS}/{failed['run_id']}").json() == failed  # now read back from the run row
+
+
+NARRATIVES = (PRIORITY_NARRATIVE.name, RECOMMENDATION_NARRATIVE.name)
+
+
+class NarrativeFailingLlm:
+    """Replies from the recordings for a Research Tilt. Fails the way a provider does (LlmError) on the narrative tasks in
+    `failing`, or with `blow_up` raises an unexpected error that escapes the step; other narratives get a reply with no
+    claims."""
+
+    def __init__(self, recordings_dir: str, failing=NARRATIVES, blow_up: bool = False):
+        self.recorded, self.failing, self.blow_up = RecordedLlm(recordings_dir), failing, blow_up
+
+    def complete(self, request: LlmRequest) -> LlmResponse:
+        if request.task in self.failing:
+            if self.blow_up:
+                raise RuntimeError("secret internal detail: provider blew up")
+            raise LlmError("secret internal detail: provider is down")
+        if request.task in NARRATIVES:
+            return LlmResponse(content={"claims": []}, model="fake", prompt_version=request.prompt_version)
+        return self.recorded.complete(request)
+
+
+AI_STEP_FAILED = "Narrative unavailable (AI step failed; scores are unaffected)."
+
+
+def test_an_llm_failing_in_the_narrative_steps_ends_completed_with_warnings_and_the_queue_moves_on(app, advisor, settings):
+    seed_research(app.state.session_factory)
+    previous = run_and_wait(advisor)
+    app.state.llm = NarrativeFailingLlm(settings.llm_recordings_dir)
+    snap = start_and_wait(advisor)
+    assert snap["outcome"] == "completed_with_warnings"
+    assert outcomes(snap) == ["done", "done", "done", "failed", "failed"]
+    assert [s["error"] for s in snap["steps"][3:]] == [AI_STEP_FAILED] * 2
+    assert "secret" not in json.dumps(snap)
+    assert advisor.get("/api/queue").json()["run_id"] == snap["run_id"] != previous
+
+
+def test_recommendation_narratives_still_run_after_the_priority_narratives_step_blows_up(app, advisor, settings, caplog):
+    seed_research(app.state.session_factory)
+    app.state.llm = NarrativeFailingLlm(settings.llm_recordings_dir, failing=(PRIORITY_NARRATIVE.name,), blow_up=True)
+    with caplog.at_level(logging.ERROR, logger="app.analysis_runs"):
+        snap = start_and_wait(advisor)
+    assert snap["outcome"] == "completed_with_warnings"
+    assert outcomes(snap) == ["done", "done", "done", "failed", "done"]
+    assert snap["steps"][3]["error"] == AI_STEP_FAILED and "secret" not in json.dumps(snap)
+    assert any(f"Analysis Run {snap['run_id']}" in r.getMessage() and r.exc_info for r in caplog.records)

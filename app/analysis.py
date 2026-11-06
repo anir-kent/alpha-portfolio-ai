@@ -18,7 +18,7 @@ from app.llm import LlmClient, build_llm
 from app.market_data import MarketData
 from app.opportunity import opportunity_raw, relevant_insights
 from app.priority import score_portfolio
-from app.run_steps import NullReporter, RunStepReporter, run_step
+from app.run_steps import AI_STEP_KEYS, NullReporter, RunStepReporter, run_ai_steps, run_step
 
 SYSTEM = audit.Actor.system("priority-engine")
 
@@ -146,13 +146,13 @@ def run_analysis(
             run.outcome, run.finished_at = "completed", audit.format_ts(datetime.now(timezone.utc))
         db.commit()
     if llm is None:
-        reporter.step_skipped("priority_narratives")
-        reporter.step_skipped("recommendation_narratives")
+        for key in AI_STEP_KEYS:
+            reporter.step_skipped(key)
     else:  # after the run is on record: a failing LLM cannot undo it
-        with run_step(reporter, "priority_narratives"):
-            priority_narrative.generate_for_run(db, llm, run.id, market)
-        with run_step(reporter, "recommendation_narratives"):
-            narrative.generate_for_run(db, llm, run.id)
+        run_ai_steps(reporter, [
+            ("priority_narratives", lambda: priority_narrative.generate_for_run(db, llm, run.id, market)),
+            ("recommendation_narratives", lambda: narrative.generate_for_run(db, llm, run.id)),
+        ], recover=db.rollback)
     return run.id, len(clients)
 
 
