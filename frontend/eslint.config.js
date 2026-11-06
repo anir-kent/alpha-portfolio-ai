@@ -19,9 +19,13 @@ export default defineConfig([
       prettier, // formatting belongs to Prettier, not the linter
     ],
     languageOptions: { ecmaVersion: 2022, globals: globals.browser },
+    linterOptions: { reportUnusedDisableDirectives: "error" }, // a suppression that no longer suppresses anything must go
     rules: {
       // `_name` marks a binding left unused on purpose, e.g. a field dropped by a rest destructure
-      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", ignoreRestSiblings: true }],
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", ignoreRestSiblings: true },
+      ],
       // Fast refresh is a dev convenience: a module that shares a helper with its components only reloads in full
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
     },
