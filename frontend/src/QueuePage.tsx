@@ -1,8 +1,8 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "./api/client";
-import { RunAnalysisModal, type RunSnapshot } from "./RunAnalysisModal";
+import { RunAnalysisModal, useRunProgress, type RunSnapshot } from "./RunAnalysisModal";
 import {
   Citations,
   DeltaBar,
@@ -132,21 +132,54 @@ function Narrative({ r }: { r: Item }) {
   );
 }
 
+/** The Analysis Run in flight when the page loads (a reload, or coming back from another page), or null when idle. Asked
+ * once per visit: from then on the run is followed over its own stream. */
+function useRunInFlight() {
+  return useQuery({
+    queryKey: ["analysis-run-current"],
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/analysis/runs/current");
+      if (response.status === 204) return null;
+      if (error || !data) throw new Error("Could not check for a running analysis");
+      return data;
+    },
+    staleTime: Infinity,
+    gcTime: 0, // a later visit asks again rather than trusting what an earlier one saw
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+}
+
+/** A run this page started, or attached to because its start found one already in flight (409). */
+type Followed = { snap: RunSnapshot; attached: boolean };
+
 export function QueuePage() {
   const [filters, setFilters] = useState<QueueParams>({ sort: "score" });
   const queue = useQueue(filters);
-  const [watching, setWatching] = useState<RunSnapshot | null>(null);
+  const inFlightOnLoad = useRunInFlight();
+  const [started, setStarted] = useState<Followed | null>(null);
+  // The run being followed: the one this page started or attached to, else the one in flight on load
+  const followed = started?.snap ?? inFlightOnLoad.data ?? null;
+  const progress = useRunProgress(followed);
+  const running = progress != null && progress.snap.outcome == null;
+  // null until the user opens or closes it: a run found in flight on load opens it on its own
+  const [modalOpen, setModalOpen] = useState<boolean | null>(null);
+  const showModal = progress != null && (modalOpen ?? inFlightOnLoad.data != null);
   const runButton = useRef<HTMLButtonElement>(null);
   const run = useMutation({
-    // Starts the run in the background; a run already in flight (409) is followed instead of a new one.
-    mutationFn: async () => {
+    // Starts the run in the background; a run already in flight (409, e.g. a colleague's) is followed instead.
+    mutationFn: async (): Promise<Followed> => {
       const { data, error, response } = await api.POST("/api/analysis/runs");
-      if (data) return data;
-      if (response.status === 409 && error) return error as RunSnapshot;
+      if (data) return { snap: data, attached: false };
+      if (response.status === 409 && error) return { snap: error as RunSnapshot, attached: true };
       throw new Error("Could not start the analysis run");
     },
-    onSuccess: setWatching,
+    onSuccess: (s) => {
+      setStarted(s);
+      setModalOpen(true);
+    },
   });
+  const onRunClick = () => (running ? setModalOpen(true) : run.mutate()); // while a run is in flight, open it
   const set = (patch: Partial<QueueParams>) => setFilters((f) => ({ ...f, ...patch }));
   const items = queue.data?.items ?? [];
 
@@ -166,18 +199,40 @@ export function QueuePage() {
           )
         }
         actions={
-          <button ref={runButton} className="btn btn-primary" onClick={() => run.mutate()} disabled={run.isPending}>
-            {run.isPending ? "Starting…" : "Run analysis"}
-          </button>
+          <>
+            {running && (
+              <button
+                type="button"
+                className="pill pill-info cursor-pointer"
+                onClick={() => setModalOpen(true)}
+                aria-haspopup="dialog"
+              >
+                <span className="run-spin run-spin-sm" aria-hidden="true" />
+                Analysis running… <span className="underline">View progress</span>
+              </button>
+            )}
+            <button
+              ref={runButton}
+              className="btn btn-primary"
+              onClick={onRunClick}
+              disabled={run.isPending || inFlightOnLoad.isPending} // until `current` answers, a click could start what is already running
+              aria-haspopup={running ? "dialog" : undefined}
+              title={running ? `Run #${progress.snap.run_id} is in flight; opens its progress` : undefined}
+            >
+              {run.isPending ? "Starting…" : running ? "Analysis Run in progress" : "Run analysis"}
+            </button>
+          </>
         }
       />
       {run.isError && <ErrorLine>{run.error.message}</ErrorLine>}
-      {watching && (
+      {inFlightOnLoad.isError && <ErrorLine>{inFlightOnLoad.error.message}</ErrorLine>}
+      {showModal && (
         <RunAnalysisModal
-          key={watching.run_id}
-          initial={watching}
+          key={progress.snap.run_id}
+          progress={progress}
+          attached={started?.snap.run_id === progress.snap.run_id && started.attached}
           trigger={runButton}
-          onClose={() => setWatching(null)}
+          onClose={() => setModalOpen(false)}
         />
       )}
 

@@ -590,6 +590,12 @@
     border-top-color: var(--color-info);
     animation: spin 900ms linear infinite;
   }
+  .run-spin-sm {
+    /* the Queue header's "Analysis running" pill */
+    width: 0.7rem;
+    height: 0.7rem;
+    border-width: 1.5px;
+  }
 
   /* Floating navigation capsule. */
   .capsule {

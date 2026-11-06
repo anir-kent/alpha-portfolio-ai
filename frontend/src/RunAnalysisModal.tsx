@@ -15,6 +15,10 @@ const SUCCESS = new Set<RunSnapshot["outcome"]>(["completed", "completed_with_wa
 /** The scoring transaction committed: this run's results are current, whatever happened after. */
 const recorded = (snap: RunSnapshot) => snap.steps.find((s) => s.key === "record_run")?.outcome === "done";
 
+/** The run ended and the Queue now shows it. An Interrupted run changes nothing, unless its results were recorded first. */
+const resultsCurrent = (snap: RunSnapshot) =>
+  SUCCESS.has(snap.outcome) || (snap.outcome === "interrupted" && recorded(snap));
+
 /** Server timestamps carry microseconds; Date wants milliseconds at most. */
 const ms = (ts: string) => Date.parse(ts.replace(/(\.\d{3})\d+/, "$1"));
 
@@ -41,23 +45,33 @@ function useNow(on: boolean) {
  * stream is tried again once a poll gets through. */
 type StreamState = "connecting" | "live" | "reconnecting" | "unavailable";
 
+export type RunProgress = { snap: RunSnapshot; stream: StreamState; pollFailed: boolean };
+
 /**
- * The run's latest snapshot, pushed over the run's event stream (ADR-0005). Each event is the whole snapshot, so the latest
- * one always replaces what is shown, and a reconnect (the browser's own, with Last-Event-ID) needs nothing else. When the
- * stream is unavailable the snapshot is polled until the run has an outcome. `initial` is what the start request returned.
+ * Follows an Analysis Run, whether or not its modal is open (ADR-0005): the run's latest snapshot, pushed over its event
+ * stream. Each event is the whole snapshot, so the latest one always replaces what is shown, and a reconnect (the
+ * browser's own, with Last-Event-ID) needs nothing else. When the stream is unavailable the snapshot is polled until the
+ * run has an outcome. `initial` is the snapshot the run was found with (start, 409 or `current`); null follows nothing,
+ * and a different run starts over. When the run's results become current, the Queue and Recommendation views refresh.
  */
-function useRunProgress(initial: RunSnapshot) {
-  const runId = initial.run_id;
-  const [snap, setSnap] = useState(initial);
+export function useRunProgress(initial: RunSnapshot | null): RunProgress | null {
+  const runId = initial?.run_id;
+  const [latest, setLatest] = useState<RunSnapshot | null>(null);
+  const snap = initial && latest?.run_id === initial.run_id ? latest : initial; // what the stream or a poll last said
   const [stream, setStream] = useState<StreamState>("connecting");
   const [pollFailed, setPollFailed] = useState(false);
   const [attempt, setAttempt] = useState(0); // bumping it reopens the stream
   const opened = useRef(0);
-  const finished = snap.outcome != null;
+  const finished = snap?.outcome != null;
+  const qc = useQueryClient();
 
   useEffect(() => {
+    if (runId == null || finished) return; // nothing to follow, or nothing more will come
     opened.current = Date.now();
-    setStream("connecting"); // eslint-disable-line react-hooks/set-state-in-effect -- resetting the connection state is part of (re)subscribing
+    /* eslint-disable react-hooks/set-state-in-effect -- resetting the connection state is part of (re)subscribing */
+    setStream("connecting");
+    setPollFailed(false); // a previous run's failed poll says nothing about this one
+    /* eslint-enable react-hooks/set-state-in-effect */
     const es = new EventSource(`/api/analysis/runs/${runId}/events`, { withCredentials: true });
     es.onopen = () => setStream("live");
     es.addEventListener("progress", (e) => {
@@ -67,17 +81,17 @@ function useRunProgress(initial: RunSnapshot) {
       } catch {
         return;
       } // the next event carries it all again
-      setSnap(next);
+      setLatest(next);
       setStream("live");
       if (next.outcome) es.close(); // final: the server closes too, and the browser must not reconnect
     });
     es.onerror = () => setStream(es.readyState === EventSource.CLOSED ? "unavailable" : "reconnecting"); // CLOSED: refused (401/403/404) or no retry coming
     return () => es.close();
-  }, [runId, attempt]);
+  }, [runId, attempt, finished]);
 
   useEffect(() => {
     // the fallback: poll the snapshot while the stream is unavailable and the run goes on
-    if (stream !== "unavailable" || finished) return;
+    if (runId == null || stream !== "unavailable" || finished) return;
     let stopped = false;
     const poll = async () => {
       const { data } = await api
@@ -86,7 +100,7 @@ function useRunProgress(initial: RunSnapshot) {
       if (stopped) return;
       setPollFailed(!data);
       if (!data) return;
-      setSnap(data);
+      setLatest(data);
       if (!data.outcome && Date.now() - opened.current >= STREAM_RETRY_MS) setAttempt((a) => a + 1); // the server is back: go live again
     };
     poll();
@@ -97,7 +111,14 @@ function useRunProgress(initial: RunSnapshot) {
     };
   }, [stream, finished, runId]);
 
-  return { snap, stream, pollFailed };
+  const resultsChanged = snap != null && resultsCurrent(snap);
+  useEffect(() => {
+    if (!resultsChanged) return;
+    qc.invalidateQueries({ queryKey: ["queue"] });
+    qc.invalidateQueries({ queryKey: ["portfolio"] }); // each Portfolio view carries its Recommendation
+  }, [resultsChanged, runId, qc]);
+
+  return snap && { snap, stream, pollFailed };
 }
 
 const STREAM_NOTE: Record<StreamState, string | null> = {
@@ -176,22 +197,31 @@ function interruptedMessage(snap: RunSnapshot): string {
     : "Run interrupted. The Queue still shows the previous run";
 }
 
+/** "13:05" today, "6 Nov, 13:05" on another day: when the run started, in the viewer's time zone. */
+function startedAt(ts: string) {
+  const d = new Date(ms(ts));
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toDateString() === new Date().toDateString()
+    ? time
+    : `${d.toLocaleDateString([], { day: "numeric", month: "short" })}, ${time}`;
+}
+
 /**
- * Follows one Analysis Run's Run Steps (ADR-0005). An accessible dialog: focus moves in on open and back to the trigger on
- * close, Tab stays inside, Escape hides it. Closing never stops the run. On a successful outcome the Queue and
- * Recommendation views are refreshed.
+ * Shows one Analysis Run's Run Steps, as `useRunProgress` follows them (ADR-0005). An accessible dialog: focus moves in on
+ * open and back to the trigger on close, Tab stays inside, Escape hides it. Closing only hides it: the run, and the
+ * following, carry on. `attached`: the user's start found this run already in flight (409), so it is not theirs.
  */
 export function RunAnalysisModal({
-  initial,
+  progress: { snap, stream, pollFailed },
+  attached,
   onClose,
   trigger,
 }: {
-  initial: RunSnapshot;
+  progress: RunProgress;
+  attached: boolean;
   onClose: () => void;
   trigger: RefObject<HTMLElement | null>;
 }) {
-  const qc = useQueryClient();
-  const { snap, stream, pollFailed } = useRunProgress(initial);
   const finished = snap.outcome != null;
   const now = useNow(!finished);
   const dialog = useRef<HTMLDivElement>(null);
@@ -201,14 +231,6 @@ export function RunAnalysisModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately the trigger at close time
     return () => trigger.current?.focus(); // the trigger, not whatever had focus: it was disabled while the run started
   }, [trigger]);
-
-  const resultsChanged = SUCCESS.has(snap.outcome) || (snap.outcome === "interrupted" && recorded(snap)); // an Interrupted
-  // run refreshes nothing, unless its results were recorded before the restart
-  useEffect(() => {
-    if (!resultsChanged) return;
-    qc.invalidateQueries({ queryKey: ["queue"] });
-    qc.invalidateQueries({ queryKey: ["portfolio"] }); // each Portfolio view carries its Recommendation
-  }, [resultsChanged, qc]);
 
   useEffect(() => {
     // Escape hides it wherever focus is, like the Drawer
@@ -251,9 +273,15 @@ export function RunAnalysisModal({
         onKeyDown={onKeyDown}
       >
         <div className="panel-head !px-4 !py-2.5">
-          <h2 id="run-modal-title" className="!text-[1.0769rem]">
-            Analysis run <span className="mono text-ink-3">#{snap.run_id}</span>
-          </h2>
+          <div className="min-w-0">
+            <h2 id="run-modal-title" className="!text-[1.0769rem]">
+              Analysis run <span className="mono text-ink-3">#{snap.run_id}</span>
+            </h2>
+            <p className="text-ink-3">
+              Started by <span className="text-ink-2">{snap.actor_name}</span> at{" "}
+              <span className="mono">{startedAt(snap.started_at)}</span>
+            </p>
+          </div>
           <span className="mono ml-auto text-ink-3" aria-label={`Total time ${total}`}>
             {total}
           </span>
@@ -262,6 +290,11 @@ export function RunAnalysisModal({
           </button>
         </div>
         <div className="space-y-3 p-4">
+          {attached && (
+            <p className="callout callout-info">
+              A run was already in flight, so this one is shown instead of starting another.
+            </p>
+          )}
           <ol className="space-y-1" aria-live="polite" aria-label="Run Steps">
             {snap.steps.map((s) => (
               <StepRow key={s.key} step={s} now={now} inlineError={snap.outcome !== "failed"} />
