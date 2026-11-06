@@ -15,6 +15,7 @@ from app.seeder import PLANTED
 from tests.runs import run_and_wait
 from tests.test_portfolio import url
 from tests.test_queue import seeded  # noqa: F401  (fixture)
+from tests.test_research import upload
 
 ASK = "/api/assistant/questions"
 REFUSAL_START = "I can only help with questions about this platform"
@@ -369,3 +370,121 @@ def test_a_failed_turn_has_no_answer_so_it_is_left_out_of_the_transcript(login, 
     ask_answered(advisor, model, 3, portfolio_screen("C001"))
     prompt = model.requests[-1].user
     assert "Question: Question 1?\nAnswer: Answer 1." in prompt and "Question 2?" not in prompt
+
+
+# --- grounded Claims (ticket 04) ---------------------------------------------------------------------------------
+
+
+def engine_cite(figure):
+    return {"kind": "engine", "figure": figure}
+
+
+def claims_reply(*claims):
+    return {**answer(), "claims": list(claims)}
+
+
+def test_a_claim_whose_figure_matches_the_screen_context_comes_back_grounded(login, model):
+    advisor = login("advisor")
+    cid = PLANTED["restricted_breach"]
+    drift = advisor.get(url(cid)).json()["drift"]
+    model.reply = claims_reply(
+        {
+            "text": f"Portfolio Drift is {drift['portfolio_drift_pp']} pp.",
+            "citations": [engine_cite("portfolio_drift_pp")],
+        }
+    )
+    turn = ask(advisor, "How far has it drifted?", portfolio_screen(cid)).json()
+    assert turn["outcome"] == "answered"
+    (claim,) = turn["answer"]["claims"]
+    assert claim["grounded"] is True and claim["issues"] == []
+    assert '"portfolio_drift_pp"' in model.requests[0].user  # the figure the model cited is named in its prompt
+
+
+def test_claims_citing_absent_figures_or_mismatched_numbers_are_flagged_and_stay_in_the_answer(login, model):
+    advisor = login("advisor")
+    cid = PLANTED["restricted_breach"]
+    drift = advisor.get(url(cid)).json()["drift"]
+    model.reply = claims_reply(
+        {"text": "The Queue holds 12 Portfolios.", "citations": [engine_cite("queue.portfolio_count")]},
+        {
+            "text": f"Portfolio Drift is {drift['portfolio_drift_pp'] + 5} pp.",
+            "citations": [engine_cite("portfolio_drift_pp")],
+        },
+        {"text": "Equity drives the drift.", "citations": []},
+    )
+    turn = ask(advisor, "How far has it drifted?", portfolio_screen(cid)).json()
+    assert turn["outcome"] == "answered" and turn["answer"]["markdown"] == answer()["answer_markdown"]
+    claims = turn["answer"]["claims"]
+    assert [c["text"] for c in claims] == [c["text"] for c in model.reply["claims"]]
+    assert [c["grounded"] for c in claims] == [False, False, False]
+    assert [{i["code"] for i in c["issues"]} for c in claims] == [
+        {"unknown_engine_figure", "number_mismatch"},
+        {"number_mismatch"},
+        {"uncited"},
+    ]
+
+
+def test_a_report_citation_quoting_a_real_page_verbatim_is_grounded_and_a_made_up_quote_is_not(login, model):
+    report_id = upload(login("research_analyst")).json()["id"]
+    verbatim = {"kind": "report", "report_id": report_id, "page": 1, "quote": "We are constructive on technology."}
+    invented = {**verbatim, "quote": "We expect technology to double next year."}
+    model.reply = claims_reply(
+        {"text": "The house view is constructive on technology.", "asset": "technology", "citations": [verbatim]},
+        {"text": "Research expects technology to double.", "asset": "technology", "citations": [invented]},
+    )
+    turn = ask(login("advisor"), "What does research say?", portfolio_screen("C001")).json()
+    grounded, flagged = turn["answer"]["claims"]
+    assert grounded["grounded"] is True and grounded["citations"] == [verbatim]
+    assert flagged["grounded"] is False and [i["code"] for i in flagged["issues"]] == ["quote_not_found"]
+
+
+def test_the_grounding_check_is_linked_to_the_turn_and_shows_through_the_grounding_read_paths(app, login, model):
+    advisor = login("advisor")
+    cid = PLANTED["restricted_breach"]
+    drift = advisor.get(url(cid)).json()["drift"]
+    model.reply = claims_reply(
+        {
+            "text": f"Portfolio Drift is {drift['portfolio_drift_pp']} pp.",
+            "citations": [engine_cite("portfolio_drift_pp")],
+        },
+        {"text": "Drift is 99 pp.", "citations": [engine_cite("portfolio_drift_pp")]},
+    )
+    turn = ask(advisor, "How far has it drifted?", portfolio_screen(cid)).json()
+    check_id = turn["grounding_check_id"]
+    assert check_id
+
+    (answered,) = events(app, "assistant.answered")
+    assert answered["check_id"] == check_id
+    subject = {"subject_kind": "assistant_turn", "subject_id": f"{answered['conversation_id']}.{turn['seq']}"}
+
+    auditor = login("auditor")
+    [verdict] = auditor.get(f"/api/llm/exchanges/{turn['exchange_id']}").json()["grounding"]
+    assert verdict["check_id"] == check_id
+    assert verdict["summary"] == {"total": 2, "grounded": 1, "ungrounded": 1}
+    assert [c["grounded"] for c in verdict["claims"]] == [True, False]
+
+    [checked] = auditor.get("/api/audit/events", params={"type": "grounding_checked"}).json()["items"]
+    [flagged] = auditor.get("/api/audit/events", params={"type": "claim_ungrounded"}).json()["items"]
+    assert {k: checked["payload"][k] for k in subject} == subject and checked["payload"]["check_id"] == check_id
+    assert checked["client_id"] == cid
+    assert flagged["payload"]["subject_id"] == subject["subject_id"] and flagged["payload"]["claim_index"] == 1
+
+    quality = auditor.get("/api/governance").json()["quality"]
+    assert (quality["checks"], quality["claims_total"], quality["claims_grounded"]) == (1, 2, 1)
+    assert auditor.get("/api/audit/verify").json()["valid"]
+
+    (read_back,) = advisor.get(CONVERSATION).json()["turns"]
+    assert read_back == turn
+
+
+def test_a_turn_without_claims_has_no_grounding_check(app, login, model):
+    turn = ask(login("advisor"), "Hello?", portfolio_screen("C001")).json()
+    assert turn["grounding_check_id"] is None and turn["answer"]["claims"] == []
+    assert events(app, "grounding_checked") == []
+
+
+def test_a_refused_turn_is_not_grounding_checked_even_if_the_model_sent_claims(app, login, model):
+    model.reply = {**claims_reply({"text": "Buy 100 NVDA.", "citations": []}), "in_scope": False}
+    turn = ask(login("advisor"), "Should I buy NVDA?", portfolio_screen("C001")).json()
+    assert turn["outcome"] == "refused" and turn["answer"]["claims"] == [] and turn["grounding_check_id"] is None
+    assert events(app, "grounding_checked") == []

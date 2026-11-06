@@ -9,14 +9,18 @@ deterministic: the same screen and data give a byte-identical prompt, which reco
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app import grounding
 from app.db import User
 from app.market_data import MarketData
 from app.rbac import PERMISSIONS
+
+if TYPE_CHECKING:
+    from app.routers.portfolios import PortfolioDetail
 
 
 class ScreenIdentity(BaseModel):
@@ -32,6 +36,7 @@ class ScreenContext:
     label: str  # how the drawer names it, e.g. "Portfolio C001"
     portfolio_id: str | None
     text: str  # the serialised context that goes into the prompt
+    figures: dict[str, float]  # every engine figure in `text`, by the name Claims cite it with (also listed in `text`)
 
     @property
     def hash(self) -> str:
@@ -54,6 +59,7 @@ def _portfolio(db: Session, market: MarketData, user: User, screen: ScreenIdenti
         return None
     client = detail.client
     drift = detail.drift
+    figures = _portfolio_figures(detail)
     context = {
         "screen": "portfolio",
         "portfolio_id": detail.portfolio_id,
@@ -99,8 +105,33 @@ def _portfolio(db: Session, market: MarketData, user: User, screen: ScreenIdenti
             if drift
             else "No Analysis Run has completed for this Portfolio yet."
         ),
+        "figures": figures,
     }
-    return ScreenContext(label=label(screen), portfolio_id=detail.portfolio_id, text=serialise(context))
+    return ScreenContext(
+        label=label(screen), portfolio_id=detail.portfolio_id, text=serialise(context), figures=figures
+    )
+
+
+def _portfolio_figures(detail: "PortfolioDetail") -> dict[str, float]:
+    """The engine figures on the Portfolio screen, named the way grounding names them (`drift.<Asset Class>.<key>`, as
+    for a Recommendation). A Holding held in several Accounts is summed, as the screen's totals are."""
+    figures: dict[str, float] = {
+        "total_value": detail.total_value,
+        "client.horizon_years": float(detail.client.horizon_years),
+        "client.liquidity_needs_pct": detail.client.liquidity_needs_pct,
+    }
+    for holding in detail.holdings:
+        for key in ("quantity", "market_value", "weight_pct"):
+            name = f"holding.{holding.symbol}.{key}"
+            figures[name] = figures.get(name, 0.0) + getattr(holding, key)
+    if drift := detail.drift:
+        # Not a measurement, but a Claim naming the run ("run 12") must be able to cite it like any other number.
+        figures["latest_analysis_run.run_id"] = float(drift.run_id)
+        figures["portfolio_drift_pp"] = drift.portfolio_drift_pp
+        figures["tolerance_band.warn"] = drift.tolerance_band.warn
+        figures["tolerance_band.breach"] = drift.tolerance_band.breach
+        figures |= grounding.drift_figures("drift", (row.model_dump() for row in drift.asset_classes))
+    return figures
 
 
 def label(screen: ScreenIdentity) -> str:

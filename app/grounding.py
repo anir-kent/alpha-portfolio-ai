@@ -99,6 +99,13 @@ def summarise(results: Iterable) -> dict[str, int]:
 
 # --- engine figures ---------------------------------------------------------------------------------------------
 
+DRIFT_KEYS = ("actual_pct", "target_pct", "signed_pp", "drift_pp")
+
+
+def drift_figures(scope: str, rows: Iterable[dict]) -> dict[str, float]:
+    """Asset-Class Drift rows as named figures, `<scope>.<Asset Class>.<key>`: the one naming every figure set shares."""
+    return {f"{scope}.{row['asset_class']}.{key}": row[key] for row in rows for key in DRIFT_KEYS}
+
 
 def engine_figures(db: Session, rec: RecommendationRow) -> dict[str, float]:
     """Every number the engine produced for this Recommendation, by name."""
@@ -112,10 +119,7 @@ def engine_figures(db: Session, rec: RecommendationRow) -> dict[str, float]:
         for key in ("amount", "quantity", "pct_of_portfolio"):  # one symbol may trade in several Accounts
             f[f"{base}.{key}"] = f.get(f"{base}.{key}", 0.0) + line[key]
         f.setdefault(f"{base}.price", line["price"])
-    for scope, rows in (("post_trade_drift", json.loads(rec.post_trade_drift_json)),):
-        for d in rows:
-            for key in ("actual_pct", "target_pct", "signed_pp", "drift_pp"):
-                f[f"{scope}.{d['asset_class']}.{key}"] = d[key]
+    f.update(drift_figures("post_trade_drift", json.loads(rec.post_trade_drift_json)))
     tilt = db.get(RecommendationTiltRow, rec.id)
     if tilt is not None and tilt.status == "ok":  # what the AI proposed and the engine allowed are engine-owned figures
         f["tilt.bound_pp"] = tilt.bound_pp
@@ -126,9 +130,7 @@ def engine_figures(db: Session, rec: RecommendationRow) -> dict[str, float]:
     if prio is not None:
         f["priority_score"], f["portfolio_drift_pp"] = prio.score, prio.portfolio_drift_pp
         f["days_past_due"] = float(prio.days_past_due)
-        for d in json.loads(prio.drift_json):
-            for key in ("actual_pct", "target_pct", "signed_pp", "drift_pp"):
-                f[f"drift.{d['asset_class']}.{key}"] = d[key]
+        f.update(drift_figures("drift", json.loads(prio.drift_json)))
     return f
 
 

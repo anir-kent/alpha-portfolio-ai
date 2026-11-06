@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useEffect, useState } from "react";
 import Markdown from "react-markdown";
-import { useMatch } from "react-router-dom";
+import { Link, useMatch } from "react-router-dom";
 import { api } from "./api/client";
 import type { components } from "./api/schema";
-import { Icon } from "./ui";
+import { CitationChip, Icon, Pill } from "./ui";
 
 type Turn = components["schemas"]["Turn"];
 type Screen = components["schemas"]["ScreenIdentity"];
 type Conversation = components["schemas"]["Conversation"];
+type ClaimResult = components["schemas"]["ClaimResult"];
 
 /** Cached under this key, so logout (which drops every query but "me") clears the Conversation from the page too. */
 const CONVERSATION_KEY = ["assistant-conversation"];
@@ -46,6 +47,50 @@ function AnswerMarkdown({ text }: { text: string }) {
   );
 }
 
+/** The route of the screen each kind of Screen Context is built from, so an engine figure chip can go back to it. */
+const SCREEN_ROUTES: Record<Screen["kind"], (ids: Screen["entity_ids"]) => string> = {
+  portfolio: (ids) => `/portfolios/${encodeURIComponent(ids.portfolio_id ?? "")}`,
+};
+
+/** One Claim with its citation chips: a Report citation opens the quoted passage, an engine figure goes to the screen
+ * it came from. A Claim that failed grounding stays in the Answer, marked in place with its reasons. */
+function ClaimView({ claim, screen }: { claim: ClaimResult; screen: Screen }) {
+  const route = SCREEN_ROUTES[screen.kind](screen.entity_ids);
+  return (
+    <li className={claim.grounded ? "" : "assistant-claim-ungrounded"}>
+      <span className="text-ink">{claim.text}</span>{" "}
+      {!claim.grounded && (
+        <Pill tone="neg">
+          <Icon name="alert" size={11} />
+          ungrounded
+        </Pill>
+      )}{" "}
+      <span className="inline-flex flex-wrap items-start gap-1">
+        {claim.citations.map((citation, n) =>
+          citation.kind === "report" ? (
+            <CitationChip
+              key={n}
+              kind="report"
+              label={`${citation.report_id} p.${citation.page}`}
+              quote={citation.quote}
+            />
+          ) : (
+            <Link key={n} className="chip chip-engine" to={route} title={`Engine figure from ${route}`}>
+              <Icon name="spark" size={11} />
+              {citation.figure}
+            </Link>
+          ),
+        )}
+      </span>
+      {claim.issues.map((issue) => (
+        <p key={issue.code + issue.message} className="text-neg">
+          {issue.message}
+        </p>
+      ))}
+    </li>
+  );
+}
+
 /** Marks where the Conversation moved to another screen; each earlier turn stays tied to its own context. */
 function ContextDivider({ turn }: { turn: Turn }) {
   return (
@@ -62,6 +107,13 @@ function TurnView({ turn, onFollowUp }: { turn: Turn; onFollowUp: (q: string) =>
       {turn.outcome === "answered" && turn.answer && (
         <div className="space-y-1.5">
           <AnswerMarkdown text={turn.answer.markdown} />
+          {turn.answer.claims.length > 0 && (
+            <ul className="assistant-claims" aria-label="Claims">
+              {turn.answer.claims.map((c) => (
+                <ClaimView key={c.index} claim={c} screen={turn.screen} />
+              ))}
+            </ul>
+          )}
           {turn.answer.follow_up_questions.length > 0 && (
             <ul className="flex flex-wrap gap-1" aria-label="Follow-up questions">
               {turn.answer.follow_up_questions.map((q) => (

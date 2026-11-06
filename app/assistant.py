@@ -13,9 +13,9 @@ from pydantic import BaseModel, ValidationError, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import audit, prompts, screen_context
+from app import audit, grounding, prompts, screen_context
 from app.db import AssistantTurnRow, ConversationRow, SessionRow, User
-from app.grounding import Claim
+from app.grounding import CheckSubject, Claim, ClaimResult
 from app.llm import LlmClient, LlmError, LlmRequest, LlmResponse, exchange_ref
 from app.market_data import MarketData
 from app.screen_context import ScreenIdentity
@@ -47,7 +47,7 @@ class AssistantReply(BaseModel):
 
 class Answer(BaseModel):
     markdown: str
-    claims: list[Claim]
+    claims: list[ClaimResult]  # every Claim with its grounding verdict; ungrounded ones stay, flagged
     follow_up_questions: list[str]
 
 
@@ -61,6 +61,7 @@ class Turn(BaseModel):
     context_label: str | None  # how the drawer names the context; None when nothing was readable
     exchange_id: int | None
     exchange_hash: str | None
+    grounding_check_id: str | None  # the check of this turn's Claims; None when it had none
 
 
 def _now() -> str:
@@ -154,6 +155,7 @@ def ask(
     answer: Answer | None = None
     model: str | None = None
     called: LlmResponse | LlmError | None = None
+    reply: AssistantReply | None = None
     if context is None:  # nothing readable: refuse without calling the model or saying whether the entity exists
         outcome = "refused"
     else:
@@ -168,17 +170,25 @@ def ask(
             outcome = "failed"
         else:
             outcome = "answered" if reply.in_scope else "refused"
-            if reply.in_scope:
-                answer = Answer(
-                    markdown=reply.answer_markdown, claims=reply.claims, follow_up_questions=reply.follow_up_questions
-                )
-    if outcome == "refused":
-        answer = Answer(markdown=OUT_OF_SCOPE_REFUSAL, claims=[], follow_up_questions=[])
 
     conv = _conversation(db, user, session)
     seq = (
         db.scalar(select(func.max(AssistantTurnRow.seq)).where(AssistantTurnRow.conversation_id == conv.id)) or 0
     ) + 1
+    check_id: str | None = None
+    if outcome == "answered" and reply is not None and context is not None:
+        claims: list[ClaimResult] = []
+        if reply.claims:  # grounding finishes before the turn is stored or returned: nothing reaches the user unchecked
+            check_id, claims = grounding.validate_figures(
+                db,
+                reply.claims,
+                context.figures,
+                client_id=context.portfolio_id,
+                subject=CheckSubject(subject_kind="assistant_turn", subject_id=f"{conv.id}.{seq}"),
+            )
+        answer = Answer(markdown=reply.answer_markdown, claims=claims, follow_up_questions=reply.follow_up_questions)
+    elif outcome == "refused":
+        answer = Answer(markdown=OUT_OF_SCOPE_REFUSAL, claims=[], follow_up_questions=[])
     ref = exchange_ref(called)
     context_hash = context.hash if context else None
     db.add(
@@ -191,6 +201,7 @@ def ask(
             screen_context_hash=context_hash,
             outcome=outcome,
             answer_json=answer.model_dump_json() if answer else None,
+            grounding_check_id=check_id,
             exchange_id=ref.get("exchange_id"),
             exchange_hash=ref.get("exchange_hash"),
         )
@@ -211,6 +222,7 @@ def ask(
             "seq": seq,
             "screen_kind": screen.kind,
             "screen_context_hash": context_hash,
+            **({"check_id": check_id} if check_id else {}),  # how the Exchange screen finds this turn's grounding
             **ref,
         },
         portfolio_id=portfolio_id,
@@ -226,6 +238,7 @@ def ask(
         context_label=context.label if context else None,
         exchange_id=ref.get("exchange_id"),
         exchange_hash=ref.get("exchange_hash"),
+        grounding_check_id=check_id,
     )
 
 
@@ -248,6 +261,7 @@ def _turn(row: AssistantTurnRow) -> Turn:
         context_label=screen_context.label(screen) if row.screen_context_hash else None,
         exchange_id=row.exchange_id,
         exchange_hash=row.exchange_hash,
+        grounding_check_id=row.grounding_check_id,
     )
 
 

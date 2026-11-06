@@ -6,9 +6,9 @@
 
 **Status:** ready-for-agent
 
-- [ ] Claims whose figures match Screen Context figures, and whose Report citations quote a real page verbatim, come back grounded
-- [ ] Claims citing figures absent from the Screen Context, or with mismatched numbers, come back flagged ungrounded and stay in the Answer
-- [ ] The grounding check is linked to the Assistant turn and appears through the existing grounding read paths
-- [ ] Grounding finishes before the Answer is returned; nothing is shown before it
-- [ ] The drawer shows citation chips (a Report citation opens the passage, an engine figure goes to its screen) and an "ungrounded" marker per flagged Claim
-- [ ] Manual E2E checklist items: a citation chip opens the passage, an ungrounded marker shows
+- [x] Claims whose figures match Screen Context figures, and whose Report citations quote a real page verbatim, come back grounded
+- [x] Claims citing figures absent from the Screen Context, or with mismatched numbers, come back flagged ungrounded and stay in the Answer
+- [x] The grounding check is linked to the Assistant turn and appears through the existing grounding read paths
+- [x] Grounding finishes before the Answer is returned; nothing is shown before it
+- [x] The drawer shows citation chips (a Report citation opens the passage, an engine figure goes to its screen) and an "ungrounded" marker per flagged Claim
+- [x] Manual E2E checklist items: a citation chip opens the passage, an ungrounded marker shows (a live Report chip needs a context with Report passages: ticket 06)

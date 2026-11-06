@@ -37,9 +37,7 @@ def figures(result: PriorityResultRow, sector_pct: dict[str, float]) -> dict[str
     for c in json.loads(result.components_json):
         for key in ("raw", "weight", "points"):
             f[f"component.{c['name']}.{key}"] = c[key]
-    for d in json.loads(result.drift_json):
-        for key in ("actual_pct", "target_pct", "signed_pp", "drift_pp"):
-            f[f"drift.{d['asset_class']}.{key}"] = d[key]
+    f.update(grounding.drift_figures("drift", json.loads(result.drift_json)))
     for sector, pct in sector_pct.items():
         f[f"exposure.sector.{sector}"] = round(pct, 2)
     return f

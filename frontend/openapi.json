@@ -1935,7 +1935,7 @@
           },
           "claims": {
             "items": {
-              "$ref": "#/components/schemas/Claim"
+              "$ref": "#/components/schemas/ClaimResult"
             },
             "type": "array",
             "title": "Claims"
@@ -6031,6 +6031,17 @@
               }
             ],
             "title": "Exchange Hash"
+          },
+          "grounding_check_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grounding Check Id"
           }
         },
         "type": "object",
@@ -6043,7 +6054,8 @@
           "screen",
           "context_label",
           "exchange_id",
-          "exchange_hash"
+          "exchange_hash",
+          "grounding_check_id"
         ],
         "title": "Turn"
       },

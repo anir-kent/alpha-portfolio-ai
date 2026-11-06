@@ -61,6 +61,8 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] Ask two Questions on C001, then reload the page: reopening the drawer shows both turns in order
 - [ ] Ask on C001, open `/portfolios/C002` and ask again: a "Context changed · Portfolio C002" divider separates the turns; the earlier turn still reads as asked on C001; a follow-up ("and why?") gets an Answer that uses the earlier turn (its Exchange prompt has a CONVERSATION SO FAR block with text only, no earlier Screen Context)
 - [ ] Switch role (logout) and log back in: the drawer is empty, and the first Question is turn 1 of a new Conversation
+- [ ] Ask "How far has C001 drifted?" on C001: the Answer lists its Claims with engine figure chips (e.g. `portfolio_drift_pp`); clicking one goes to `/portfolios/C001`. Report citation chips (`<report id> p.<page>`) open the quoted passage under the chip when clicked; a live model can only cite one once a Screen Context carries Report passages (the Recommendation context, sme-assistant ticket 06), until then `tests/test_assistant.py` covers it
+- [ ] A Claim that failed grounding (e.g. a number the Screen Context doesn't hold) shows a red "ungrounded" marker in place with its reason below it, and the Claim stays in the Answer; as auditor, the turn's LLM Exchange shows the grounding verdict and a `claim_ungrounded` Audit Event names the `assistant_turn` subject
 
 ## Approvals
 

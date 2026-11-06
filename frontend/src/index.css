@@ -553,6 +553,18 @@
     flex: 1;
     border-top: 1px solid var(--color-line);
   }
+  .assistant-claims {
+    display: grid;
+    gap: 0.35rem;
+    border-left: 2px solid var(--color-line);
+    padding-left: 0.6rem;
+    font-size: 0.8461rem;
+  }
+  .assistant-claim-ungrounded {
+    border-left: 2px solid var(--color-neg);
+    margin-left: calc(-0.6rem - 2px);
+    padding-left: 0.6rem;
+  }
   .assistant-md > * + * {
     margin-top: 0.5rem;
   }
