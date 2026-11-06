@@ -28,11 +28,16 @@ def ranking(items):
 
 def narrative_reply(payload):
     f = payload["figures"]
-    return {"claims": [
-        {"text": f"The priority score is {f['priority_score']:.2f}.", "citations": [{"kind": "engine", "figure": "priority_score"}]},
-        {"text": "The priority score is 99.90.", "citations": [{"kind": "engine", "figure": "priority_score"}]},
-        {"text": "Technology will double.", "asset": "Information Technology", "citations": []},
-    ]}
+    return {
+        "claims": [
+            {
+                "text": f"The priority score is {f['priority_score']:.2f}.",
+                "citations": [{"kind": "engine", "figure": "priority_score"}],
+            },
+            {"text": "The priority score is 99.90.", "citations": [{"kind": "engine", "figure": "priority_score"}]},
+            {"text": "Technology will double.", "asset": "Information Technology", "citations": []},
+        ]
+    }
 
 
 def run(ai):  # noqa: F811
@@ -41,6 +46,7 @@ def run(ai):  # noqa: F811
 
 
 # --- Opportunity ---------------------------------------------------------------------------------------------------
+
 
 def test_opportunity_is_zero_without_approved_insights_and_rises_with_relevant_exposure(ai):
     before = run(ai)  # the demo Insights are uploaded but still pending
@@ -59,6 +65,7 @@ def test_opportunity_is_zero_without_approved_insights_and_rises_with_relevant_e
 
 # --- the LLM never influences a score ---------------------------------------------------------------------------------
 
+
 def test_scores_and_ranking_are_identical_whatever_the_llm_says(ai):
     ai.approve("Information Technology")
     ai.stub.narrative = None
@@ -72,6 +79,7 @@ def test_scores_and_ranking_are_identical_whatever_the_llm_says(ai):
 
 
 # --- the narrative: grounded claims stated, flagged claims flagged -----------------------------------------------------
+
 
 def test_each_queue_row_shows_grounded_claims_and_flags_the_rest(ai):
     ai.approve("Information Technology")
@@ -122,16 +130,26 @@ def test_no_llm_means_no_narrative_and_the_same_scores(ai):
 
 # --- audit -------------------------------------------------------------------------------------------------------------
 
+
 def test_narrative_generation_and_flags_are_audited_with_model_and_prompt_version(app, login, ai):
     ai.approve("Information Technology")
     ai.stub.priority_narrative = narrative_reply
     item = relevant(run(ai))[0]
     auditor = login("auditor")
-    events = auditor.get(AUDIT, params={"type": "priority_narrative_generated", "client_id": item["client_id"]}).json()["items"]
+    events = auditor.get(AUDIT, params={"type": "priority_narrative_generated", "client_id": item["client_id"]}).json()[
+        "items"
+    ]
     event = events[0]
     assert (event["actor"]["kind"], event["actor"]["model"], event["actor"]["prompt_version"]) == (
-        "system", "stub-model-1", "priority_narrative@v1")
-    assert event["payload"]["status"] == "complete" and event["payload"]["summary"] == {"total": 3, "grounded": 1, "ungrounded": 2}
+        "system",
+        "stub-model-1",
+        "priority_narrative@v1",
+    )
+    assert event["payload"]["status"] == "complete" and event["payload"]["summary"] == {
+        "total": 3,
+        "grounded": 1,
+        "ungrounded": 2,
+    }
     scored = auditor.get(AUDIT, params={"type": "priority_scored", "client_id": item["client_id"]}).json()["items"]
     assert scored[0]["id"] in event["parent_ids"]  # lineage reaches the score it explains
     flagged = auditor.get(AUDIT, params={"type": "claim_ungrounded", "client_id": item["client_id"]}).json()["items"]

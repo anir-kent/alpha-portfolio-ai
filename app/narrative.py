@@ -4,6 +4,7 @@ The LLM writes cited claims about a Recommendation from the engine's figures and
 through the grounding validator. The Advisor sees all claims, flagged ones included; the memo is assembled here, by the
 engine, from the engine's own figures plus the *grounded* claims only. A failing LLM leaves the Recommendation untouched.
 """
+
 import json
 from datetime import UTC, datetime
 
@@ -28,14 +29,22 @@ def _request(db: Session, rec: RecommendationRow) -> LlmRequest:
         "figures": grounding.engine_figures(db, rec),
         "tilts": json.loads(tilt.entries_json) if tilt and tilt.status == "ok" else [],
         "insights": [
-            {"id": i.id, "subject": i.subject, "direction": i.direction, "report_id": i.report_id, "page": i.page,
-             "passage": i.passage}
+            {
+                "id": i.id,
+                "subject": i.subject,
+                "direction": i.direction,
+                "report_id": i.report_id,
+                "page": i.page,
+                "passage": i.passage,
+            }
             for i in reports.approved_insights(db)
         ],
     }
     return LlmRequest(
-        task=RECOMMENDATION_NARRATIVE.name, prompt_version=RECOMMENDATION_NARRATIVE.label,
-        system=RECOMMENDATION_NARRATIVE.system, user=json.dumps(payload, sort_keys=True),
+        task=RECOMMENDATION_NARRATIVE.name,
+        prompt_version=RECOMMENDATION_NARRATIVE.label,
+        system=RECOMMENDATION_NARRATIVE.system,
+        user=json.dumps(payload, sort_keys=True),
         schema=NarrativeReply.model_json_schema(),
     )
 
@@ -75,28 +84,49 @@ def generate(db: Session, llm: LlmClient, rec: RecommendationRow) -> Recommendat
         reply = NarrativeReply.model_validate(response.content)
     except (LlmError, ValidationError) as e:
         row = RecommendationNarrativeRow(
-            recommendation_id=rec.id, status="failed", error=str(e)[:300], prompt_version=RECOMMENDATION_NARRATIVE.label,
+            recommendation_id=rec.id,
+            status="failed",
+            error=str(e)[:300],
+            prompt_version=RECOMMENDATION_NARRATIVE.label,
             created_at=now,
         )
         db.add(row)
         db.commit()
         audit.record(
-            db, "memo_generated", audit.Actor.system("memo-writer", prompt_version=RECOMMENDATION_NARRATIVE.label),
-            {"status": "failed", "error": row.error, **exchange_ref(e if isinstance(e, LlmError) else response)}, parents=[p for p in [recommendations.last_event_id(db, rec.id)] if p], **scope,
+            db,
+            "memo_generated",
+            audit.Actor.system("memo-writer", prompt_version=RECOMMENDATION_NARRATIVE.label),
+            {"status": "failed", "error": row.error, **exchange_ref(e if isinstance(e, LlmError) else response)},
+            parents=[p for p in [recommendations.last_event_id(db, rec.id)] if p],
+            **scope,
         )
         return row
     check_id, results = grounding.validate(db, rec, reply.claims)
     memo = build_memo(rec, db.get(RecommendationTiltRow, rec.id), results)
     row = RecommendationNarrativeRow(
-        recommendation_id=rec.id, status="complete", check_id=check_id, model=response.model,
-        prompt_version=response.prompt_version, created_at=now, memo=memo,
+        recommendation_id=rec.id,
+        status="complete",
+        check_id=check_id,
+        model=response.model,
+        prompt_version=response.prompt_version,
+        created_at=now,
+        memo=memo,
     )
     db.add(row)
     db.commit()
     audit.record(
-        db, "memo_generated", audit.Actor.system("memo-writer", model=response.model, prompt_version=response.prompt_version),
-        {"status": "complete", "check_id": check_id, "summary": grounding.summarise(results), "memo_chars": len(memo), **exchange_ref(response)},
-        parents=[p for p in [recommendations.last_event_id(db, rec.id)] if p], **scope,
+        db,
+        "memo_generated",
+        audit.Actor.system("memo-writer", model=response.model, prompt_version=response.prompt_version),
+        {
+            "status": "complete",
+            "check_id": check_id,
+            "summary": grounding.summarise(results),
+            "memo_chars": len(memo),
+            **exchange_ref(response),
+        },
+        parents=[p for p in [recommendations.last_event_id(db, rec.id)] if p],
+        **scope,
     )
     return row
 
@@ -104,7 +134,9 @@ def generate(db: Session, llm: LlmClient, rec: RecommendationRow) -> Recommendat
 def generate_for_run(db: Session, llm: LlmClient, run_id: int) -> int:
     """A memo for each of the run's Recommendations that had approved research in play. Returns how many failed."""
     recs = db.scalars(
-        select(RecommendationRow).join(RecommendationTiltRow, RecommendationTiltRow.recommendation_id == RecommendationRow.id)
-        .where(RecommendationRow.run_id == run_id).order_by(RecommendationRow.id)
+        select(RecommendationRow)
+        .join(RecommendationTiltRow, RecommendationTiltRow.recommendation_id == RecommendationRow.id)
+        .where(RecommendationRow.run_id == run_id)
+        .order_by(RecommendationRow.id)
     ).all()
     return sum(generate(db, llm, rec).status == "failed" for rec in recs)

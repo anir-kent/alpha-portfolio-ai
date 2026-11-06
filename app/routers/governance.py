@@ -20,8 +20,11 @@ class GovernanceOut(BaseModel):
 @router.get("", response_model=GovernanceOut, operation_id="getGovernance")
 def get_governance(request: Request, user: User = Depends(require("governance:read")), db: Session = Depends(get_db)):
     return GovernanceOut(
-        model_card=governance.model_card(db, request.app.state.settings), prompt_log=governance.prompt_log(db),
-        quality=governance.quality(db), capture_health=governance.capture_health(db), fixtures=governance.latest_run(db),
+        model_card=governance.model_card(db, request.app.state.settings),
+        prompt_log=governance.prompt_log(db),
+        quality=governance.quality(db),
+        capture_health=governance.capture_health(db),
+        fixtures=governance.latest_run(db),
     )
 
 

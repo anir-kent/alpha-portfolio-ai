@@ -3,6 +3,7 @@
 A run replaces the earlier ones as the current result (highest run id wins; history is kept).
 CLI: uv run python -m app.analysis
 """
+
 import json
 from collections import defaultdict
 from datetime import UTC, date, datetime
@@ -36,7 +37,9 @@ SYSTEM = audit.Actor.system("priority-engine")
 def open_run(db: Session, market: MarketData, actor: audit.Actor) -> AnalysisRunRow:
     """Add a new, not yet completed Analysis Run row (flushed, not committed)."""
     run = AnalysisRunRow(
-        started_at=audit.format_ts(datetime.now(UTC)), actor_name=actor.name, as_of=market.as_of[:10],
+        started_at=audit.format_ts(datetime.now(UTC)),
+        actor_name=actor.name,
+        as_of=market.as_of[:10],
         config_json=get_config(db).model_dump_json(),
     )
     db.add(run)
@@ -45,8 +48,12 @@ def open_run(db: Session, market: MarketData, actor: audit.Actor) -> AnalysisRun
 
 
 def run_analysis(
-    db: Session, market: MarketData, actor: audit.Actor, llm: LlmClient | None = None,
-    reporter: RunStepReporter | None = None, run_id: int | None = None,
+    db: Session,
+    market: MarketData,
+    actor: audit.Actor,
+    llm: LlmClient | None = None,
+    reporter: RunStepReporter | None = None,
+    run_id: int | None = None,
 ) -> tuple[int, int]:
     """Score every Portfolio. Returns (run_id, portfolios scored). With an `llm`, a Portfolio being rebalanced also gets an
     engine-bounded Research Tilt from approved Insights (a failing LLM only means no tilt). A `reporter` is told about
@@ -86,11 +93,16 @@ def run_analysis(
             suit = suitability.evaluate(
                 rows,
                 suitability.ClientContext(c.risk_profile, c.horizon_years, c.liquidity_needs_pct, restrictions[c.id]),
-                cfg.suitability, market,
+                cfg.suitability,
+                market,
             )
             sector_pct = portfolio_view.sector_pct(rows, market)
             s = score_portfolio(
-                drift, band, cfg.priority_weights, days_past_due=days_past_due, sla_days=cfg.sla_days,
+                drift,
+                band,
+                cfg.priority_weights,
+                days_past_due=days_past_due,
+                sla_days=cfg.sla_days,
                 suitability_risk=suitability.risk_points(suit),
                 opportunity=opportunity_raw(sector_pct, insights),
             )
@@ -100,29 +112,63 @@ def run_analysis(
                 for x in s.components
             ]
             drift_out = [
-                {"asset_class": d.asset_class, "actual_pct": round(d.actual_pct, 2),
-                 "target_pct": round(d.target_pct, 2), "signed_pp": round(d.signed_pp, 2),
-                 "drift_pp": round(d.drift_pp, 2), "status": d.status}
+                {
+                    "asset_class": d.asset_class,
+                    "actual_pct": round(d.actual_pct, 2),
+                    "target_pct": round(d.target_pct, 2),
+                    "signed_pp": round(d.signed_pp, 2),
+                    "drift_pp": round(d.drift_pp, 2),
+                    "status": d.status,
+                }
                 for d in drift.classes
             ]
-            db.add(PriorityResultRow(
-                run_id=run.id, client_id=c.id, score=round(s.score, 2), label=s.label, risk_profile=c.risk_profile,
-                review_due=c.review_due, days_past_due=days_past_due, sla_breached=s.sla_breached,
-                portfolio_drift_pp=round(drift.portfolio_drift_pp, 2), total_value=round(total, 2),
-                components_json=json.dumps(components), drift_json=json.dumps(drift_out),
-            ))
+            db.add(
+                PriorityResultRow(
+                    run_id=run.id,
+                    client_id=c.id,
+                    score=round(s.score, 2),
+                    label=s.label,
+                    risk_profile=c.risk_profile,
+                    review_due=c.review_due,
+                    days_past_due=days_past_due,
+                    sla_breached=s.sla_breached,
+                    portfolio_drift_pp=round(drift.portfolio_drift_pp, 2),
+                    total_value=round(total, 2),
+                    components_json=json.dumps(components),
+                    drift_json=json.dumps(drift_out),
+                )
+            )
             suit_out = suitability.to_dicts(suit)
-            db.add(SuitabilityResultRow(
-                run_id=run.id, client_id=c.id, status=suitability.overall(suit), results_json=json.dumps(suit_out),
-            ))
+            db.add(
+                SuitabilityResultRow(
+                    run_id=run.id,
+                    client_id=c.id,
+                    status=suitability.overall(suit),
+                    results_json=json.dumps(suit_out),
+                )
+            )
             tilt = None
             if llm is not None and rebalance.outside_tolerance(drift):
                 tilt = research_tilt.assess(
-                    db, llm.bind(db) if hasattr(llm, "bind") else llm, client=c, rows=rows, market=market, cfg=cfg,
+                    db,
+                    llm.bind(db) if hasattr(llm, "bind") else llm,
+                    client=c,
+                    rows=rows,
+                    market=market,
+                    cfg=cfg,
                 )
             rec = recommendations.draft(
-                db, run_id=run.id, rows=rows, client=c, targets=targets[c.id], restrictions=restrictions[c.id],
-                tax={h["account_id"]: h["tax_status"] for h in rows}, cfg=cfg, market=market, drift=drift, tilt=tilt,
+                db,
+                run_id=run.id,
+                rows=rows,
+                client=c,
+                targets=targets[c.id],
+                restrictions=restrictions[c.id],
+                tax={h["account_id"]: h["tax_status"] for h in rows},
+                cfg=cfg,
+                market=market,
+                drift=drift,
+                tilt=tilt,
             )
             scored.append((c, s, components, drift.portfolio_drift_pp, suitability.overall(suit), suit_out, rec, tilt))
             reporter.portfolios_scored(len(scored), len(clients))
@@ -130,23 +176,45 @@ def run_analysis(
         db.flush()
 
         started = audit.record(
-            db, "analysis_run_started", actor,
+            db,
+            "analysis_run_started",
+            actor,
             {"run_id": run.id, "as_of": run.as_of, "portfolios": len(clients), "config": json.loads(run.config_json)},
         )
         recommendations.supersede(
-            db, stale, SYSTEM, "A newer analysis run replaced this Recommendation", parents=[started],
+            db,
+            stale,
+            SYSTEM,
+            "A newer analysis run replaced this Recommendation",
+            parents=[started],
         )
         for c, s, components, pd, suit_status, suit_out, rec, tilt in scored:
             evaluated = audit.record(
-                db, "suitability_evaluated", SYSTEM, {"run_id": run.id, "status": suit_status, "rules": suit_out},
-                parents=[started], portfolio_id=c.id, client_id=c.id,
+                db,
+                "suitability_evaluated",
+                SYSTEM,
+                {"run_id": run.id, "status": suit_status, "rules": suit_out},
+                parents=[started],
+                portfolio_id=c.id,
+                client_id=c.id,
             )
             audit.record(
-                db, "priority_scored", SYSTEM,
-                {"run_id": run.id, "score": round(s.score, 2), "label": s.label, "components": components,
-                 "portfolio_drift_pp": round(pd, 2), "days_past_due": s.days_past_due, "sla_breached": s.sla_breached,
-                 "opportunity_insight_ids": opportunity_ids[c.id]},
-                parents=[started, evaluated], portfolio_id=c.id, client_id=c.id,
+                db,
+                "priority_scored",
+                SYSTEM,
+                {
+                    "run_id": run.id,
+                    "score": round(s.score, 2),
+                    "label": s.label,
+                    "components": components,
+                    "portfolio_drift_pp": round(pd, 2),
+                    "days_past_due": s.days_past_due,
+                    "sla_breached": s.sla_breached,
+                    "opportunity_insight_ids": opportunity_ids[c.id],
+                },
+                parents=[started, evaluated],
+                portfolio_id=c.id,
+                client_id=c.id,
             )
             if rec is not None:
                 tilted = [research_tilt.audit_assessment(db, rec, tilt)] if tilt is not None else []
@@ -159,10 +227,14 @@ def run_analysis(
         for key in AI_STEP_KEYS:
             reporter.step_skipped(key)
     else:  # after the run is on record: a failing LLM cannot undo it
-        run_ai_steps(reporter, [
-            ("priority_narratives", lambda: priority_narrative.generate_for_run(db, llm, run.id, market)),
-            ("recommendation_narratives", lambda: narrative.generate_for_run(db, llm, run.id)),
-        ], recover=db.rollback)
+        run_ai_steps(
+            reporter,
+            [
+                ("priority_narratives", lambda: priority_narrative.generate_for_run(db, llm, run.id, market)),
+                ("recommendation_narratives", lambda: narrative.generate_for_run(db, llm, run.id)),
+            ],
+            recover=db.rollback,
+        )
     return run.id, len(clients)
 
 

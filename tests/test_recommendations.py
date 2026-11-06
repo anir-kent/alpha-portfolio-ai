@@ -4,6 +4,7 @@ Expected numbers are the planted weights in app/seeder.py (whole-unit quantities
 C003 (conservative): cash 40% vs 15% target, bonds 40% vs 65%  -> sell SGOV ~25%, buy AGG ~15.6% and SHY ~9.4%.
 C002 (moderate): equity 60% vs 45%, bonds 35% vs 45%, cash 5% vs 10%.
 """
+
 import json
 
 import pytest
@@ -48,7 +49,12 @@ def breaching_lines(c, cid):
     sgov = held["SGOV"]
     return [
         {"account_id": sgov["account_id"], "symbol": "SGOV", "side": "sell", "quantity": sgov["quantity"]},
-        {"account_id": sgov["account_id"], "symbol": "XLK", "side": "buy", "quantity": int(sgov["market_value"] // 100)},
+        {
+            "account_id": sgov["account_id"],
+            "symbol": "XLK",
+            "side": "buy",
+            "quantity": int(sgov["market_value"] // 100),
+        },
     ]
 
 
@@ -163,14 +169,17 @@ def test_decisions_on_non_pending_versions_are_rejected(advisor):
     assert decide(advisor, v2["id"], "accept").status_code == 409  # already decided
 
 
-@pytest.mark.parametrize("mutate,msg", [
-    (lambda ls, h: ls[0].update(quantity=h["quantity"] + 1), "more than held"),
-    (lambda ls, h: ls[0].update(symbol="NOPE"), "unknown"),
-    (lambda ls, h: ls[0].update(quantity=0), "positive"),
-    (lambda ls, h: ls[0].update(account_id="C999-TX"), "account"),
-    (lambda ls, h: ls.append(dict(ls[0])), "duplicate"),
-    (lambda ls, h: ls.clear(), "at least one"),
-])
+@pytest.mark.parametrize(
+    "mutate,msg",
+    [
+        (lambda ls, h: ls[0].update(quantity=h["quantity"] + 1), "more than held"),
+        (lambda ls, h: ls[0].update(symbol="NOPE"), "unknown"),
+        (lambda ls, h: ls[0].update(quantity=0), "positive"),
+        (lambda ls, h: ls[0].update(account_id="C999-TX"), "account"),
+        (lambda ls, h: ls.append(dict(ls[0])), "duplicate"),
+        (lambda ls, h: ls.clear(), "at least one"),
+    ],
+)
 def test_invalid_modifications_are_rejected_and_change_nothing(advisor, mutate, msg):
     v1 = rec(advisor, "C003")
     held = next(h for h in advisor.get(url("C003")).json()["holdings"] if h["symbol"] == "SGOV")
@@ -191,7 +200,9 @@ def test_decisions_are_audited_with_rationale_and_lineage(advisor, app):
     v2 = decide(advisor, v1["id"], "modify", "More growth", breaching_lines(advisor, "C003")).json()["recommendation"]
     decide(advisor, v2["id"], "reject", "Too risky")
     with app.state.session_factory() as db:
-        evs = list(db.scalars(select(AuditEventRow).where(AuditEventRow.client_id == "C003").order_by(AuditEventRow.id)))
+        evs = list(
+            db.scalars(select(AuditEventRow).where(AuditEventRow.client_id == "C003").order_by(AuditEventRow.id))
+        )
         by_id = {e.id: e for e in evs}
         parents = lambda e: json.loads(e.parent_ids_json)  # noqa: E731
         of = lambda t, rid: [e for e in evs if e.type == t and e.recommendation_id == str(rid)]  # noqa: E731
@@ -205,7 +216,12 @@ def test_decisions_are_audited_with_rationale_and_lineage(advisor, app):
         d1 = of("decision_recorded", v1["id"])[0]
         assert of("suitability_evaluated", v1["id"])[0].id in parents(d1)  # chained after the draft's own results
         p1 = json.loads(d1.payload_json)
-        assert (p1["action"], p1["rationale"], d1.actor_name, d1.actor_role) == ("modify", "More growth", "advisor", "advisor")
+        assert (p1["action"], p1["rationale"], d1.actor_name, d1.actor_role) == (
+            "modify",
+            "More growth",
+            "advisor",
+            "advisor",
+        )
 
         modified = of("recommendation_modified", v2["id"])[0]
         assert d1.id in parents(modified)
@@ -241,11 +257,19 @@ def test_new_run_supersedes_pending_but_not_decided_recommendations(advisor):
     assert advisor.get(f"/api/recommendations/{approved['id']}").json()["status"] == "approved"
 
 
-@pytest.mark.parametrize("role,ok", [
-    ("advisor", True), ("relationship_manager", True),
-    ("portfolio_manager", False), ("compliance_officer", False), ("auditor", False),
-    ("research_analyst", False), ("investment_committee", False), ("platform_owner", False),
-])
+@pytest.mark.parametrize(
+    "role,ok",
+    [
+        ("advisor", True),
+        ("relationship_manager", True),
+        ("portfolio_manager", False),
+        ("compliance_officer", False),
+        ("auditor", False),
+        ("research_analyst", False),
+        ("investment_committee", False),
+        ("platform_owner", False),
+    ],
+)
 def test_only_advisor_and_rm_can_decide(login, advisor, role, ok):
     r = rec(advisor, "C003")
     out = decide(login(role), r["id"], "reject", "because")
@@ -254,10 +278,18 @@ def test_only_advisor_and_rm_can_decide(login, advisor, role, ok):
         assert out.status_code == 403
 
 
-@pytest.mark.parametrize("role,ok", [
-    ("advisor", True), ("portfolio_manager", True), ("compliance_officer", True), ("auditor", True),
-    ("investment_committee", True), ("research_analyst", False), ("platform_owner", False),
-])
+@pytest.mark.parametrize(
+    "role,ok",
+    [
+        ("advisor", True),
+        ("portfolio_manager", True),
+        ("compliance_officer", True),
+        ("auditor", True),
+        ("investment_committee", True),
+        ("research_analyst", False),
+        ("platform_owner", False),
+    ],
+)
 def test_recommendation_read_permission(login, advisor, role, ok):
     r = rec(advisor, "C003")
     assert (login(role).get(f"/api/recommendations/{r['id']}").status_code == 200) is ok

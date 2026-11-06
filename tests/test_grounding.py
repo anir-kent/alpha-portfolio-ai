@@ -1,5 +1,6 @@
 """Seam: the grounding validator through the HTTP API. Claims are checked against ingested Reports (page + verbatim
 quote) and the engine's figures for one Recommendation (ADR-0001). Adversarial claims must be flagged, valid ones pass."""
+
 import json
 
 import pytest
@@ -43,11 +44,15 @@ def codes(result):
 
 # --- valid claims pass -------------------------------------------------------------------------------------------
 
+
 def test_valid_report_and_engine_claims_pass_with_citations_intact(ctx):
     advisor, rec, rid = ctx
     claims = [
-        {"text": "The house view is constructive on technology.", "asset": "Information Technology",
-         "citations": [report_cite(rid)]},
+        {
+            "text": "The house view is constructive on technology.",
+            "asset": "Information Technology",
+            "citations": [report_cite(rid)],
+        },
         {"text": f"Turnover is {rec['turnover_pct']}% of the Portfolio.", "citations": [engine_cite("turnover_pct")]},
     ]
     body = check(advisor, rec, claims)
@@ -68,17 +73,24 @@ def test_numbers_match_at_the_precision_stated(ctx):
     advisor, rec, rid = ctx
     line = rec["trade_lines"][0]
     text = f"Sell {line['symbol']}: ${line['amount']:,.2f}, {line['pct_of_portfolio']:.1f}% of the Portfolio."
-    cites = [engine_cite(f"trade_line.{line['symbol']}.amount"), engine_cite(f"trade_line.{line['symbol']}.pct_of_portfolio")]
+    cites = [
+        engine_cite(f"trade_line.{line['symbol']}.amount"),
+        engine_cite(f"trade_line.{line['symbol']}.pct_of_portfolio"),
+    ]
     body = check(advisor, rec, [{"text": text, "citations": cites}])
     assert body["results"][0]["grounded"] is True, body["results"][0]["issues"]
 
 
 # --- adversarial fixtures are caught -----------------------------------------------------------------------------
 
+
 def test_fabricated_quote_is_flagged(ctx):
     advisor, rec, rid = ctx
-    claim = {"text": "Technology will double.", "asset": "Information Technology",
-             "citations": [report_cite(rid, quote="Technology will double next year.")]}
+    claim = {
+        "text": "Technology will double.",
+        "asset": "Information Technology",
+        "citations": [report_cite(rid, quote="Technology will double next year.")],
+    }
     result = check(advisor, rec, [claim])["results"][0]
     assert result["grounded"] is False and codes(result) == {"quote_not_found"}
 
@@ -108,8 +120,11 @@ def test_wrong_number_is_flagged(ctx):
 
 def test_a_number_with_no_engine_figure_is_flagged_even_when_cited(ctx):
     advisor, rec, rid = ctx
-    claim = {"text": "Technology should return 12.5% next year.", "asset": "Information Technology",
-             "citations": [report_cite(rid)]}
+    claim = {
+        "text": "Technology should return 12.5% next year.",
+        "asset": "Information Technology",
+        "citations": [report_cite(rid)],
+    }
     assert codes(check(advisor, rec, [claim])["results"][0]) == {"number_mismatch"}
 
 
@@ -138,6 +153,7 @@ def test_unknown_engine_figure_is_flagged(ctx):
 
 # --- flags: visible to the Advisor, kept out of memos, stored, audited -------------------------------------------
 
+
 def test_ungrounded_claims_stay_visible_but_are_not_memo_eligible(ctx):
     advisor, rec, rid = ctx
     good = {"text": "Tech is favoured.", "citations": [report_cite(rid)]}
@@ -162,9 +178,14 @@ def test_flags_are_recorded_as_audit_events(app, ctx):
     good = {"text": "Tech is favoured.", "citations": [report_cite(rid)]}
     check(advisor, rec, [good, bad])
     with app.state.session_factory() as db:
-        events = list(db.scalars(select(AuditEventRow).where(AuditEventRow.recommendation_id == str(rec["id"]))
-                                 .where(AuditEventRow.type.in_(("grounding_checked", "claim_ungrounded")))
-                                 .order_by(AuditEventRow.id)))
+        events = list(
+            db.scalars(
+                select(AuditEventRow)
+                .where(AuditEventRow.recommendation_id == str(rec["id"]))
+                .where(AuditEventRow.type.in_(("grounding_checked", "claim_ungrounded")))
+                .order_by(AuditEventRow.id)
+            )
+        )
     checked, flagged = events
     assert checked.type == "grounding_checked" and checked.client_id == "C003" and checked.actor_kind == "system"
     assert json.loads(checked.payload_json)["summary"] == {"total": 2, "grounded": 1, "ungrounded": 1}
@@ -202,10 +223,17 @@ def test_unknown_recommendation_is_404(ctx):
     assert advisor.post("/api/recommendations/9999/grounding", json={"claims": []}).status_code == 404
 
 
-@pytest.mark.parametrize("role,validate,read", [
-    ("advisor", True, True), ("relationship_manager", True, True), ("auditor", False, True),
-    ("compliance_officer", False, True), ("research_analyst", False, False), ("platform_owner", False, False),
-])
+@pytest.mark.parametrize(
+    "role,validate,read",
+    [
+        ("advisor", True, True),
+        ("relationship_manager", True, True),
+        ("auditor", False, True),
+        ("compliance_officer", False, True),
+        ("research_analyst", False, False),
+        ("platform_owner", False, False),
+    ],
+)
 def test_permissions(login, ctx, role, validate, read):
     advisor, rec, rid = ctx
     c = login(role)

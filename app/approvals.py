@@ -4,6 +4,7 @@ Advisor always; Compliance only when a Suitability Rule is in breach; Investment
 (turnover or any single Trade Line at or above the configured thresholds). Pure functions of the Recommendation and
 the config: nothing here touches the database.
 """
+
 import json
 from dataclasses import dataclass
 
@@ -25,14 +26,20 @@ class Plan:
 
     @property
     def required_steps(self) -> list[str]:
-        return ["advisor", *(["compliance"] if self.needs_compliance else []), *(["committee"] if self.high_impact else [])]
+        return [
+            "advisor",
+            *(["compliance"] if self.needs_compliance else []),
+            *(["committee"] if self.high_impact else []),
+        ]
 
 
 def plan(rec: RecommendationRow, cfg: Config) -> Plan:
     t = cfg.approval_thresholds
     reasons = []
     if rec.turnover_pct >= t.turnover_pct:
-        reasons.append(f"Turnover {rec.turnover_pct:.1f}% of the Portfolio is at or above the {t.turnover_pct:g}% threshold")
+        reasons.append(
+            f"Turnover {rec.turnover_pct:.1f}% of the Portfolio is at or above the {t.turnover_pct:g}% threshold"
+        )
     for line in json.loads(rec.trade_lines_json):
         if line["pct_of_portfolio"] >= t.trade_line_pct:
             reasons.append(
@@ -56,6 +63,11 @@ def affected_lines(subject: str, trade_lines: list[dict], market: MarketData) ->
     out = []
     for line in trade_lines:
         inst = market.instrument(line["symbol"])
-        if subject in (inst.symbol, inst.asset_class, inst.sector) or subject in market.sector_weights(inst.symbol) or subject == "taxable gains" and line["side"] == "sell":
+        if (
+            subject in (inst.symbol, inst.asset_class, inst.sector)
+            or subject in market.sector_weights(inst.symbol)
+            or subject == "taxable gains"
+            and line["side"] == "sell"
+        ):
             out.append(line)
     return out

@@ -5,6 +5,7 @@ in flight per process. Run Step progress lives in a `ProgressRegistry` in memory
 going: the scoring transaction holds the only write lock (ADR-0004). When the run ends, its outcome and Run Step results
 are saved on the run row.
 """
+
 import json
 import logging
 import threading
@@ -98,7 +99,11 @@ class SnapshotReporter:
     def __init__(self, registry: ProgressRegistry, run: AnalysisRunRow) -> None:
         self._registry = registry
         self.snapshot = RunSnapshot(
-            run_id=run.id, actor_name=run.actor_name, started_at=run.started_at, finished_at=None, outcome=None,
+            run_id=run.id,
+            actor_name=run.actor_name,
+            started_at=run.started_at,
+            finished_at=None,
+            outcome=None,
             steps=[RunStepOut(key=s.key, label=s.label, outcome="pending") for s in RUN_STEPS],
         )
         self._publish()
@@ -155,10 +160,16 @@ def snapshot_from_row(run: AnalysisRunRow) -> RunSnapshot:
     if run.steps_json:
         steps = [RunStepOut.model_validate(s) for s in json.loads(run.steps_json)]
     else:
-        steps = [RunStepOut(key=s.key, label=s.label, outcome="done" if run.completed else "pending") for s in RUN_STEPS]
+        steps = [
+            RunStepOut(key=s.key, label=s.label, outcome="done" if run.completed else "pending") for s in RUN_STEPS
+        ]
     return RunSnapshot(
-        run_id=run.id, actor_name=run.actor_name, started_at=run.started_at, finished_at=run.finished_at,
-        outcome=run.outcome, steps=steps,  # validated: a stored outcome is always a RunOutcome
+        run_id=run.id,
+        actor_name=run.actor_name,
+        started_at=run.started_at,
+        finished_at=run.finished_at,
+        outcome=run.outcome,
+        steps=steps,  # validated: a stored outcome is always a RunOutcome
     )
 
 
@@ -175,7 +186,11 @@ def mark_stranded_runs_interrupted(session_factory: sessionmaker) -> None:
     with session_factory() as db:
         for run in db.scalars(select(AnalysisRunRow).where(AnalysisRunRow.outcome.is_(None))):
             steps = [
-                RunStepOut(key=s.key, label=s.label, outcome="done" if run.completed and s.key in SCORING_STEP_KEYS else "skipped")
+                RunStepOut(
+                    key=s.key,
+                    label=s.label,
+                    outcome="done" if run.completed and s.key in SCORING_STEP_KEYS else "skipped",
+                )
                 for s in RUN_STEPS
             ]
             save_outcome(run, "interrupted", finished_at, steps)
@@ -203,7 +218,10 @@ class AnalysisRuns:
             reporter = SnapshotReporter(self.registry, run)  # in flight from here on
             try:
                 threading.Thread(
-                    target=self._run, args=(run.id, reporter, market, actor, llm), name=f"analysis-run-{run.id}", daemon=True,
+                    target=self._run,
+                    args=(run.id, reporter, market, actor, llm),
+                    name=f"analysis-run-{run.id}",
+                    daemon=True,
                 ).start()
             except BaseException:
                 self._finish(run.id, reporter)
@@ -227,7 +245,12 @@ class AnalysisRuns:
         return (snapshot_from_row(run), 0) if run else None
 
     def _run(
-        self, run_id: int, reporter: SnapshotReporter, market: MarketData, actor: audit.Actor, llm: LlmClient | None,
+        self,
+        run_id: int,
+        reporter: SnapshotReporter,
+        market: MarketData,
+        actor: audit.Actor,
+        llm: LlmClient | None,
     ) -> None:
         try:
             with self._session_factory() as db:

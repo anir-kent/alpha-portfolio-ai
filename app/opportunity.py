@@ -4,6 +4,7 @@ A sector with an approved positive or negative Insight is a reason to talk to th
 not. Each such sector counts once, at the Portfolio's look-through weight in it. The sum saturates at OPPORTUNITY_FULL_PCT
 points of Portfolio value. The LLM plays no part.
 """
+
 from collections.abc import Iterable
 
 OPPORTUNITY_FULL_PCT = 30.0
@@ -11,7 +12,11 @@ OPPORTUNITY_FULL_PCT = 30.0
 
 def relevant_insights(sector_pct: dict[str, float], insights: Iterable) -> list:
     """The Insights that give this Portfolio an Opportunity: a non-neutral view on a sector it holds."""
-    return [i for i in insights if i.subject_kind == "sector" and i.direction != "neutral" and sector_pct.get(i.subject, 0.0) > 0]
+    return [
+        i
+        for i in insights
+        if i.subject_kind == "sector" and i.direction != "neutral" and sector_pct.get(i.subject, 0.0) > 0
+    ]
 
 
 def opportunity_raw(sector_pct: dict[str, float], insights: Iterable) -> float:

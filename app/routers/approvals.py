@@ -1,5 +1,6 @@
 """The shared pending-approvals panel: Compliance sees what waits on Compliance, the Investment Committee what waits
 on the Committee."""
+
 import json
 
 from fastapi import APIRouter, Depends
@@ -53,7 +54,6 @@ class ApprovalsOut(BaseModel):
     items: list[ApprovalItem]
 
 
-
 def _flagged(rec: RecommendationRow, market: MarketData) -> list[FlaggedRuleOut]:
     lines = json.loads(rec.trade_lines_json)
     out = []
@@ -62,31 +62,48 @@ def _flagged(rec: RecommendationRow, market: MarketData) -> list[FlaggedRuleOut]
             continue
         findings = [
             FlaggedFinding(**f, affected_trade_lines=approvals.affected_lines(f["subject"], lines, market))
-            for f in r["findings"] if f["status"] != "pass"
+            for f in r["findings"]
+            if f["status"] != "pass"
         ]
-        out.append(FlaggedRuleOut(rule_id=r["rule_id"], name=r["name"], status=r["status"], message=r["message"], findings=findings))
+        out.append(
+            FlaggedRuleOut(
+                rule_id=r["rule_id"], name=r["name"], status=r["status"], message=r["message"], findings=findings
+            )
+        )
     return out
 
 
 @router.get("/approvals", response_model=ApprovalsOut, operation_id="listApprovals")
 def pending_approvals(
-    user: User = Depends(require("approvals:read")), db: Session = Depends(get_db), market: MarketData = Depends(get_market),
+    user: User = Depends(require("approvals:read")),
+    db: Session = Depends(get_db),
+    market: MarketData = Depends(get_market),
 ):
     perms = PERMISSIONS[user.role]
     steps = [s for p, s in _STEP_FOR_PERMISSION.items() if p in perms]
     cfg = get_config(db)
     pii = "client:pii" in perms
     recs = db.scalars(
-        select(RecommendationRow).where(RecommendationRow.status.in_([approvals.PENDING_FOR[s] for s in steps]))
+        select(RecommendationRow)
+        .where(RecommendationRow.status.in_([approvals.PENDING_FOR[s] for s in steps]))
         .order_by(RecommendationRow.id)
     )
     items = []
     for rec in recs:
         c = db.get_one(ClientRow, rec.client_id)
-        restrictions = db.scalars(select(RestrictionRow).where(RestrictionRow.client_id == c.id).order_by(RestrictionRow.id))
-        items.append(ApprovalItem(
-            step=approvals.STEP_OF[rec.status], status=rec.status, portfolio_id=c.id, client_name=c.name if pii else None,
-            risk_profile=c.risk_profile, recommendation=to_out(rec, cfg, db, user), rules=_flagged(rec, market),
-            restrictions=[RestrictionOut(kind=r.kind, value=r.value) for r in restrictions],
-        ))
+        restrictions = db.scalars(
+            select(RestrictionRow).where(RestrictionRow.client_id == c.id).order_by(RestrictionRow.id)
+        )
+        items.append(
+            ApprovalItem(
+                step=approvals.STEP_OF[rec.status],
+                status=rec.status,
+                portfolio_id=c.id,
+                client_name=c.name if pii else None,
+                risk_profile=c.risk_profile,
+                recommendation=to_out(rec, cfg, db, user),
+                rules=_flagged(rec, market),
+                restrictions=[RestrictionOut(kind=r.kind, value=r.value) for r in restrictions],
+            )
+        )
     return ApprovalsOut(items=items)

@@ -50,7 +50,9 @@ def require(permission: str):
     def check(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)) -> User:
         if permission not in PERMISSIONS[user.role]:
             audit.record(
-                db, "access_denied", audit.Actor.user(user.username, user.role),
+                db,
+                "access_denied",
+                audit.Actor.user(user.username, user.role),
                 {"permission": permission, "method": request.method, "path": request.url.path},
             )
             raise HTTPException(403, f"Role '{user.role}' lacks permission '{permission}'")

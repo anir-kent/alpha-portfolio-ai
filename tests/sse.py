@@ -1,4 +1,5 @@
 """Reading a server-sent event stream's body in tests."""
+
 import json
 
 

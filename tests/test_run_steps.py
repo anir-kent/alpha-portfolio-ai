@@ -1,5 +1,6 @@
 """Seam: `run_analysis` with a progress reporter. The run tells the reporter about each Run Step as it goes (ADR-0005).
 The HTTP contract that publishes this progress is covered through the API; this file covers only the reporter calls."""
+
 import pytest
 
 from app import audit
@@ -45,7 +46,11 @@ def run(app, market, reporter=None, llm=None):
 def test_run_step_keys_and_labels_are_fixed_and_ordered():
     assert [s.key for s in RUN_STEPS] == KEYS
     assert [s.label for s in RUN_STEPS] == [
-        "Load inputs", "Score Portfolios", "Record run", "Priority narratives", "Recommendation narratives",
+        "Load inputs",
+        "Score Portfolios",
+        "Record run",
+        "Priority narratives",
+        "Recommendation narratives",
     ]
 
 
@@ -54,10 +59,14 @@ def test_a_run_without_an_llm_reports_every_step_in_order_and_skips_the_narrativ
     run(seeded, market, r)
     steps = [c for c in r.calls if c[0] != "scored"]
     assert steps == [
-        ("started", "load_inputs"), ("finished", "load_inputs"),
-        ("started", "score_portfolios"), ("finished", "score_portfolios"),
-        ("started", "record_run"), ("finished", "record_run"),
-        ("skipped", "priority_narratives"), ("skipped", "recommendation_narratives"),
+        ("started", "load_inputs"),
+        ("finished", "load_inputs"),
+        ("started", "score_portfolios"),
+        ("finished", "score_portfolios"),
+        ("started", "record_run"),
+        ("finished", "record_run"),
+        ("skipped", "priority_narratives"),
+        ("skipped", "recommendation_narratives"),
     ]
 
 
@@ -65,15 +74,17 @@ def test_score_portfolios_reports_the_count_after_each_portfolio(seeded, market)
     r = Recorder()
     run(seeded, market, r)
     start, end = r.calls.index(("started", "score_portfolios")), r.calls.index(("finished", "score_portfolios"))
-    assert r.calls[start + 1:end] == [("scored", n, 25) for n in range(26)]
+    assert r.calls[start + 1 : end] == [("scored", n, 25) for n in range(26)]
 
 
 def test_a_run_with_an_llm_reports_both_narrative_steps(seeded, market):  # noqa: F811
     r = Recorder()
     run(seeded, market, r, llm=seeded.state.llm)
     assert r.calls[-4:] == [
-        ("started", "priority_narratives"), ("finished", "priority_narratives"),
-        ("started", "recommendation_narratives"), ("finished", "recommendation_narratives"),
+        ("started", "priority_narratives"),
+        ("finished", "priority_narratives"),
+        ("started", "recommendation_narratives"),
+        ("finished", "recommendation_narratives"),
     ]
 
 
@@ -88,8 +99,11 @@ def test_a_failing_step_is_reported_failed_the_rest_skipped_and_the_error_still_
         run(seeded, broken, r)
     steps = [c for c in r.calls if c[0] != "scored"]
     assert steps[-5:] == [
-        ("started", "score_portfolios"), ("failed", "score_portfolios"),
-        ("skipped", "record_run"), ("skipped", "priority_narratives"), ("skipped", "recommendation_narratives"),
+        ("started", "score_portfolios"),
+        ("failed", "score_portfolios"),
+        ("skipped", "record_run"),
+        ("skipped", "priority_narratives"),
+        ("skipped", "recommendation_narratives"),
     ]
 
 

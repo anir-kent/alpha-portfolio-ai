@@ -39,8 +39,13 @@ def login(body: LoginRequest, request: Request, response: Response, db: Session 
     db.add(SessionRow(token_hash=token_digest(token), user_id=user.id, expires_at=datetime.now(UTC) + ttl))
     db.commit()
     response.set_cookie(
-        COOKIE, token, httponly=True, samesite="lax", secure=settings.cookie_secure,
-        max_age=int(ttl.total_seconds()), path="/",
+        COOKIE,
+        token,
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+        max_age=int(ttl.total_seconds()),
+        path="/",
     )
     return _me(user)
 

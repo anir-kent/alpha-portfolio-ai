@@ -24,7 +24,10 @@ def sf(tmp_path):
 def dump(sf):
     with sf() as db:
         return [
-            [tuple(getattr(r, c.name) for c in r.__table__.columns) for r in db.scalars(select(m).order_by(*m.__mapper__.primary_key))]
+            [
+                tuple(getattr(r, c.name) for c in r.__table__.columns)
+                for r in db.scalars(select(m).order_by(*m.__mapper__.primary_key))
+            ]
             for m in (ClientRow, AccountRow, HoldingRow, TargetRow, RestrictionRow)
         ]
 
@@ -33,14 +36,19 @@ def portfolio(sf, md, client_id):
     """Returns (values by symbol, total, target by asset class, restrictions)."""
     with sf() as db:
         rows = db.execute(
-            select(HoldingRow, AccountRow).join(AccountRow, HoldingRow.account_id == AccountRow.id)
+            select(HoldingRow, AccountRow)
+            .join(AccountRow, HoldingRow.account_id == AccountRow.id)
             .where(AccountRow.client_id == client_id)
         ).all()
         values: defaultdict[str, float] = defaultdict(float)
         for h, _ in rows:
             values[h.symbol] += h.quantity * md.instrument(h.symbol).price
-        target = {t.asset_class: t.weight for t in db.scalars(select(TargetRow).where(TargetRow.client_id == client_id))}
-        restr = [(r.kind, r.value) for r in db.scalars(select(RestrictionRow).where(RestrictionRow.client_id == client_id))]
+        target = {
+            t.asset_class: t.weight for t in db.scalars(select(TargetRow).where(TargetRow.client_id == client_id))
+        }
+        restr = [
+            (r.kind, r.value) for r in db.scalars(select(RestrictionRow).where(RestrictionRow.client_id == client_id))
+        ]
     return dict(values), sum(values.values()), target, restr
 
 

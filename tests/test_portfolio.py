@@ -1,4 +1,5 @@
 """Seam: Portfolio drill-down through the HTTP API against seeded data."""
+
 import pytest
 from sqlalchemy import select
 
@@ -98,10 +99,19 @@ def test_roles_without_pii_see_masked_fields_but_everything_else(login, advisor,
     assert client["risk_profile"] and r.json()["holdings"]
 
 
-@pytest.mark.parametrize("role,ok", [
-    ("advisor", True), ("relationship_manager", True), ("portfolio_manager", True), ("compliance_officer", True),
-    ("auditor", True), ("research_analyst", False), ("investment_committee", False), ("platform_owner", False),
-])
+@pytest.mark.parametrize(
+    "role,ok",
+    [
+        ("advisor", True),
+        ("relationship_manager", True),
+        ("portfolio_manager", True),
+        ("compliance_officer", True),
+        ("auditor", True),
+        ("research_analyst", False),
+        ("investment_committee", False),
+        ("platform_owner", False),
+    ],
+)
 def test_portfolio_read_permission(login, seeded, role, ok):  # noqa: F811
     assert (login(role).get(url("C001")).status_code == 200) is ok
 

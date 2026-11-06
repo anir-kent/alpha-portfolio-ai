@@ -1,5 +1,6 @@
 """Seam: Report ingestion, Insight approval and the LLM interface. All LLM calls replay committed recordings
 (tests/fixtures/llm); a live smoke test runs only with LLM_LIVE=1."""
+
 import json
 import os
 from pathlib import Path
@@ -25,18 +26,25 @@ def upload(c, name="house_view_demo.txt", content=None, **params):
 
 def events(app, **where):
     with app.state.session_factory() as db:
-        return [r for r in db.scalars(select(AuditEventRow).order_by(AuditEventRow.id))
-                if all(getattr(r, k) == v for k, v in where.items())]
+        return [
+            r
+            for r in db.scalars(select(AuditEventRow).order_by(AuditEventRow.id))
+            if all(getattr(r, k) == v for k, v in where.items())
+        ]
 
 
 def minimal_pdf(pages: list[str]) -> bytes:
     """A tiny valid PDF with one line of text per page."""
-    objs = ["<< /Type /Catalog /Pages 2 0 R >>",
-            f"<< /Type /Pages /Kids [{' '.join(f'{3 + 2 * i} 0 R' for i in range(len(pages)))}] /Count {len(pages)} >>"]
+    objs = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        f"<< /Type /Pages /Kids [{' '.join(f'{3 + 2 * i} 0 R' for i in range(len(pages)))}] /Count {len(pages)} >>",
+    ]
     for i, text in enumerate(pages):
         stream = f"BT /F1 12 Tf 50 700 Td ({text}) Tj ET"
-        objs.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents {4 + 2 * i} 0 R "
-                    f"/Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> >>")
+        objs.append(
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents {4 + 2 * i} 0 R "
+            f"/Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> >>"
+        )
         objs.append(f"<< /Length {len(stream)} >>\nstream\n{stream}\nendstream")
     out, offsets = b"%PDF-1.4\n", []
     for n, o in enumerate(objs, 1):
@@ -49,6 +57,7 @@ def minimal_pdf(pages: list[str]) -> bytes:
 
 
 # --- ingestion -------------------------------------------------------------------------------------------------
+
 
 def test_upload_produces_pending_cited_insights(login):
     r = upload(login("research_analyst"), title="Demo view")
@@ -65,7 +74,9 @@ def test_upload_produces_pending_cited_insights(login):
 
 
 def test_pdf_upload_keeps_page_references(login):
-    pdf = minimal_pdf(["Report cover", "We prefer equities over bonds for the next twelve months as growth stays resilient."])
+    pdf = minimal_pdf(
+        ["Report cover", "We prefer equities over bonds for the next twelve months as growth stays resilient."]
+    )
     r = upload(login("research_analyst"), "pdf_view.pdf", pdf)
     assert r.status_code == 201, r.text
     assert r.json()["kind"] == "pdf" and r.json()["page_count"] == 2
@@ -89,7 +100,10 @@ def test_insights_failing_citation_or_taxonomy_checks_are_dropped_and_recorded(a
     assert [i["passage"] for i in report["insights"]] == ["Energy will double next year according to our model."]
     payload = json.loads(events(app, report_id=report["id"], type="insight_extracted")[0].payload_json)
     assert {d["reason"] for d in payload["dropped"]} == {
-        "passage not found on cited page", "subject not in taxonomy", "cited page does not exist"}
+        "passage not found on cited page",
+        "subject not in taxonomy",
+        "cited page does not exist",
+    }
 
 
 def test_report_without_a_recording_is_stored_with_failed_extraction(login):
@@ -99,14 +113,21 @@ def test_report_without_a_recording_is_stored_with_failed_extraction(login):
     assert "No recorded response" in r.json()["extraction_error"]
 
 
-@pytest.mark.parametrize("name,content", [
-    ("notes.docx", b"hello"), ("empty.txt", b"  \n"), ("broken.pdf", b"not a pdf"), ("bin.txt", b"\xff\xfe\x00"),
-])
+@pytest.mark.parametrize(
+    "name,content",
+    [
+        ("notes.docx", b"hello"),
+        ("empty.txt", b"  \n"),
+        ("broken.pdf", b"not a pdf"),
+        ("bin.txt", b"\xff\xfe\x00"),
+    ],
+)
 def test_unusable_uploads_are_rejected(login, name, content):
     assert upload(login("research_analyst"), name, content).status_code == 422
 
 
 # --- approval gate ---------------------------------------------------------------------------------------------
+
 
 def test_only_approved_insights_are_retrievable_for_use(app, login):
     analyst, advisor = login("research_analyst"), login("advisor")
@@ -117,7 +138,10 @@ def test_only_approved_insights_are_retrievable_for_use(app, login):
     approved = analyst.post(f"/api/insights/{tech['id']}/decision", json={"action": "approve", "note": "checked p1"})
     assert approved.status_code == 200 and approved.json()["status"] == "approved"
     assert approved.json()["decided_by"] == "research_analyst"
-    assert analyst.post(f"/api/insights/{utilities['id']}/decision", json={"action": "reject"}).json()["status"] == "rejected"
+    assert (
+        analyst.post(f"/api/insights/{utilities['id']}/decision", json={"action": "reject"}).json()["status"]
+        == "rejected"
+    )
 
     visible = advisor.get("/api/insights").json()["items"]
     assert [i["subject"] for i in visible] == ["Information Technology"]
@@ -140,6 +164,7 @@ def test_a_decided_insight_cannot_be_decided_again(login):
 
 # --- roles -----------------------------------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("role", [r for r in ROLES if r != "research_analyst"])
 def test_other_roles_cannot_upload_or_approve_and_are_audited(app, login, role):
     analyst = login("research_analyst")
@@ -152,15 +177,23 @@ def test_other_roles_cannot_upload_or_approve_and_are_audited(app, login, role):
     assert analyst.get(f"/api/reports/{upload(analyst).json()['id']}").json()["insights"][0]["status"] == "pending"
 
 
-@pytest.mark.parametrize("role,allowed", [
-    ("advisor", True), ("relationship_manager", True), ("auditor", True), ("research_analyst", True),
-    ("platform_owner", False), ("investment_committee", False),
-])
+@pytest.mark.parametrize(
+    "role,allowed",
+    [
+        ("advisor", True),
+        ("relationship_manager", True),
+        ("auditor", True),
+        ("research_analyst", True),
+        ("platform_owner", False),
+        ("investment_committee", False),
+    ],
+)
 def test_reading_approved_insights_by_role(login, role, allowed):
     assert (login(role).get("/api/insights").status_code == 200) is allowed
 
 
 # --- seeds -----------------------------------------------------------------------------------------------------
+
 
 @pytest.fixture
 def seeded_research(app):
@@ -209,12 +242,26 @@ def test_openai_compatible_llm_parses_replies_and_can_record_them(tmp_path):
     seen: dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        seen["url"], seen["auth"], seen["body"] = str(request.url), request.headers["authorization"], json.loads(request.content)
-        return httpx.Response(200, json={"model": "claude-sonnet-5-5", "choices": [
-            {"message": {"content": '```json\n{"insights": []}\n```'}}]})
+        seen["url"], seen["auth"], seen["body"] = (
+            str(request.url),
+            request.headers["authorization"],
+            json.loads(request.content),
+        )
+        return httpx.Response(
+            200,
+            json={
+                "model": "claude-sonnet-5-5",
+                "choices": [{"message": {"content": '```json\n{"insights": []}\n```'}}],
+            },
+        )
 
-    llm = OpenAICompatibleLlm(base_url="https://gw.example/v1", api_key="k", model="m", record_dir=tmp_path,
-                              transport=httpx.MockTransport(handler))
+    llm = OpenAICompatibleLlm(
+        base_url="https://gw.example/v1",
+        api_key="k",
+        model="m",
+        record_dir=tmp_path,
+        transport=httpx.MockTransport(handler),
+    )
     response = llm.complete(REQ)
     assert response.content == {"insights": []} and response.model == "claude-sonnet-5-5"
     assert seen["url"] == "https://gw.example/v1/chat/completions" and seen["auth"] == "Bearer k"
@@ -223,8 +270,12 @@ def test_openai_compatible_llm_parses_replies_and_can_record_them(tmp_path):
 
 
 def test_openai_compatible_llm_surfaces_provider_errors():
-    llm = OpenAICompatibleLlm(base_url="https://gw.example/v1", api_key="k", model="m",
-                              transport=httpx.MockTransport(lambda r: httpx.Response(500)))
+    llm = OpenAICompatibleLlm(
+        base_url="https://gw.example/v1",
+        api_key="k",
+        model="m",
+        transport=httpx.MockTransport(lambda r: httpx.Response(500)),
+    )
     with pytest.raises(LlmError):
         llm.complete(REQ)
 

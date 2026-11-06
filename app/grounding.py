@@ -8,6 +8,7 @@ in the claim text equals a cited engine figure at the precision the claim states
 Ungrounded claims are never dropped: they are flagged with the reasons, kept out of memos (`memo_claims`) and stay
 visible to the Advisor.
 """
+
 import json
 import re
 import uuid
@@ -33,8 +34,13 @@ from app.reports import passage_on_page
 VALIDATOR = audit.Actor.system("grounding-validator")
 
 IssueCode = Literal[
-    "uncited", "report_not_found", "page_not_found", "quote_not_found", "unknown_engine_figure",
-    "number_mismatch", "asset_call_needs_report",
+    "uncited",
+    "report_not_found",
+    "page_not_found",
+    "quote_not_found",
+    "unknown_engine_figure",
+    "number_mismatch",
+    "asset_call_needs_report",
 ]
 
 
@@ -85,10 +91,12 @@ def summarise(results: Iterable) -> dict[str, int]:
 
 # --- engine figures ---------------------------------------------------------------------------------------------
 
+
 def engine_figures(db: Session, rec: RecommendationRow) -> dict[str, float]:
     """Every number the engine produced for this Recommendation, by name."""
     f: dict[str, float] = {
-        "total_value": rec.total_value, "turnover_pct": rec.turnover_pct,
+        "total_value": rec.total_value,
+        "turnover_pct": rec.turnover_pct,
         "trade_line_count": float(len(json.loads(rec.trade_lines_json))),
     }
     for line in json.loads(rec.trade_lines_json):
@@ -136,6 +144,7 @@ def number_matches(value: float, decimals: int, figures: Iterable[float]) -> boo
 
 # --- validation -------------------------------------------------------------------------------------------------
 
+
 def _check_report_citation(db: Session, c: ReportCitation) -> Issue | None:
     if db.get(ReportRow, c.report_id) is None:
         return Issue(code="report_not_found", message=f"Report {c.report_id} does not exist")
@@ -167,20 +176,35 @@ def validate_claim(db: Session, claim: Claim, index: int, figures: dict[str, flo
         if not number_matches(value, decimals, cited):
             issues.append(Issue(code="number_mismatch", message=f"{raw} does not match a cited engine figure"))
     return ClaimResult(
-        index=index, text=claim.text, asset=claim.asset, citations=claim.citations, grounded=not issues, issues=issues,
+        index=index,
+        text=claim.text,
+        asset=claim.asset,
+        citations=claim.citations,
+        grounded=not issues,
+        issues=issues,
     )
 
 
 def validate(db: Session, rec: RecommendationRow, claims: list[Claim]) -> tuple[str, list[ClaimResult]]:
     """Validate, store and audit one batch of claims about a Recommendation. Returns (check id, one result per claim in order)."""
     return validate_figures(
-        db, claims, engine_figures(db, rec), client_id=rec.client_id, recommendation_id=rec.id,
+        db,
+        claims,
+        engine_figures(db, rec),
+        client_id=rec.client_id,
+        recommendation_id=rec.id,
     )
 
 
 def validate_figures(
-    db: Session, claims: list[Claim], figures: dict[str, float], *, client_id: str, recommendation_id: int | None = None,
-    run_id: int | None = None, parents: Iterable[int] = (),
+    db: Session,
+    claims: list[Claim],
+    figures: dict[str, float],
+    *,
+    client_id: str,
+    recommendation_id: int | None = None,
+    run_id: int | None = None,
+    parents: Iterable[int] = (),
 ) -> tuple[str, list[ClaimResult]]:
     """Validate, store and audit claims against any engine figure set (a Recommendation's, or a priority result's)."""
     results = [validate_claim(db, c, i, figures) for i, c in enumerate(claims)]
@@ -188,30 +212,54 @@ def validate_figures(
     now = audit.format_ts(datetime.now(UTC))
     db.add_all(
         GroundingResultRow(
-            check_id=check_id, recommendation_id=recommendation_id, run_id=run_id, client_id=client_id, claim_index=r.index,
-            text=r.text, asset=r.asset, citations_json=json.dumps([c.model_dump() for c in r.citations]), grounded=r.grounded,
-            issues_json=json.dumps([i.model_dump() for i in r.issues]), created_at=now,
+            check_id=check_id,
+            recommendation_id=recommendation_id,
+            run_id=run_id,
+            client_id=client_id,
+            claim_index=r.index,
+            text=r.text,
+            asset=r.asset,
+            citations_json=json.dumps([c.model_dump() for c in r.citations]),
+            grounded=r.grounded,
+            issues_json=json.dumps([i.model_dump() for i in r.issues]),
+            created_at=now,
         )
         for r in results
     )
     db.commit()
     scope = dict(
-        portfolio_id=client_id, client_id=client_id,
+        portfolio_id=client_id,
+        client_id=client_id,
         recommendation_id=None if recommendation_id is None else str(recommendation_id),
     )
     checked = audit.record(
-        db, "grounding_checked", VALIDATOR,
-        {"check_id": check_id, "summary": summarise(results), "figure_count": len(figures),
-         **({"run_id": run_id} if run_id is not None else {})},
-        parents=parents, **scope,
+        db,
+        "grounding_checked",
+        VALIDATOR,
+        {
+            "check_id": check_id,
+            "summary": summarise(results),
+            "figure_count": len(figures),
+            **({"run_id": run_id} if run_id is not None else {}),
+        },
+        parents=parents,
+        **scope,
     )
     for r in results:
         if not r.grounded:
             audit.record(
-                db, "claim_ungrounded", VALIDATOR,
-                {"check_id": check_id, "claim_index": r.index, "text": r.text, "asset": r.asset,
-                 "issues": [i.model_dump() for i in r.issues]},
-                parents=[checked], **scope,
+                db,
+                "claim_ungrounded",
+                VALIDATOR,
+                {
+                    "check_id": check_id,
+                    "claim_index": r.index,
+                    "text": r.text,
+                    "asset": r.asset,
+                    "issues": [i.model_dump() for i in r.issues],
+                },
+                parents=[checked],
+                **scope,
             )
     return check_id, results
 
@@ -219,17 +267,27 @@ def validate_figures(
 def latest_results(db: Session, recommendation_id: int) -> list[ClaimResult]:
     """All results (grounded or not) of the most recent check, in claim order."""
     check_id = db.scalar(
-        select(GroundingResultRow.check_id).where(GroundingResultRow.recommendation_id == recommendation_id)
-        .order_by(GroundingResultRow.id.desc()).limit(1)
+        select(GroundingResultRow.check_id)
+        .where(GroundingResultRow.recommendation_id == recommendation_id)
+        .order_by(GroundingResultRow.id.desc())
+        .limit(1)
     )
     return [] if check_id is None else results_for(db, check_id)
 
 
 def results_for(db: Session, check_id: str) -> list[ClaimResult]:
-    rows = db.scalars(select(GroundingResultRow).where(GroundingResultRow.check_id == check_id).order_by(GroundingResultRow.claim_index))
+    rows = db.scalars(
+        select(GroundingResultRow)
+        .where(GroundingResultRow.check_id == check_id)
+        .order_by(GroundingResultRow.claim_index)
+    )
     return [
         ClaimResult(
-            index=r.claim_index, text=r.text, asset=r.asset, citations=json.loads(r.citations_json), grounded=r.grounded,
+            index=r.claim_index,
+            text=r.text,
+            asset=r.asset,
+            citations=json.loads(r.citations_json),
+            grounded=r.grounded,
             issues=json.loads(r.issues_json),
         )
         for r in rows

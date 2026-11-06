@@ -4,6 +4,7 @@ Advisor always; Compliance only when a rule is in breach; Investment Committee o
 (turnover >= 15% of the Portfolio or any Trade Line >= 10%, from config). C003 (cash drag) is high-impact by default
 (turnover ~25%, SGOV sell ~25%) and clean on suitability; the breaching modification (all SGOV into XLK) is both.
 """
+
 import json
 
 import pytest
@@ -71,7 +72,10 @@ def test_high_impact_clean_recommendation_goes_to_committee_only(advisor, commit
 def test_committee_can_reject_with_rationale(advisor, committee):
     r = rec(advisor, "C003")
     decide(advisor, r["id"], "accept")
-    assert act(committee, "committee", r["id"], "reject", "Too much turnover").json()["recommendation"]["status"] == "rejected"
+    assert (
+        act(committee, "committee", r["id"], "reject", "Too much turnover").json()["recommendation"]["status"]
+        == "rejected"
+    )
 
 
 def test_breach_without_high_impact_needs_compliance_only(advisor, compliance, login):
@@ -89,7 +93,10 @@ def test_breach_and_high_impact_needs_both_in_order(advisor, compliance, committ
     r_id = breach_pending(advisor)
     assert rec(advisor, "C003")["approval"]["required_steps"] == ["advisor", "compliance", "committee"]
     assert act(committee, "committee", r_id, "approve", "early").status_code == 409  # not before Compliance
-    assert act(compliance, "compliance", r_id, "approve", "Waiver on file").json()["recommendation"]["status"] == "pending_committee"
+    assert (
+        act(compliance, "compliance", r_id, "approve", "Waiver on file").json()["recommendation"]["status"]
+        == "pending_committee"
+    )
     assert act(compliance, "compliance", r_id, "approve", "again").status_code == 409  # already past Compliance
     assert act(committee, "committee", r_id, "approve", "Agreed").json()["recommendation"]["status"] == "approved"
 
@@ -122,9 +129,16 @@ def test_compliance_cannot_act_before_the_advisor_has_decided(advisor, complianc
     assert status(advisor) == "pending_advisor"
 
 
-def test_no_path_reaches_approved_without_a_human_decision_at_every_required_step(advisor, compliance, committee, login):
+def test_no_path_reaches_approved_without_a_human_decision_at_every_required_step(
+    advisor, compliance, committee, login
+):
     """Invariant: from each state, every out-of-order or wrong-role attempt fails and the status never reaches approved."""
-    attempts = [(c, step, a) for c in (advisor, compliance, committee) for step in ("compliance", "committee") for a in ("approve", "block", "reject")]
+    attempts = [
+        (c, step, a)
+        for c in (advisor, compliance, committee)
+        for step in ("compliance", "committee")
+        for a in ("approve", "block", "reject")
+    ]
     r_id = breach_pending(advisor)  # pending_compliance, both steps required
     seen = ["pending_compliance"]
     for c, step, a in attempts:
@@ -154,12 +168,15 @@ def test_a_clean_in_threshold_recommendation_is_approved_by_the_advisor_alone(ad
     assert decide(advisor, r["id"], "accept").json()["recommendation"]["status"] == "approved"
 
 
-@pytest.mark.parametrize("thresholds,high", [
-    ({"turnover_pct": 25.5, "trade_line_pct": 30}, False),
-    ({"turnover_pct": 20, "trade_line_pct": 30}, True),   # turnover alone
-    ({"turnover_pct": 100, "trade_line_pct": 20}, True),  # one Trade Line alone (SGOV ~25%)
-    ({"turnover_pct": 100, "trade_line_pct": 26}, False),
-])
+@pytest.mark.parametrize(
+    "thresholds,high",
+    [
+        ({"turnover_pct": 25.5, "trade_line_pct": 30}, False),
+        ({"turnover_pct": 20, "trade_line_pct": 30}, True),  # turnover alone
+        ({"turnover_pct": 100, "trade_line_pct": 20}, True),  # one Trade Line alone (SGOV ~25%)
+        ({"turnover_pct": 100, "trade_line_pct": 26}, False),
+    ],
+)
 def test_thresholds_are_read_from_config(advisor, login, thresholds, high):
     set_config(login, {"approval_thresholds": thresholds})
     a = rec(advisor, "C003")["approval"]
@@ -185,11 +202,17 @@ def test_a_run_supersedes_recommendations_waiting_on_the_committee(advisor, comm
     assert advisor.get(f"/api/recommendations/{r['id']}").json()["status"] == "superseded"
 
 
-@pytest.mark.parametrize("role,step,ok", [
-    ("advisor", "compliance", False), ("relationship_manager", "committee", False), ("auditor", "compliance", False),
-    ("investment_committee", "compliance", False), ("compliance_officer", "committee", False),
-    ("platform_owner", "committee", False),
-])
+@pytest.mark.parametrize(
+    "role,step,ok",
+    [
+        ("advisor", "compliance", False),
+        ("relationship_manager", "committee", False),
+        ("auditor", "compliance", False),
+        ("investment_committee", "compliance", False),
+        ("compliance_officer", "committee", False),
+        ("platform_owner", "committee", False),
+    ],
+)
 def test_only_the_right_role_may_take_each_step(login, advisor, role, step, ok):
     r_id = breach_pending(advisor)
     out = act(login(role), step, r_id, "approve", "because")
@@ -201,14 +224,18 @@ def test_approvals_are_audited_with_rationale_and_lineage(advisor, compliance, c
     act(compliance, "compliance", r_id, "approve", "Waiver on file")
     act(committee, "committee", r_id, "approve", "Agreed")
     with app.state.session_factory() as db:
-        evs = [e for e in db.scalars(select(AuditEventRow).order_by(AuditEventRow.id)) if e.recommendation_id == str(r_id)]
+        evs = [
+            e for e in db.scalars(select(AuditEventRow).order_by(AuditEventRow.id)) if e.recommendation_id == str(r_id)
+        ]
         by_type = lambda t: [e for e in evs if e.type == t]  # noqa: E731
         parents = lambda e: json.loads(e.parent_ids_json)  # noqa: E731
         accepted = [e for e in by_type("decision_recorded") if json.loads(e.payload_json)["action"] == "accept"][0]
         (exc,) = by_type("exception_approved")
         assert (exc.actor_name, exc.actor_role) == ("compliance_officer", "compliance_officer")
         assert json.loads(exc.payload_json)["rationale"] == "Waiver on file" and accepted.id in parents(exc)
-        final = [e for e in by_type("decision_recorded") if json.loads(e.payload_json)["action"] == "committee_approve"][0]
+        final = [
+            e for e in by_type("decision_recorded") if json.loads(e.payload_json)["action"] == "committee_approve"
+        ][0]
         assert (final.actor_role, json.loads(final.payload_json)["rationale"]) == ("investment_committee", "Agreed")
         assert exc.id in parents(final) and json.loads(final.payload_json)["resulting_status"] == "approved"
         assert audit.verify(db).valid
@@ -229,7 +256,9 @@ def test_decisions_appear_in_the_portfolio_history(advisor, compliance, login):
     act(compliance, "compliance", r_id, "approve", "Waiver")
     ds = advisor.get(url("C003")).json()["history"]["decisions"]
     assert [(d["action"], d["actor_role"]) for d in ds if d["recommendation_id"] == r_id] == [
-        ("accept", "advisor"), ("approve_exception", "compliance_officer")]
+        ("accept", "advisor"),
+        ("approve_exception", "compliance_officer"),
+    ]
 
 
 def test_compliance_view_shows_rule_limit_actual_affected_lines_and_restrictions(advisor, compliance, app):
@@ -263,8 +292,14 @@ def test_committee_panel_lists_only_pending_committee_with_thresholds(advisor, c
 
 
 def test_approvals_panel_is_for_compliance_and_committee_only(login, advisor):
-    for role, ok in [("compliance_officer", True), ("investment_committee", True), ("advisor", False),
-                     ("auditor", False), ("platform_owner", False), ("relationship_manager", False)]:
+    for role, ok in [
+        ("compliance_officer", True),
+        ("investment_committee", True),
+        ("advisor", False),
+        ("auditor", False),
+        ("platform_owner", False),
+        ("relationship_manager", False),
+    ]:
         assert (login(role).get("/api/approvals").status_code == 200) is ok
 
 

@@ -43,9 +43,18 @@ def test_unknown_event_type_and_missing_parent_are_rejected(app):
 
 def test_event_types_cover_the_specified_list():
     assert {
-        "report_ingested", "insight_extracted", "insight_approved", "analysis_run_started",
-        "priority_scored", "suitability_evaluated", "recommendation_drafted", "memo_generated",
-        "recommendation_modified", "decision_recorded", "exception_approved", "exception_blocked",
+        "report_ingested",
+        "insight_extracted",
+        "insight_approved",
+        "analysis_run_started",
+        "priority_scored",
+        "suitability_evaluated",
+        "recommendation_drafted",
+        "memo_generated",
+        "recommendation_modified",
+        "decision_recorded",
+        "exception_approved",
+        "exception_blocked",
         "access_denied",
     } <= set(EVENT_TYPES)
 
@@ -63,8 +72,14 @@ def test_verify_passes_on_intact_chain(app, login):
         append(app)
     r = login("auditor").get("/api/audit/verify")
     assert r.status_code == 200
-    assert r.json() == {"valid": True, "checked": 3, "first_broken_id": None, "reason": None,
-                        "exchanges_checked": 0, "first_broken_exchange_id": None}
+    assert r.json() == {
+        "valid": True,
+        "checked": 3,
+        "first_broken_id": None,
+        "reason": None,
+        "exchanges_checked": 0,
+        "first_broken_exchange_id": None,
+    }
 
 
 def test_verify_on_empty_chain_is_valid(login):
@@ -124,10 +139,25 @@ def test_permitted_action_is_not_logged_as_denied(login):
 def test_search_filters(app, login):
     r1 = append(app, "report_ingested", USER, report_id="R1")
     i1 = append(app, "insight_extracted", AI, parents=[r1], report_id="R1")
-    d1 = append(app, "recommendation_drafted", AI, parents=[i1], report_id="R1",
-                portfolio_id="P1", client_id="C1", recommendation_id="REC1")
-    d2 = append(app, "decision_recorded", Actor.user("carol", "advisor"), parents=[d1],
-                portfolio_id="P2", client_id="C2", recommendation_id="REC2")
+    d1 = append(
+        app,
+        "recommendation_drafted",
+        AI,
+        parents=[i1],
+        report_id="R1",
+        portfolio_id="P1",
+        client_id="C1",
+        recommendation_id="REC1",
+    )
+    d2 = append(
+        app,
+        "decision_recorded",
+        Actor.user("carol", "advisor"),
+        parents=[d1],
+        portfolio_id="P2",
+        client_id="C2",
+        recommendation_id="REC2",
+    )
     c = login("auditor")
 
     def ids(**p):
@@ -159,10 +189,18 @@ def test_search_is_newest_first_and_paginated(app, login):
     assert body["total"] == 5
 
 
-@pytest.mark.parametrize("role", [
-    "relationship_manager", "advisor", "portfolio_manager", "research_analyst",
-    "compliance_officer", "investment_committee", "platform_owner",
-])
+@pytest.mark.parametrize(
+    "role",
+    [
+        "relationship_manager",
+        "advisor",
+        "portfolio_manager",
+        "research_analyst",
+        "compliance_officer",
+        "investment_committee",
+        "platform_owner",
+    ],
+)
 def test_other_roles_cannot_reach_audit(login, role):
     c = login(role)
     assert c.get("/api/audit/events").status_code == 403

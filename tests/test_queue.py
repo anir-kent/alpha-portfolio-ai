@@ -1,4 +1,5 @@
 """Seam: analysis run + ranked queue through the HTTP API against seeded data."""
+
 import shutil
 
 import pytest
@@ -129,11 +130,19 @@ def test_client_name_is_masked_without_pii_permission(login, advisor):
     assert next(i for i in rows(rm) if i["client_id"] == "C001")["client_name"] is None
 
 
-@pytest.mark.parametrize("role,ok", [
-    ("advisor", True), ("relationship_manager", True),
-    ("portfolio_manager", False), ("compliance_officer", False), ("auditor", False),
-    ("research_analyst", False), ("investment_committee", False), ("platform_owner", False),
-])
+@pytest.mark.parametrize(
+    "role,ok",
+    [
+        ("advisor", True),
+        ("relationship_manager", True),
+        ("portfolio_manager", False),
+        ("compliance_officer", False),
+        ("auditor", False),
+        ("research_analyst", False),
+        ("investment_committee", False),
+        ("platform_owner", False),
+    ],
+)
 def test_only_advisor_and_rm_can_run_and_read_the_queue(login, seeded, role, ok):
     c = login(role)
     if ok:
@@ -151,4 +160,5 @@ def test_denied_attempts_are_audited(login, seeded, app):
 
 def test_cli_runs_analysis(seeded, settings):
     from app.analysis import main
+
     assert main(settings) == 25

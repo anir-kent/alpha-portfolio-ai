@@ -5,7 +5,8 @@ import { api } from "./api/client";
 import type { components, operations } from "./api/schema";
 
 /* ---------- formatting: figures are monospaced and right-aligned via .num ---------- */
-export const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+export const money = (n: number) =>
+  n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 export const signed = (n: number, d = 1) => `${n > 0 ? "+" : ""}${n.toFixed(d)}`;
 export const pp = (n: number) => `${signed(n)} pp`;
 export const pct = (n: number, d = 1) => `${n.toFixed(d)}%`;
@@ -14,7 +15,11 @@ export const pct = (n: number, d = 1) => `${n.toFixed(d)}%`;
 export type Tone = "pos" | "warn" | "neg" | "info" | "ai" | "mute";
 
 export function Pill({ tone = "mute", children, title }: { tone?: Tone; children: ReactNode; title?: string }) {
-  return <span className={`pill pill-${tone}`} title={title}>{children}</span>;
+  return (
+    <span className={`pill pill-${tone}`} title={title}>
+      {children}
+    </span>
+  );
 }
 
 export const RULE_TONE = { pass: "pos", warning: "warn", breach: "neg" } as const satisfies Record<string, Tone>;
@@ -34,7 +39,19 @@ export function PageHeader({ title, sub, actions }: { title: ReactNode; sub?: Re
   );
 }
 
-export function Panel({ title, aside, children, label, flush }: { title?: ReactNode; aside?: ReactNode; children: ReactNode; label?: string; flush?: boolean }) {
+export function Panel({
+  title,
+  aside,
+  children,
+  label,
+  flush,
+}: {
+  title?: ReactNode;
+  aside?: ReactNode;
+  children: ReactNode;
+  label?: string;
+  flush?: boolean;
+}) {
   return (
     <section className="panel" aria-label={label}>
       {title && (
@@ -53,9 +70,12 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 export function ErrorLine({ children }: { children: ReactNode }) {
-  return <p role="alert" className="callout callout-neg">{children}</p>;
+  return (
+    <p role="alert" className="callout callout-neg">
+      {children}
+    </p>
+  );
 }
-
 
 /* ---------- hover / focus peek ---------- */
 /** Shows `children` in a floating card when the trigger is hovered or focused. The card stays open while the pointer is on it, so its
@@ -68,8 +88,14 @@ export function HoverPeek({ trigger, children, label }: { trigger: ReactNode; ch
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
-  const show = useCallback(() => { window.clearTimeout(timer.current); setOpen(true); }, []);
-  const hide = useCallback(() => { window.clearTimeout(timer.current); timer.current = window.setTimeout(() => setOpen(false), 140); }, []);
+  const show = useCallback(() => {
+    window.clearTimeout(timer.current);
+    setOpen(true);
+  }, []);
+  const hide = useCallback(() => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setOpen(false), 140);
+  }, []);
 
   useLayoutEffect(() => {
     if (!open || !anchor.current || !card.current) return;
@@ -85,63 +111,198 @@ export function HoverPeek({ trigger, children, label }: { trigger: ReactNode; ch
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     // Page scroll dismisses the peek (its anchor moved), but scrolling inside the peek itself must not.
-    const close = (e: Event) => { if (!card.current?.contains(e.target as Node)) setOpen(false); };
+    const close = (e: Event) => {
+      if (!card.current?.contains(e.target as Node)) setOpen(false);
+    };
     window.addEventListener("keydown", onKey);
     window.addEventListener("scroll", close, true);
-    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("scroll", close, true); };
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", close, true);
+    };
   }, [open]);
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
   return (
     <>
-      <div ref={anchor} className="peek-trigger min-w-0" tabIndex={0} aria-label={label} aria-describedby={open ? id : undefined}
-        onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide}>{trigger}</div>
-      {open && createPortal(
-        <div ref={card} id={id} role="tooltip" className="peek panel" style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, visibility: pos ? "visible" : "hidden" }}
-          onMouseEnter={show} onMouseLeave={hide}>{children}</div>,
-        document.body,
-      )}
+      <div
+        ref={anchor}
+        className="peek-trigger min-w-0"
+        tabIndex={0}
+        aria-label={label}
+        aria-describedby={open ? id : undefined}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+      >
+        {trigger}
+      </div>
+      {open &&
+        createPortal(
+          <div
+            ref={card}
+            id={id}
+            role="tooltip"
+            className="peek panel"
+            style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, visibility: pos ? "visible" : "hidden" }}
+            onMouseEnter={show}
+            onMouseLeave={hide}
+          >
+            {children}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
 
 /* ---------- volumetric figures ---------- */
 const DIAL_TONE = {
-  neg: ["#f08a80", "#b3261e"], warn: ["#f1c05a", "#b7791f"], pos: ["#5fd1a0", "#0b7a4b"], info: ["#8fb0ff", "#2253d4"],
+  neg: ["#f08a80", "#b3261e"],
+  warn: ["#f1c05a", "#b7791f"],
+  pos: ["#5fd1a0", "#0b7a4b"],
+  info: ["#8fb0ff", "#2253d4"],
 } as const;
 
 /** Semicircle speed dial, 0..max. The arc is graded, with a glowing end-stop. The value is real text for readers and tests. */
-export function ScoreDial({ value, max = 100, tone = "info", size = 78, label }: { value: number; max?: number; tone?: keyof typeof DIAL_TONE; size?: number; label?: string }) {
+export function ScoreDial({
+  value,
+  max = 100,
+  tone = "info",
+  size = 78,
+  label,
+}: {
+  value: number;
+  max?: number;
+  tone?: keyof typeof DIAL_TONE;
+  size?: number;
+  label?: string;
+}) {
   const id = useId();
   const frac = Math.max(0, Math.min(1, value / max));
-  const r = 40, len = Math.PI * r, a = Math.PI * (1 - frac);
+  const r = 40,
+    len = Math.PI * r,
+    a = Math.PI * (1 - frac);
   const [from, to] = DIAL_TONE[tone];
   return (
     <div className="inline-flex flex-col items-center" style={{ width: size }}>
-      <svg viewBox="0 0 100 56" width={size} height={size * 0.56} role="img" aria-label={`${label ?? "Score"} ${value.toFixed(1)} of ${max}`}>
+      <svg
+        viewBox="0 0 100 56"
+        width={size}
+        height={size * 0.56}
+        role="img"
+        aria-label={`${label ?? "Score"} ${value.toFixed(1)} of ${max}`}
+      >
         <defs>
-          <linearGradient id={id} x1="0" x2="1"><stop offset="0" stopColor={from} /><stop offset="1" stopColor={to} /></linearGradient>
-          <filter id={`${id}g`} x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="2.2" /></filter>
+          <linearGradient id={id} x1="0" x2="1">
+            <stop offset="0" stopColor={from} />
+            <stop offset="1" stopColor={to} />
+          </linearGradient>
+          <filter id={`${id}g`} x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="2.2" />
+          </filter>
         </defs>
-        <path d="M10,50 A40,40 0 0 1 90,50" fill="none" stroke="rgb(31 38 80 / 0.09)" strokeWidth="9" strokeLinecap="round" />
-        <path d="M10,50 A40,40 0 0 1 90,50" fill="none" stroke="rgb(255 255 255 / 0.9)" strokeWidth="1" strokeLinecap="round" transform="translate(0 4.6)" opacity="0.7" />
-        {frac > 0 && <path d="M10,50 A40,40 0 0 1 90,50" fill="none" stroke={`url(#${id})`} strokeWidth="9" strokeLinecap="round" strokeDasharray={`${len * frac} ${len}`} style={{ transition: "stroke-dasharray 400ms ease-out" }} />}
-        {frac > 0 && <circle cx={50 + r * Math.cos(a)} cy={50 - r * Math.sin(a)} r="3.4" fill="#fff" stroke={to} strokeWidth="1.6" />}
-        {frac > 0 && <circle cx={50 + r * Math.cos(a)} cy={50 - r * Math.sin(a)} r="5" fill={to} opacity="0.35" filter={`url(#${id}g)`} />}
-        <text x="50" y="47" textAnchor="middle" fontFamily="var(--font-mono)" fontSize="15" fontWeight="700" fill="var(--color-ink)">{value.toFixed(1)}</text>
+        <path
+          d="M10,50 A40,40 0 0 1 90,50"
+          fill="none"
+          stroke="rgb(31 38 80 / 0.09)"
+          strokeWidth="9"
+          strokeLinecap="round"
+        />
+        <path
+          d="M10,50 A40,40 0 0 1 90,50"
+          fill="none"
+          stroke="rgb(255 255 255 / 0.9)"
+          strokeWidth="1"
+          strokeLinecap="round"
+          transform="translate(0 4.6)"
+          opacity="0.7"
+        />
+        {frac > 0 && (
+          <path
+            d="M10,50 A40,40 0 0 1 90,50"
+            fill="none"
+            stroke={`url(#${id})`}
+            strokeWidth="9"
+            strokeLinecap="round"
+            strokeDasharray={`${len * frac} ${len}`}
+            style={{ transition: "stroke-dasharray 400ms ease-out" }}
+          />
+        )}
+        {frac > 0 && (
+          <circle
+            cx={50 + r * Math.cos(a)}
+            cy={50 - r * Math.sin(a)}
+            r="3.4"
+            fill="#fff"
+            stroke={to}
+            strokeWidth="1.6"
+          />
+        )}
+        {frac > 0 && (
+          <circle
+            cx={50 + r * Math.cos(a)}
+            cy={50 - r * Math.sin(a)}
+            r="5"
+            fill={to}
+            opacity="0.35"
+            filter={`url(#${id}g)`}
+          />
+        )}
+        <text
+          x="50"
+          y="47"
+          textAnchor="middle"
+          fontFamily="var(--font-mono)"
+          fontSize="15"
+          fontWeight="700"
+          fill="var(--color-ink)"
+        >
+          {value.toFixed(1)}
+        </text>
       </svg>
     </div>
   );
 }
 
 /** Diverging delta bar on a faint grid: zero in the middle, emerald to the right, crimson to the left unless `tone` overrides. */
-export function DeltaBar({ value, max, tone, width = "7rem", height = "0.6rem" }: { value: number; max: number; tone?: "pos" | "neg" | "warn"; width?: string; height?: string }) {
+export function DeltaBar({
+  value,
+  max,
+  tone,
+  width = "7rem",
+  height = "0.6rem",
+}: {
+  value: number;
+  max: number;
+  tone?: "pos" | "neg" | "warn";
+  width?: string;
+  height?: string;
+}) {
   const t = tone ?? (value >= 0 ? "pos" : "neg");
-  const grad = { pos: "linear-gradient(to bottom, #5fd1a0, #0b7a4b)", neg: "linear-gradient(to bottom, #ef7a70, #b3261e)", warn: "linear-gradient(to bottom, #f1c05a, #b7791f)" }[t];
+  const grad = {
+    pos: "linear-gradient(to bottom, #5fd1a0, #0b7a4b)",
+    neg: "linear-gradient(to bottom, #ef7a70, #b3261e)",
+    warn: "linear-gradient(to bottom, #f1c05a, #b7791f)",
+  }[t];
   const w = Math.min(1, Math.abs(value) / max) * 50;
   return (
-    <div className="gridtex relative inline-block rounded-full align-middle" style={{ width, height }} role="img" aria-label={`delta ${value.toFixed(2)}`}>
-      <div className="rod absolute inset-y-0" style={{ background: grad, width: `${w}%`, left: value >= 0 ? "50%" : `${50 - w}%`, transition: "width 240ms ease-out" }} />
+    <div
+      className="gridtex relative inline-block rounded-full align-middle"
+      style={{ width, height }}
+      role="img"
+      aria-label={`delta ${value.toFixed(2)}`}
+    >
+      <div
+        className="rod absolute inset-y-0"
+        style={{
+          background: grad,
+          width: `${w}%`,
+          left: value >= 0 ? "50%" : `${50 - w}%`,
+          transition: "width 240ms ease-out",
+        }}
+      />
       <div className="absolute inset-y-[-2px] left-1/2 w-px bg-ink-3/60" />
     </div>
   );
@@ -164,7 +325,17 @@ const PATHS: Record<string, string> = {
 };
 export function Icon({ name, size = 15 }: { name: keyof typeof PATHS | string; size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d={PATHS[name] ?? PATHS.queue} />
     </svg>
   );
@@ -175,8 +346,14 @@ export function CitationChip({ kind, label, quote }: { kind: "report" | "engine"
   const [open, setOpen] = useState(false);
   return (
     <span className="inline-block align-baseline">
-      <button type="button" className={`chip ${kind === "report" ? "chip-report" : "chip-engine"}`} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <Icon name={kind === "report" ? "link" : "spark"} size={11} />{label}
+      <button
+        type="button"
+        className={`chip ${kind === "report" ? "chip-report" : "chip-engine"}`}
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <Icon name={kind === "report" ? "link" : "spark"} size={11} />
+        {label}
       </button>
       {open && quote && <span className="quote block">&ldquo;{quote}&rdquo;</span>}
     </span>
@@ -189,9 +366,12 @@ export function Citations({ citations }: { citations: Cite[] }) {
   return (
     <span className="inline-flex flex-wrap items-start gap-1">
       {citations.map((c, i) =>
-        c.kind === "report"
-          ? <CitationChip key={i} kind="report" label={`${c.report_id} p.${c.page}`} quote={c.quote} />
-          : <CitationChip key={i} kind="engine" label={c.figure} />)}
+        c.kind === "report" ? (
+          <CitationChip key={i} kind="report" label={`${c.report_id} p.${c.page}`} quote={c.quote} />
+        ) : (
+          <CitationChip key={i} kind="engine" label={c.figure} />
+        ),
+      )}
     </span>
   );
 }
@@ -221,7 +401,12 @@ export function Drawer({ title, onClose, children }: { title: string; onClose: (
     <>
       <div className="scrim" onClick={onClose} />
       <aside className="drawer" role="dialog" aria-modal="true" aria-label={title}>
-        <div className="panel-head !px-4 !py-2.5"><h2 className="!text-[1.0769rem]">{title}</h2><button type="button" className="btn btn-ghost btn-sm ml-auto" onClick={onClose} aria-label="Close"><Icon name="close" /></button></div>
+        <div className="panel-head !px-4 !py-2.5">
+          <h2 className="!text-[1.0769rem]">{title}</h2>
+          <button type="button" className="btn btn-ghost btn-sm ml-auto" onClick={onClose} aria-label="Close">
+            <Icon name="close" />
+          </button>
+        </div>
         <div className="flex-1 space-y-3 overflow-y-auto p-4">{children}</div>
       </aside>
     </>,

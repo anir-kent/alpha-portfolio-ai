@@ -62,7 +62,11 @@ function useRunProgress(initial: RunSnapshot) {
     es.onopen = () => setStream("live");
     es.addEventListener("progress", (e) => {
       let next: RunSnapshot;
-      try { next = JSON.parse((e as MessageEvent).data) as RunSnapshot; } catch { return; } // the next event carries it all again
+      try {
+        next = JSON.parse((e as MessageEvent).data) as RunSnapshot;
+      } catch {
+        return;
+      } // the next event carries it all again
       setSnap(next);
       setStream("live");
       if (next.outcome) es.close(); // final: the server closes too, and the browser must not reconnect
@@ -71,11 +75,14 @@ function useRunProgress(initial: RunSnapshot) {
     return () => es.close();
   }, [runId, attempt]);
 
-  useEffect(() => { // the fallback: poll the snapshot while the stream is unavailable and the run goes on
+  useEffect(() => {
+    // the fallback: poll the snapshot while the stream is unavailable and the run goes on
     if (stream !== "unavailable" || finished) return;
     let stopped = false;
     const poll = async () => {
-      const { data } = await api.GET("/api/analysis/runs/{run_id}", { params: { path: { run_id: runId } } }).catch(() => ({ data: undefined }));
+      const { data } = await api
+        .GET("/api/analysis/runs/{run_id}", { params: { path: { run_id: runId } } })
+        .catch(() => ({ data: undefined }));
       if (stopped) return;
       setPollFailed(!data);
       if (!data) return;
@@ -84,7 +91,10 @@ function useRunProgress(initial: RunSnapshot) {
     };
     poll();
     const t = setInterval(poll, POLL_MS);
-    return () => { stopped = true; clearInterval(t); };
+    return () => {
+      stopped = true;
+      clearInterval(t);
+    };
   }, [stream, finished, runId]);
 
   return { snap, stream, pollFailed };
@@ -110,26 +120,46 @@ function StepIcon({ outcome }: { outcome: Step["outcome"] }) {
 /** Inside the live region only outcome changes are read out: the ticking timer and the n/N count are hidden from it.
  * `inlineError` shows a failed step's message under it; a Failed run says it once, below the list, instead. */
 function StepRow({ step, now, inlineError }: { step: Step; now: number; inlineError: boolean }) {
-  const time = step.started_at && step.finished_at ? duration(step.started_at, step.finished_at)
-    : step.outcome === "running" && step.started_at ? duration(step.started_at, now) : null;
+  const time =
+    step.started_at && step.finished_at
+      ? duration(step.started_at, step.finished_at)
+      : step.outcome === "running" && step.started_at
+        ? duration(step.started_at, now)
+        : null;
   const count = step.total != null ? `${step.done ?? 0}/${step.total}` : null;
   return (
     <li className={`run-step run-step-${step.outcome}`}>
       <StepIcon outcome={step.outcome} />
       <span className="flex-1">
         {step.label}
-        {count && <span className="mono ml-2 text-ink-3" aria-hidden="true">{count}</span>}
+        {count && (
+          <span className="mono ml-2 text-ink-3" aria-hidden="true">
+            {count}
+          </span>
+        )}
         <span className="sr-only">: {step.outcome}</span>
-        {inlineError && step.outcome === "failed" && step.error && <span className="block font-normal text-neg">{step.error}</span>}
+        {inlineError && step.outcome === "failed" && step.error && (
+          <span className="block font-normal text-neg">{step.error}</span>
+        )}
       </span>
-      {step.outcome === "skipped" ? <span className="text-ink-3">skipped</span>
-        : time && <span className="mono text-ink-3" aria-hidden={step.outcome === "running"}>{time}</span>}
+      {step.outcome === "skipped" ? (
+        <span className="text-ink-3">skipped</span>
+      ) : (
+        time && (
+          <span className="mono text-ink-3" aria-hidden={step.outcome === "running"}>
+            {time}
+          </span>
+        )
+      )}
     </li>
   );
 }
 
 const HEADLINE: Record<NonNullable<RunSnapshot["outcome"]>, string> = {
-  completed: "Completed", completed_with_warnings: "Completed with warnings", failed: "Failed", interrupted: "Interrupted",
+  completed: "Completed",
+  completed_with_warnings: "Completed with warnings",
+  failed: "Failed",
+  interrupted: "Interrupted",
 };
 
 /** What a Failed run tells the user: the failed Run Step, that nothing changed, and a reference for the server log. */
@@ -151,7 +181,15 @@ function interruptedMessage(snap: RunSnapshot): string {
  * close, Tab stays inside, Escape hides it. Closing never stops the run. On a successful outcome the Queue and
  * Recommendation views are refreshed.
  */
-export function RunAnalysisModal({ initial, onClose, trigger }: { initial: RunSnapshot; onClose: () => void; trigger: RefObject<HTMLElement | null> }) {
+export function RunAnalysisModal({
+  initial,
+  onClose,
+  trigger,
+}: {
+  initial: RunSnapshot;
+  onClose: () => void;
+  trigger: RefObject<HTMLElement | null>;
+}) {
   const qc = useQueryClient();
   const { snap, stream, pollFailed } = useRunProgress(initial);
   const finished = snap.outcome != null;
@@ -172,17 +210,24 @@ export function RunAnalysisModal({ initial, onClose, trigger }: { initial: RunSn
     qc.invalidateQueries({ queryKey: ["portfolio"] }); // each Portfolio view carries its Recommendation
   }, [resultsChanged, qc]);
 
-  useEffect(() => { // Escape hides it wherever focus is, like the Drawer
+  useEffect(() => {
+    // Escape hides it wherever focus is, like the Drawer
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const onKeyDown = (e: ReactKeyboardEvent) => { // Tab stays inside
+  const onKeyDown = (e: ReactKeyboardEvent) => {
+    // Tab stays inside
     if (e.key !== "Tab" || !dialog.current) return;
-    const focusable = [...dialog.current.querySelectorAll<HTMLElement>("button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])")];
+    const focusable = [
+      ...dialog.current.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
+      ),
+    ];
     if (focusable.length === 0) return e.preventDefault();
-    const first = focusable[0], last = focusable[focusable.length - 1];
+    const first = focusable[0],
+      last = focusable[focusable.length - 1];
     if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) {
       e.preventDefault();
       last.focus();
@@ -197,17 +242,30 @@ export function RunAnalysisModal({ initial, onClose, trigger }: { initial: RunSn
     <>
       <div className="scrim" onClick={onClose} />
       <div
-        ref={dialog} className="run-modal" role="dialog" aria-modal="true" aria-labelledby="run-modal-title" tabIndex={-1}
+        ref={dialog}
+        className="run-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="run-modal-title"
+        tabIndex={-1}
         onKeyDown={onKeyDown}
       >
         <div className="panel-head !px-4 !py-2.5">
-          <h2 id="run-modal-title" className="!text-[1.0769rem]">Analysis run <span className="mono text-ink-3">#{snap.run_id}</span></h2>
-          <span className="mono ml-auto text-ink-3" aria-label={`Total time ${total}`}>{total}</span>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close"><Icon name="close" /></button>
+          <h2 id="run-modal-title" className="!text-[1.0769rem]">
+            Analysis run <span className="mono text-ink-3">#{snap.run_id}</span>
+          </h2>
+          <span className="mono ml-auto text-ink-3" aria-label={`Total time ${total}`}>
+            {total}
+          </span>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close">
+            <Icon name="close" />
+          </button>
         </div>
         <div className="space-y-3 p-4">
           <ol className="space-y-1" aria-live="polite" aria-label="Run Steps">
-            {snap.steps.map((s) => <StepRow key={s.key} step={s} now={now} inlineError={snap.outcome !== "failed"} />)}
+            {snap.steps.map((s) => (
+              <StepRow key={s.key} step={s} now={now} inlineError={snap.outcome !== "failed"} />
+            ))}
           </ol>
           <p role="status" className={finished ? "font-semibold" : "text-ink-3"}>
             {snap.outcome ? HEADLINE[snap.outcome] : "Running… You can close this; the run carries on."}
@@ -215,12 +273,20 @@ export function RunAnalysisModal({ initial, onClose, trigger }: { initial: RunSn
           {snap.outcome === "failed" && <p className="text-neg">{failedMessage(snap)}</p>}
           {snap.outcome === "interrupted" && <p className="text-neg">{interruptedMessage(snap)}</p>}
           {!finished && STREAM_NOTE[stream] && (
-            <p className="text-ink-3">{pollFailed ? "Could not load the run's progress. Retrying…" : STREAM_NOTE[stream]}</p>
+            <p className="text-ink-3">
+              {pollFailed ? "Could not load the run's progress. Retrying…" : STREAM_NOTE[stream]}
+            </p>
           )}
         </div>
         <div className="flex justify-end gap-2 border-t border-[rgb(31_38_80/0.08)] px-4 py-2.5">
-          <button type="button" className="btn" onClick={onClose}>Close</button>
-          {SUCCESS.has(snap.outcome) && <button type="button" className="btn btn-primary" onClick={onClose}>View updated queue</button>}
+          <button type="button" className="btn" onClick={onClose}>
+            Close
+          </button>
+          {SUCCESS.has(snap.outcome) && (
+            <button type="button" className="btn btn-primary" onClick={onClose}>
+              View updated queue
+            </button>
+          )}
         </div>
       </div>
     </>,

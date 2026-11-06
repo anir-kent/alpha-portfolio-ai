@@ -178,7 +178,9 @@ class RecommendationRow(Base):
     parent_id: Mapped[int | None] = mapped_column(nullable=True)
     version: Mapped[int] = mapped_column()
     run_id: Mapped[int] = mapped_column(ForeignKey("analysis_runs.id"))
-    status: Mapped[str] = mapped_column(String, index=True)  # pending_advisor | pending_compliance | pending_committee | approved | rejected | superseded
+    status: Mapped[str] = mapped_column(
+        String, index=True
+    )  # pending_advisor | pending_compliance | pending_committee | approved | rejected | superseded
     created_at: Mapped[str] = mapped_column(String)
     created_by: Mapped[str] = mapped_column(String)
     summary: Mapped[str] = mapped_column(Text)
@@ -257,7 +259,9 @@ class GroundingResultRow(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     check_id: Mapped[str] = mapped_column(String, index=True)  # one validation call
     recommendation_id: Mapped[int | None] = mapped_column(ForeignKey("recommendations.id"), index=True, nullable=True)
-    run_id: Mapped[int | None] = mapped_column(ForeignKey("analysis_runs.id"), index=True, nullable=True)  # a priority narrative's claims
+    run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("analysis_runs.id"), index=True, nullable=True
+    )  # a priority narrative's claims
     client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), index=True)
     claim_index: Mapped[int] = mapped_column()
     text: Mapped[str] = mapped_column(Text)
@@ -289,7 +293,9 @@ class RecommendationTiltRow(Base):
     bound_pp: Mapped[float] = mapped_column()  # the bound in force when clipped
     model: Mapped[str | None] = mapped_column(String, nullable=True)
     prompt_version: Mapped[str] = mapped_column(String)
-    entries_json: Mapped[str] = mapped_column(Text)  # [{subject_kind, subject, exposure_pct, proposed_pp, allowed_pp, clipped, reason, insight_ids}]
+    entries_json: Mapped[str] = mapped_column(
+        Text
+    )  # [{subject_kind, subject, exposure_pct, proposed_pp, allowed_pp, clipped, reason, insight_ids}]
     dropped_json: Mapped[str] = mapped_column(Text)
 
 

@@ -1,5 +1,6 @@
 """Seam: the Analysis Run lifecycle through the HTTP API (ADR-0005). A run starts in the background; its Run Steps are read
 back as snapshots. Timing is controlled only through the LLM the app is given."""
+
 import json
 import logging
 import shutil
@@ -40,7 +41,11 @@ def test_start_returns_202_and_a_snapshot_listing_all_five_run_steps(advisor):
     assert snap["actor_name"] == "advisor" and snap["started_at"] and snap["outcome"] is None
     assert [s["key"] for s in snap["steps"]] == KEYS
     assert [s["label"] for s in snap["steps"]] == [
-        "Load inputs", "Score Portfolios", "Record run", "Priority narratives", "Recommendation narratives",
+        "Load inputs",
+        "Score Portfolios",
+        "Record run",
+        "Priority narratives",
+        "Recommendation narratives",
     ]
     assert {s["outcome"] for s in snap["steps"]} <= {"pending", "running", "done"}
     wait_for_outcome(advisor, snap["run_id"])
@@ -170,29 +175,48 @@ def run_events(app) -> list[tuple]:
     start = next(n for n, e in enumerate(events) if e.type == "analysis_run_started")
     ref = {e.id: (e.type, e.payload_json) for e in events[:start]} | {e.id: n for n, e in enumerate(events[start:])}
     return [
-        (e.type, e.actor_kind, e.actor_name, e.actor_role,
-         {k: v for k, v in json.loads(e.payload_json).items() if k != "exchange_hash"}, e.portfolio_id, e.client_id,
-         e.recommendation_id, [ref[p] for p in json.loads(e.parent_ids_json)])
+        (
+            e.type,
+            e.actor_kind,
+            e.actor_name,
+            e.actor_role,
+            {k: v for k, v in json.loads(e.payload_json).items() if k != "exchange_hash"},
+            e.portfolio_id,
+            e.client_id,
+            e.recommendation_id,
+            [ref[p] for p in json.loads(e.parent_ids_json)],
+        )
         for e in events[start:]
     ]
 
 
-def test_a_background_run_records_the_same_queue_and_audit_events_as_a_synchronous_run(app, advisor, settings, tmp_path):
+def test_a_background_run_records_the_same_queue_and_audit_events_as_a_synchronous_run(
+    app, advisor, settings, tmp_path
+):
     seed_research(app.state.session_factory)
     run_and_wait(advisor)
 
     sync_dir = tmp_path / "sync"
     sync_dir.mkdir()
-    sync_app = create_app(settings.model_copy(update={
-        "database_url": f"sqlite:///{sync_dir / 'test.db'}", "market_data_snapshot_path": str(sync_dir / "snapshot.json"),
-    }))
+    sync_app = create_app(
+        settings.model_copy(
+            update={
+                "database_url": f"sqlite:///{sync_dir / 'test.db'}",
+                "market_data_snapshot_path": str(sync_dir / "snapshot.json"),
+            }
+        )
+    )
     shutil.copy(SNAPSHOT, sync_app.state.settings.market_data_snapshot_path)
     seed_clients(sync_app.state.session_factory, MarketData.load(SNAPSHOT, LOOKTHROUGH))
     seed_research(sync_app.state.session_factory)
     with sync_app.state.session_factory() as db:
-        run_analysis(db, MarketData.load(SNAPSHOT, LOOKTHROUGH), audit.Actor.user("advisor", "advisor"), sync_app.state.llm)
+        run_analysis(
+            db, MarketData.load(SNAPSHOT, LOOKTHROUGH), audit.Actor.user("advisor", "advisor"), sync_app.state.llm
+        )
     sync_advisor = TestClient(sync_app)
-    assert sync_advisor.post("/api/auth/login", json={"username": "advisor", "password": SEED_PASSWORD}).status_code == 200
+    assert (
+        sync_advisor.post("/api/auth/login", json={"username": "advisor", "password": SEED_PASSWORD}).status_code == 200
+    )
 
     assert advisor.get("/api/queue").json() == sync_advisor.get("/api/queue").json()
     background, synchronous = run_events(app), run_events(sync_app)
@@ -207,7 +231,9 @@ def test_a_database_from_before_run_outcomes_gets_them_and_its_completed_runs_re
             "CREATE TABLE analysis_runs (id INTEGER PRIMARY KEY, started_at VARCHAR, actor_name VARCHAR, as_of VARCHAR,"
             " config_json TEXT, completed BOOLEAN)"
         )
-        conn.execute("INSERT INTO analysis_runs VALUES (1, '2026-01-01T00:00:00.000000Z', 'advisor', '2026-01-01', '{}', 1)")
+        conn.execute(
+            "INSERT INTO analysis_runs VALUES (1, '2026-01-01T00:00:00.000000Z', 'advisor', '2026-01-01', '{}', 1)"
+        )
     snap = restart(settings).get(f"{RUNS}/1").json()
     assert snap["outcome"] == "completed" and outcomes(snap) == ["done"] * 5
 
@@ -241,7 +267,9 @@ def test_broken_market_data_fails_score_portfolios_and_skips_the_later_steps_wit
     assert "secret" not in json.dumps(snap) and "RuntimeError" not in json.dumps(snap)
 
 
-def test_a_failed_run_keeps_nothing_supersedes_nothing_and_the_queue_still_serves_the_previous_run(app, advisor, broken_market):
+def test_a_failed_run_keeps_nothing_supersedes_nothing_and_the_queue_still_serves_the_previous_run(
+    app, advisor, broken_market
+):
     seed_research(app.state.session_factory)
     previous = run_and_wait(advisor)
     queue = advisor.get("/api/queue").json()
@@ -265,7 +293,10 @@ def test_a_failed_run_keeps_nothing_supersedes_nothing_and_the_queue_still_serve
 
 
 def test_a_failed_run_logs_its_traceback_by_run_id_keeps_its_row_and_a_new_run_starts_straight_away(
-    app, advisor, broken_market, caplog,
+    app,
+    advisor,
+    broken_market,
+    caplog,
 ):
     broken_market()
     with caplog.at_level(logging.ERROR, logger="app.analysis_runs"):
@@ -302,7 +333,9 @@ class NarrativeFailingLlm:
 AI_STEP_FAILED = "Narrative unavailable (AI step failed; scores are unaffected)."
 
 
-def test_an_llm_failing_in_the_narrative_steps_ends_completed_with_warnings_and_the_queue_moves_on(app, advisor, settings):
+def test_an_llm_failing_in_the_narrative_steps_ends_completed_with_warnings_and_the_queue_moves_on(
+    app, advisor, settings
+):
     seed_research(app.state.session_factory)
     previous = run_and_wait(advisor)
     app.state.llm = NarrativeFailingLlm(settings.llm_recordings_dir)
@@ -314,7 +347,9 @@ def test_an_llm_failing_in_the_narrative_steps_ends_completed_with_warnings_and_
     assert advisor.get("/api/queue").json()["run_id"] == snap["run_id"] != previous
 
 
-def test_recommendation_narratives_still_run_after_the_priority_narratives_step_blows_up(app, advisor, settings, caplog):
+def test_recommendation_narratives_still_run_after_the_priority_narratives_step_blows_up(
+    app, advisor, settings, caplog
+):
     seed_research(app.state.session_factory)
     app.state.llm = NarrativeFailingLlm(settings.llm_recordings_dir, failing=(PRIORITY_NARRATIVE.name,), blow_up=True)
     with caplog.at_level(logging.ERROR, logger="app.analysis_runs"):
@@ -331,7 +366,8 @@ def strand_a_run(settings, *, completed: bool) -> int:
     with sqlite3.connect(settings.database_url.removeprefix("sqlite:///")) as conn:
         cur = conn.execute(
             "INSERT INTO analysis_runs (started_at, actor_name, as_of, config_json, completed)"
-            " VALUES ('2026-01-01T00:00:00.000000Z', 'advisor', '2026-01-01', '{}', ?)", (completed,),
+            " VALUES ('2026-01-01T00:00:00.000000Z', 'advisor', '2026-01-01', '{}', ?)",
+            (completed,),
         )
         assert cur.lastrowid is not None
         return cur.lastrowid

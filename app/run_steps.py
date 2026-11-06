@@ -2,13 +2,18 @@
 
 Progress is telemetry, not a business fact: nothing here writes to the database or the audit chain.
 """
+
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Literal, Protocol, get_args
 
 RunStepKey = Literal[
-    "load_inputs", "score_portfolios", "record_run", "priority_narratives", "recommendation_narratives",
+    "load_inputs",
+    "score_portfolios",
+    "record_run",
+    "priority_narratives",
+    "recommendation_narratives",
 ]
 
 
@@ -19,7 +24,9 @@ class RunStep:
     failure_message: str  # what a failed step shows: fixed and safe; the exception itself only goes to the server log
 
 
-AI_STEP_FAILED = "Narrative unavailable (AI step failed; scores are unaffected)."  # the Queue's wording for a failed narrative
+AI_STEP_FAILED = (
+    "Narrative unavailable (AI step failed; scores are unaffected)."  # the Queue's wording for a failed narrative
+)
 
 RUN_STEPS: tuple[RunStep, ...] = (
     RunStep("load_inputs", "Load inputs", "Loading inputs failed"),
@@ -49,11 +56,20 @@ class RunStepReporter(Protocol):
 class NullReporter:
     """What the command-line run gets: progress goes nowhere."""
 
-    def step_started(self, key: RunStepKey) -> None: pass
-    def step_finished(self, key: RunStepKey) -> None: pass
-    def step_skipped(self, key: RunStepKey) -> None: pass
-    def step_failed(self, key: RunStepKey) -> None: pass
-    def portfolios_scored(self, done: int, total: int) -> None: pass
+    def step_started(self, key: RunStepKey) -> None:
+        pass
+
+    def step_finished(self, key: RunStepKey) -> None:
+        pass
+
+    def step_skipped(self, key: RunStepKey) -> None:
+        pass
+
+    def step_failed(self, key: RunStepKey) -> None:
+        pass
+
+    def portfolios_scored(self, done: int, total: int) -> None:
+        pass
 
 
 @contextmanager
@@ -65,13 +81,15 @@ def run_step(reporter: RunStepReporter, key: RunStepKey) -> Iterator[None]:
         yield
     except BaseException:
         reporter.step_failed(key)
-        for later in RUN_STEP_KEYS[RUN_STEP_KEYS.index(key) + 1:]:
+        for later in RUN_STEP_KEYS[RUN_STEP_KEYS.index(key) + 1 :]:
             reporter.step_skipped(later)
         raise
     reporter.step_finished(key)
 
 
-def run_ai_steps(reporter: RunStepReporter, steps: Sequence[tuple[RunStepKey, Callable[[], int]]], recover: Callable[[], None]) -> None:
+def run_ai_steps(
+    reporter: RunStepReporter, steps: Sequence[tuple[RunStepKey, Callable[[], int]]], recover: Callable[[], None]
+) -> None:
     """Run each AI step in turn; each returns how many of its items failed. A step is failed if any item failed or it
     raised. One failing never stops the next: after an exception, `recover` readies the session for it, and the first
     exception is re-raised once every step has run, so the caller still sees (and logs) it."""

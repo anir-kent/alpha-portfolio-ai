@@ -74,9 +74,20 @@ def _canonical(value) -> str:
 
 def _digest(row: AuditEventRow) -> str:
     content = [
-        row.type, row.actor_kind, row.actor_name, row.actor_role, row.model, row.prompt_version,
-        row.timestamp, json.loads(row.payload_json), json.loads(row.parent_ids_json),
-        row.portfolio_id, row.client_id, row.recommendation_id, row.report_id, row.previous_hash,
+        row.type,
+        row.actor_kind,
+        row.actor_name,
+        row.actor_role,
+        row.model,
+        row.prompt_version,
+        row.timestamp,
+        json.loads(row.payload_json),
+        json.loads(row.parent_ids_json),
+        row.portfolio_id,
+        row.client_id,
+        row.recommendation_id,
+        row.report_id,
+        row.previous_hash,
     ]
     return hashlib.sha256(_canonical(content).encode()).hexdigest()
 
@@ -104,13 +115,21 @@ def record(
                 raise ValueError(f"Unknown parent event ids: {sorted(set(parent_ids) - found)}")
         last = db.scalar(select(AuditEventRow).order_by(AuditEventRow.id.desc()).limit(1))
         row = AuditEventRow(
-            type=type, actor_kind=actor.kind, actor_name=actor.name, actor_role=actor.role,
-            model=actor.model, prompt_version=actor.prompt_version,
+            type=type,
+            actor_kind=actor.kind,
+            actor_name=actor.name,
+            actor_role=actor.role,
+            model=actor.model,
+            prompt_version=actor.prompt_version,
             timestamp=format_ts(datetime.now(UTC)),
-            payload_json=_canonical(payload or {}), parent_ids_json=_canonical(parent_ids),
-            portfolio_id=portfolio_id, client_id=client_id,
-            recommendation_id=recommendation_id, report_id=report_id,
-            previous_hash=last.hash if last else GENESIS_HASH, hash="",
+            payload_json=_canonical(payload or {}),
+            parent_ids_json=_canonical(parent_ids),
+            portfolio_id=portfolio_id,
+            client_id=client_id,
+            recommendation_id=recommendation_id,
+            report_id=report_id,
+            previous_hash=last.hash if last else GENESIS_HASH,
+            hash="",
         )
         row.hash = _digest(row)
         db.add(row)
@@ -150,7 +169,10 @@ def _exchange_problem(db: Session, row: AuditEventRow) -> tuple[int, str] | None
     if ex is None:
         return exchange_id, f"LLM Exchange #{exchange_id} referenced by this event is missing"
     if exchange_digest(ex) != pinned or ex.hash != pinned:
-        return exchange_id, f"LLM Exchange #{exchange_id} referenced by this event was altered (its hash no longer matches)"
+        return (
+            exchange_id,
+            f"LLM Exchange #{exchange_id} referenced by this event was altered (its hash no longer matches)",
+        )
     return None
 
 
@@ -163,15 +185,21 @@ def verify(db: Session) -> Verification:
     for row in db.scalars(select(AuditEventRow).order_by(AuditEventRow.id)):
         if row.previous_hash != expected_prev:
             return Verification(
-                False, checked, row.id,
+                False,
+                checked,
+                row.id,
                 "previous hash does not match the preceding event (an earlier event was altered or removed)",
                 exchanges_checked=exchanges,
             )
         if _digest(row) != row.hash:
-            return Verification(False, checked, row.id, "stored hash does not match event content", exchanges_checked=exchanges)
+            return Verification(
+                False, checked, row.id, "stored hash does not match event content", exchanges_checked=exchanges
+            )
         problem = _exchange_problem(db, row)
         if problem:
-            return Verification(False, checked, row.id, problem[1], exchanges_checked=exchanges, first_broken_exchange_id=problem[0])
+            return Verification(
+                False, checked, row.id, problem[1], exchanges_checked=exchanges, first_broken_exchange_id=problem[0]
+            )
         if exchange_reference(row.payload_json)[0] is not None:
             exchanges += 1
         expected_prev = row.hash
@@ -196,9 +224,12 @@ def search(
     """Newest-first matching events and the total match count."""
     q = select(AuditEventRow)
     for column, value in (
-        (AuditEventRow.type, type), (AuditEventRow.actor_name, actor),
-        (AuditEventRow.portfolio_id, portfolio_id), (AuditEventRow.client_id, client_id),
-        (AuditEventRow.recommendation_id, recommendation_id), (AuditEventRow.report_id, report_id),
+        (AuditEventRow.type, type),
+        (AuditEventRow.actor_name, actor),
+        (AuditEventRow.portfolio_id, portfolio_id),
+        (AuditEventRow.client_id, client_id),
+        (AuditEventRow.recommendation_id, recommendation_id),
+        (AuditEventRow.report_id, report_id),
     ):
         if value:
             q = q.where(column == value)

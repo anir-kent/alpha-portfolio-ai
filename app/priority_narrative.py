@@ -5,6 +5,7 @@ Portfolio holds, and writes claims. Every claim goes through the grounding valid
 assembled here, by the engine, from the *grounded* claims only; flagged claims stay visible beside it, marked as flagged.
 A failing LLM leaves the queue row exactly as it was.
 """
+
 import json
 from datetime import UTC, datetime
 
@@ -28,8 +29,10 @@ class NarrativeReply(BaseModel):
 def figures(result: PriorityResultRow, sector_pct: dict[str, float]) -> dict[str, float]:
     """Every number the engine produced for this queue row, by name."""
     f = {
-        "priority_score": result.score, "portfolio_drift_pp": result.portfolio_drift_pp,
-        "days_past_due": float(result.days_past_due), "total_value": result.total_value,
+        "priority_score": result.score,
+        "portfolio_drift_pp": result.portfolio_drift_pp,
+        "days_past_due": float(result.days_past_due),
+        "total_value": result.total_value,
     }
     for c in json.loads(result.components_json):
         for key in ("raw", "weight", "points"):
@@ -44,16 +47,28 @@ def figures(result: PriorityResultRow, sector_pct: dict[str, float]) -> dict[str
 
 def _request(result: PriorityResultRow, fig: dict[str, float], insights: list) -> LlmRequest:
     payload = {
-        "portfolio_id": result.client_id, "risk_profile": result.risk_profile, "figures": fig,
+        "portfolio_id": result.client_id,
+        "risk_profile": result.risk_profile,
+        "figures": fig,
         "insights": [
-            {"id": i.id, "subject": i.subject, "direction": i.direction, "confidence": i.confidence,
-             "report_id": i.report_id, "page": i.page, "passage": i.passage}
+            {
+                "id": i.id,
+                "subject": i.subject,
+                "direction": i.direction,
+                "confidence": i.confidence,
+                "report_id": i.report_id,
+                "page": i.page,
+                "passage": i.passage,
+            }
             for i in insights
         ],
     }
     return LlmRequest(
-        task=PRIORITY_NARRATIVE.name, prompt_version=PRIORITY_NARRATIVE.label, system=PRIORITY_NARRATIVE.system,
-        user=json.dumps(payload, sort_keys=True), schema=NarrativeReply.model_json_schema(),
+        task=PRIORITY_NARRATIVE.name,
+        prompt_version=PRIORITY_NARRATIVE.label,
+        system=PRIORITY_NARRATIVE.system,
+        user=json.dumps(payload, sort_keys=True),
+        schema=NarrativeReply.model_json_schema(),
     )
 
 
@@ -67,7 +82,8 @@ def build_summary(results: list[grounding.ClaimResult]) -> str | None:
 
 def _scored_event_id(db: Session, run_id: int, client_id: str) -> int | None:
     events = db.scalars(
-        select(AuditEventRow).where(AuditEventRow.type == "priority_scored", AuditEventRow.client_id == client_id)
+        select(AuditEventRow)
+        .where(AuditEventRow.type == "priority_scored", AuditEventRow.client_id == client_id)
         .order_by(AuditEventRow.id.desc())
     )
     return next((e.id for e in events if json.loads(e.payload_json).get("run_id") == run_id), None)
@@ -91,32 +107,64 @@ def generate(db: Session, llm: LlmClient, result: PriorityResultRow, market: Mar
         reply = NarrativeReply.model_validate(response.content)
     except (LlmError, ValidationError) as e:
         row = PriorityNarrativeRow(
-            run_id=result.run_id, client_id=result.client_id, status="failed", error=str(e)[:300],
-            prompt_version=PRIORITY_NARRATIVE.label, created_at=now,
+            run_id=result.run_id,
+            client_id=result.client_id,
+            status="failed",
+            error=str(e)[:300],
+            prompt_version=PRIORITY_NARRATIVE.label,
+            created_at=now,
         )
         db.add(row)
         db.commit()
         audit.record(
-            db, "priority_narrative_generated", audit.Actor.system("priority-narrator", prompt_version=PRIORITY_NARRATIVE.label),
-            {"run_id": result.run_id, "status": "failed", "error": row.error, "insight_ids": offered,
-             **exchange_ref(e if isinstance(e, LlmError) else response)}, parents=parents, **scope,
+            db,
+            "priority_narrative_generated",
+            audit.Actor.system("priority-narrator", prompt_version=PRIORITY_NARRATIVE.label),
+            {
+                "run_id": result.run_id,
+                "status": "failed",
+                "error": row.error,
+                "insight_ids": offered,
+                **exchange_ref(e if isinstance(e, LlmError) else response),
+            },
+            parents=parents,
+            **scope,
         )
         return row
     check_id, results = grounding.validate_figures(
-        db, reply.claims, fig, client_id=result.client_id, run_id=result.run_id, parents=parents,
+        db,
+        reply.claims,
+        fig,
+        client_id=result.client_id,
+        run_id=result.run_id,
+        parents=parents,
     )
     row = PriorityNarrativeRow(
-        run_id=result.run_id, client_id=result.client_id, status="complete", check_id=check_id, model=response.model,
-        prompt_version=response.prompt_version, created_at=now, summary=build_summary(results),
+        run_id=result.run_id,
+        client_id=result.client_id,
+        status="complete",
+        check_id=check_id,
+        model=response.model,
+        prompt_version=response.prompt_version,
+        created_at=now,
+        summary=build_summary(results),
     )
     db.add(row)
     db.commit()
     audit.record(
-        db, "priority_narrative_generated",
+        db,
+        "priority_narrative_generated",
         audit.Actor.system("priority-narrator", model=response.model, prompt_version=response.prompt_version),
-        {"run_id": result.run_id, "status": "complete", "check_id": check_id, "summary": grounding.summarise(results),
-         "insight_ids": offered, **exchange_ref(response)},
-        parents=parents, **scope,
+        {
+            "run_id": result.run_id,
+            "status": "complete",
+            "check_id": check_id,
+            "summary": grounding.summarise(results),
+            "insight_ids": offered,
+            **exchange_ref(response),
+        },
+        parents=parents,
+        **scope,
     )
     return row
 
@@ -124,7 +172,9 @@ def generate(db: Session, llm: LlmClient, result: PriorityResultRow, market: Mar
 def generate_for_run(db: Session, llm: LlmClient, run_id: int, market: MarketData) -> int:
     """A narrative for each of the run's Portfolios with relevant approved research. Returns how many failed."""
     failed = 0
-    for result in db.scalars(select(PriorityResultRow).where(PriorityResultRow.run_id == run_id).order_by(PriorityResultRow.client_id)).all():
+    for result in db.scalars(
+        select(PriorityResultRow).where(PriorityResultRow.run_id == run_id).order_by(PriorityResultRow.client_id)
+    ).all():
         row = generate(db, llm, result, market)
         failed += row is not None and row.status == "failed"
     return failed

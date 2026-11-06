@@ -1,6 +1,7 @@
 """Seam: the HTTP API. Every AI step (Research Tilt, Recommendation memo, prioritisation narrative) is captured as an
 LLM Exchange that its Audit Event references by id and hash, on success and on failure (ADR-0004). Prompts never carry
 a client name or email, which is what lets `llm:read` stand apart from `client:pii`. Recordings and stubs; no network."""
+
 import json
 import re
 

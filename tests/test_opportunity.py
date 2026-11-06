@@ -1,4 +1,5 @@
 """Seam: the Opportunity component as a pure function of look-through sector exposure and approved Insights."""
+
 from types import SimpleNamespace as NS
 
 import pytest
@@ -29,7 +30,9 @@ def test_a_view_in_either_direction_counts_but_a_neutral_view_does_not():
 
 
 def test_a_sector_is_counted_once_however_many_insights_cover_it():
-    assert opportunity_raw(EXPOSURE, [insight("Energy"), insight("Energy", "negative")]) == opportunity_raw(EXPOSURE, [insight("Energy")])
+    assert opportunity_raw(EXPOSURE, [insight("Energy"), insight("Energy", "negative")]) == opportunity_raw(
+        EXPOSURE, [insight("Energy")]
+    )
 
 
 def test_insights_on_sectors_the_portfolio_does_not_hold_or_on_asset_classes_add_nothing():

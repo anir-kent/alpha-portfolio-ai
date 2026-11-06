@@ -3,6 +3,7 @@
 Expected numbers are the planted weights in app/seeder.py (whole-unit quantities, hence the tolerances) and the
 default limits in the spec: equity cap by Risk Profile, 10% single position, 30% sector, cash floor by Risk Profile.
 """
+
 import json
 
 import pytest
@@ -161,8 +162,13 @@ def test_sector_restriction_breaches_on_direct_holdings_and_warns_on_fund_exposu
 
 def test_suitability_evaluation_is_audited_with_its_results(advisor, app):
     with app.state.session_factory() as db:
-        events = list(db.scalars(select(AuditEventRow).where(
-            AuditEventRow.type == "suitability_evaluated", AuditEventRow.recommendation_id.is_(None))))  # current Portfolios
+        events = list(
+            db.scalars(
+                select(AuditEventRow).where(
+                    AuditEventRow.type == "suitability_evaluated", AuditEventRow.recommendation_id.is_(None)
+                )
+            )
+        )  # current Portfolios
         started = db.scalar(select(AuditEventRow).where(AuditEventRow.type == "analysis_run_started"))
         assert len(events) == 25
         e = next(e for e in events if e.portfolio_id == PLANTED["restricted_breach"])
@@ -170,8 +176,11 @@ def test_suitability_evaluation_is_audited_with_its_results(advisor, app):
         assert payload["status"] == "breach" and [r["rule_id"] for r in payload["rules"]] == RULE_IDS
         assert any(f["subject"] == "XOM" for r in payload["rules"] for f in r["findings"])
         assert started.id in json.loads(e.parent_ids_json) and e.client_id == PLANTED["restricted_breach"]
-        scored = db.scalar(select(AuditEventRow).where(
-            AuditEventRow.type == "priority_scored", AuditEventRow.portfolio_id == PLANTED["restricted_breach"]))
+        scored = db.scalar(
+            select(AuditEventRow).where(
+                AuditEventRow.type == "priority_scored", AuditEventRow.portfolio_id == PLANTED["restricted_breach"]
+            )
+        )
         assert e.id in json.loads(scored.parent_ids_json)  # the score is traceable to its suitability result
         assert audit.verify(db).valid
 
@@ -205,18 +214,27 @@ def test_taxable_gain_counts_gains_only_and_is_not_offset_by_losses(advisor, app
 
     cid = PLANTED["overweight_energy"]
     with app.state.session_factory() as db:  # taxable equity at a 50% gain, every other taxable holding at a 50% loss
-        acct = {a.id for a in db.scalars(select(AccountRow).where(AccountRow.client_id == cid, AccountRow.tax_status == "taxable"))}
+        acct = {
+            a.id
+            for a in db.scalars(
+                select(AccountRow).where(AccountRow.client_id == cid, AccountRow.tax_status == "taxable")
+            )
+        }
         for h in db.scalars(select(HoldingRow).where(HoldingRow.account_id.in_(acct))):
             price = next(x["price"] for x in advisor.get(url(cid)).json()["holdings"] if x["symbol"] == h.symbol)
             h.cost_basis_per_unit = price * (0.5 if h.symbol in ("XOM", "XLE", "SPY", "JNJ", "PG") else 2.0)
         db.commit()
     body = advisor.get(url(cid)).json()
     taxable_equity_weight = sum(
-        h["weight_pct"] for h in body["holdings"] if h["tax_status"] == "taxable" and h["symbol"] in ("XOM", "XLE", "SPY", "JNJ", "PG")
+        h["weight_pct"]
+        for h in body["holdings"]
+        if h["tax_status"] == "taxable" and h["symbol"] in ("XOM", "XLE", "SPY", "JNJ", "PG")
     )
     run_and_wait(advisor)
     f = finding(rule(advisor, cid, "SR-07"), "taxable gains")
-    assert f["actual"] == pytest.approx(taxable_equity_weight / 2, abs=0.05)  # basis at half price: gain is half the value
+    assert f["actual"] == pytest.approx(
+        taxable_equity_weight / 2, abs=0.05
+    )  # basis at half price: gain is half the value
 
 
 def test_sector_etf_in_a_restricted_sector_is_a_direct_breach(advisor, app):

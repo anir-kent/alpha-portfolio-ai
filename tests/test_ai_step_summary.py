@@ -1,5 +1,6 @@
 """Seam: the HTTP API. A Recommendation's AI contribution carries a per-step summary (mode, latency, grounded counts,
 outcome) for any role that can read it, with no raw text; only `llm:read` roles also get the Exchange id (ADR-0004)."""
+
 import json
 
 import pytest
@@ -39,7 +40,11 @@ def test_an_advisor_sees_each_ai_step_with_mode_outcome_and_counts_but_no_raw_te
 @pytest.mark.parametrize("role", ["advisor", "relationship_manager"])
 def test_client_facing_roles_get_the_same_summary_and_never_an_exchange_id(captured, login, role):
     captured.run()
-    rec = login(role).get(f"/api/recommendations/{captured.advisor.get(url('C003')).json()['recommendation']['id']}").json()
+    rec = (
+        login(role)
+        .get(f"/api/recommendations/{captured.advisor.get(url('C003')).json()['recommendation']['id']}")
+        .json()
+    )
     assert set(steps(rec)) == {"tilt", "memo"}
     assert all(s["exchange_id"] is None for s in steps(rec).values())
 

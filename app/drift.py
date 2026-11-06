@@ -1,4 +1,5 @@
 """Drift engine: Asset-Class Drift, Tolerance Band status and Portfolio Drift. Pure, deterministic."""
+
 from dataclasses import dataclass
 from typing import Literal
 
@@ -32,4 +33,6 @@ def compute_drift(actual: dict[str, float], target: dict[str, float], band: Band
         d = round(abs(a - t), 9)  # absorb float noise so values exactly on a band edge classify consistently
         status: Status = "breach" if d >= band.breach else "warn" if d >= band.warn else "ok"
         classes.append(ClassDrift(cls, a, t, a - t, d, status))
-    return PortfolioDrift(classes, sum(c.drift_pp for c in classes) / 2, max((c.drift_pp for c in classes), default=0.0))
+    return PortfolioDrift(
+        classes, sum(c.drift_pp for c in classes) / 2, max((c.drift_pp for c in classes), default=0.0)
+    )

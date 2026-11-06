@@ -1,5 +1,6 @@
 """Seam: the HTTP API. Every LLM call made while ingesting a Report is captured as an immutable LLM Exchange that the
 insight Audit Event references by id and hash (ADR-0004). Recordings only; no network."""
+
 import json
 import re
 from pathlib import Path
@@ -22,8 +23,9 @@ def upload(c, name="house_view_demo.txt", content=None):
 
 def extraction_event(app, report_id):
     with app.state.session_factory() as db:
-        row = db.scalars(select(AuditEventRow).where(
-            AuditEventRow.report_id == report_id, AuditEventRow.type == "insight_extracted")).one()
+        row = db.scalars(
+            select(AuditEventRow).where(AuditEventRow.report_id == report_id, AuditEventRow.type == "insight_extracted")
+        ).one()
         return json.loads(row.payload_json)
 
 
@@ -123,9 +125,14 @@ def live_app(tmp_path):
             return handler(request)
 
         settings = Settings(
-            database_url=f"sqlite:///{tmp_path / 'live.db'}", seed_user_password="test-only-password",
-            market_data_snapshot_path=str(tmp_path / "snapshot.json"), llm_mode="live", llm_api_key=API_KEY,
-            llm_base_url="https://gw.example/v1", llm_model="m")
+            database_url=f"sqlite:///{tmp_path / 'live.db'}",
+            seed_user_password="test-only-password",
+            market_data_snapshot_path=str(tmp_path / "snapshot.json"),
+            llm_mode="live",
+            llm_api_key=API_KEY,
+            llm_base_url="https://gw.example/v1",
+            llm_model="m",
+        )
         return create_app(settings, llm_transport=httpx.MockTransport(recording)), seen
 
     return build
@@ -133,13 +140,20 @@ def live_app(tmp_path):
 
 def provider_ok(request):
     import httpx
-    return httpx.Response(200, json={
-        "model": "claude-sonnet-5-5", "usage": {"prompt_tokens": 321, "completion_tokens": 45, "total_tokens": 366},
-        "choices": [{"message": {"content": GOOD_REPLY}}]})
+
+    return httpx.Response(
+        200,
+        json={
+            "model": "claude-sonnet-5-5",
+            "usage": {"prompt_tokens": 321, "completion_tokens": 45, "total_tokens": 366},
+            "choices": [{"message": {"content": GOOD_REPLY}}],
+        },
+    )
 
 
 def as_role(app, role):
     from fastapi.testclient import TestClient
+
     c = TestClient(app)
     assert c.post("/api/auth/login", json={"username": role, "password": "test-only-password"}).status_code == 200
     return c
@@ -161,7 +175,9 @@ def test_live_exchange_stores_what_crossed_the_wire(live_app):
 
 
 def exchange_for(app, report):
-    return as_role(app, "auditor").get(f"/api/llm/exchanges/{extraction_event(app, report['id'])['exchange_id']}").json()
+    return (
+        as_role(app, "auditor").get(f"/api/llm/exchanges/{extraction_event(app, report['id'])['exchange_id']}").json()
+    )
 
 
 def test_recorded_exchange_marks_tokens_and_latency_as_replayed_not_zero(app, login):
@@ -174,6 +190,7 @@ def test_recorded_exchange_marks_tokens_and_latency_as_replayed_not_zero(app, lo
 
 def test_provider_http_error_is_an_error_exchange_with_status_and_text(live_app):
     import httpx
+
     app, _ = live_app(lambda r: httpx.Response(503, text="upstream overloaded"))
     report = upload(as_role(app, "research_analyst")).json()
     assert report["extraction_status"] == "failed"
@@ -198,9 +215,11 @@ def test_provider_timeout_is_an_error_exchange_with_the_failure_text(live_app):
 
 def test_reply_that_is_not_json_is_an_error_exchange_that_keeps_the_raw_text(live_app):
     import httpx
+
     prose = "Sure! Here are the insights you asked for, in prose."
-    app, _ = live_app(lambda r: httpx.Response(200, json={
-        "usage": {"total_tokens": 9}, "choices": [{"message": {"content": prose}}]}))
+    app, _ = live_app(
+        lambda r: httpx.Response(200, json={"usage": {"total_tokens": 9}, "choices": [{"message": {"content": prose}}]})
+    )
     ex = exchange_for(app, upload(as_role(app, "research_analyst")).json())
     assert ex["outcome"] == "error" and "not valid JSON" in ex["error"]
     assert ex["raw_reply"] == prose and ex["usage"] == {"total_tokens": 9}
@@ -209,6 +228,7 @@ def test_reply_that_is_not_json_is_an_error_exchange_that_keeps_the_raw_text(liv
 
 def test_api_key_and_headers_never_appear_in_any_exchange_or_response(live_app):
     import httpx
+
     # A hostile provider that echoes the credential back in its error body must not get it stored either.
     app, seen = live_app(lambda r: httpx.Response(401, text=f"bad credential {r.headers['authorization']}"))
     report = upload(as_role(app, "research_analyst")).json()
@@ -228,6 +248,7 @@ def test_api_key_and_headers_never_appear_in_any_exchange_or_response(live_app):
 
 def test_reply_with_no_text_content_is_an_error_exchange_not_a_server_error(live_app):
     import httpx
+
     app, _ = live_app(lambda r: httpx.Response(200, json={"choices": [{"message": {"content": None}}]}))
     report = upload(as_role(app, "research_analyst"))
     assert report.status_code == 201 and report.json()["extraction_status"] == "failed"
@@ -238,12 +259,14 @@ def test_reply_with_no_text_content_is_an_error_exchange_not_a_server_error(live
 
 def test_provider_redirect_is_reported_as_an_http_failure(live_app):
     import httpx
+
     app, _ = live_app(lambda r: httpx.Response(301, headers={"location": "https://elsewhere.example/"}))
     ex = exchange_for(app, upload(as_role(app, "research_analyst")).json())
     assert ex["outcome"] == "error" and "HTTP 301" in ex["error"]
 
 
 # --- verification and capture health (ticket 04) -----------------------------------------------------------------
+
 
 def tamper(app, sql, **params):
     with app.state.session_factory() as db:
@@ -262,10 +285,22 @@ def test_verify_names_the_first_event_whose_exchange_was_altered(app, login):
     first = upload(login("research_analyst")).json()
     second = upload(login("research_analyst"), content=b"Another view. We are cautious on energy.\n").json()
     e1, e2 = extraction_event(app, first["id"]), extraction_event(app, second["id"])
-    tamper(app, "update llm_exchanges set user_prompt = 'edited' where id in (:a, :b)", a=e1["exchange_id"], b=e2["exchange_id"])
+    tamper(
+        app,
+        "update llm_exchanges set user_prompt = 'edited' where id in (:a, :b)",
+        a=e1["exchange_id"],
+        b=e2["exchange_id"],
+    )
     with app.state.session_factory() as db:
-        first_event = db.scalars(select(AuditEventRow).where(
-            AuditEventRow.report_id == first["id"], AuditEventRow.type == "insight_extracted")).one().id
+        first_event = (
+            db.scalars(
+                select(AuditEventRow).where(
+                    AuditEventRow.report_id == first["id"], AuditEventRow.type == "insight_extracted"
+                )
+            )
+            .one()
+            .id
+        )
 
     body = login("auditor").get("/api/audit/verify").json()
     assert body["valid"] is False
@@ -310,11 +345,23 @@ def test_governance_reports_capture_health(app, login):
     from app.exchanges import exchange_digest
 
     upload(login("research_analyst"))  # one recorded ok exchange, referenced
-    upload(login("research_analyst"), content=b"A report nobody recorded a reply for.\n")  # one recorded error, referenced
+    upload(
+        login("research_analyst"), content=b"A report nobody recorded a reply for.\n"
+    )  # one recorded error, referenced
     with app.state.session_factory() as db:
         orphan = LlmExchangeRow(
-            created_at="2026-01-01T00:00:00.000000Z", task="t", prompt_version="p@v1", model="m", mode="live",
-            endpoint_host="h", system_text="s", user_prompt="u", reply_schema_json="{}", outcome="ok", hash="")
+            created_at="2026-01-01T00:00:00.000000Z",
+            task="t",
+            prompt_version="p@v1",
+            model="m",
+            mode="live",
+            endpoint_host="h",
+            system_text="s",
+            user_prompt="u",
+            reply_schema_json="{}",
+            outcome="ok",
+            hash="",
+        )
         orphan.hash = exchange_digest(orphan)
         db.add(orphan)
         db.commit()
@@ -325,4 +372,9 @@ def test_governance_reports_capture_health(app, login):
 
 def test_capture_health_is_all_zero_on_an_empty_database(login):
     assert login("auditor").get("/api/governance").json()["capture_health"] == {
-        "total": 0, "live": 0, "recorded": 0, "errors": 0, "unreferenced": 0}
+        "total": 0,
+        "live": 0,
+        "recorded": 0,
+        "errors": 0,
+        "unreferenced": 0,
+    }

@@ -3,6 +3,7 @@
 Pulls prices and metadata from Twelve Data (free tier) into the committed snapshot.
 Usage: APP_TWELVE_DATA_API_KEY=... uv run python -m app.market_refresh
 """
+
 import json
 import os
 import sys
@@ -52,7 +53,12 @@ def refresh_snapshot(api_key: str, out_path, client: httpx.Client | None = None,
     for n, batch in enumerate(batches):
         if n:
             sleep(61)
-        params: dict[str, str | int] = {"symbol": ",".join(batch), "interval": "1day", "outputsize": HISTORY_DAYS, "apikey": api_key}
+        params: dict[str, str | int] = {
+            "symbol": ",".join(batch),
+            "interval": "1day",
+            "outputsize": HISTORY_DAYS,
+            "apikey": api_key,
+        }
         for attempt in range(RETRIES + 1):
             r = client.get(API, params=params)
             if r.status_code != 429 or attempt == RETRIES:

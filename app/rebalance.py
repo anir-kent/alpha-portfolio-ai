@@ -7,6 +7,7 @@ Pure and deterministic; no tilt yet. A Portfolio is rebalanced only when some As
   name), or the class's default fund when there is none.
 A class within 0.5 points of target is left alone. Quantities are whole units rounded down, so a little drift can remain. No tax-lot optimisation.
 """
+
 from dataclasses import dataclass
 from typing import Literal
 
@@ -58,7 +59,9 @@ def plan(
     return sorted(sells, key=key) + sorted(buys, key=key)
 
 
-def _buys(cls: str, amount: float, members: list[dict], restricted: set[str], rows: list[dict], market: MarketData) -> list[TradeLine]:
+def _buys(
+    cls: str, amount: float, members: list[dict], restricted: set[str], rows: list[dict], market: MarketData
+) -> list[TradeLine]:
     funds = [r for r in members if r["kind"] != "equity" and r["symbol"] not in restricted]
     if funds:
         value = sum(r["market_value"] for r in funds)
@@ -86,7 +89,9 @@ def merge(*sets: list[TradeLine]) -> list[TradeLine]:
     net: dict[tuple[str, str], int] = {}
     for lines in sets:
         for line in lines:
-            net[(line.account_id, line.symbol)] = net.get((line.account_id, line.symbol), 0) + (line.quantity if line.side == "buy" else -line.quantity)
+            net[(line.account_id, line.symbol)] = net.get((line.account_id, line.symbol), 0) + (
+                line.quantity if line.side == "buy" else -line.quantity
+            )
     sells = [TradeLine(a, s, "sell", -q) for (a, s), q in net.items() if q < 0]
     buys = [TradeLine(a, s, "buy", q) for (a, s), q in net.items() if q > 0]
     key = lambda line: (line.symbol, line.account_id)  # noqa: E731
@@ -94,8 +99,12 @@ def merge(*sets: list[TradeLine]) -> list[TradeLine]:
 
 
 def sector_sleeve(
-    rows: list[dict], sector_tilts_pp: dict[str, float], restricted: set[str], restricted_sectors: set[str],
-    market: MarketData, total: float,
+    rows: list[dict],
+    sector_tilts_pp: dict[str, float],
+    restricted: set[str],
+    restricted_sectors: set[str],
+    market: MarketData,
+    total: float,
 ) -> list[TradeLine]:
     """Switches inside equity for sector tilts, sized on `total` (the Portfolio value) and priced from `rows` (the Holdings
     after the Asset-Class trades). A positive tilt sells the broad equity fund and buys the sector ETF in the same Account;
@@ -106,7 +115,13 @@ def sector_sleeve(
     out: list[TradeLine] = []
     for sector, pp in sorted(sector_tilts_pp.items()):
         etf = next((i for i in market.instruments() if i.kind == "fund" and i.sector == sector), None)
-        if etf is None or pp == 0 or sector in restricted_sectors or etf.symbol in restricted or broad.symbol in restricted:
+        if (
+            etf is None
+            or pp == 0
+            or sector in restricted_sectors
+            or etf.symbol in restricted
+            or broad.symbol in restricted
+        ):
             continue
         amount = abs(pp) / 100 * total
         if pp > 0:
@@ -152,7 +167,9 @@ def validate(lines: list[TradeLine], rows: list[dict], accounts: set[str], marke
             raise ValueError(f"Duplicate Trade Line for {line.symbol} in {line.account_id}")
         seen.add(key)
         if line.side == "sell" and line.quantity > held.get(key, 0):
-            raise ValueError(f"Cannot sell {line.quantity} {line.symbol} in {line.account_id}: more than held ({held.get(key, 0)})")
+            raise ValueError(
+                f"Cannot sell {line.quantity} {line.symbol} in {line.account_id}: more than held ({held.get(key, 0)})"
+            )
 
 
 def apply(lines: list[TradeLine], rows: list[dict], tax_status: dict[str, str], market: MarketData) -> list[dict]:
@@ -164,14 +181,23 @@ def apply(lines: list[TradeLine], rows: list[dict], tax_status: dict[str, str], 
         r = index.get((line.account_id, line.symbol))
         if r is None:
             r = {
-                "symbol": inst.symbol, "name": inst.name, "asset_class": inst.asset_class, "kind": inst.kind,
-                "account_id": line.account_id, "tax_status": tax_status[line.account_id], "quantity": 0, "price": inst.price,
-                "market_value": 0.0, "cost_basis_per_unit": inst.price,
+                "symbol": inst.symbol,
+                "name": inst.name,
+                "asset_class": inst.asset_class,
+                "kind": inst.kind,
+                "account_id": line.account_id,
+                "tax_status": tax_status[line.account_id],
+                "quantity": 0,
+                "price": inst.price,
+                "market_value": 0.0,
+                "cost_basis_per_unit": inst.price,
             }
             out.append(r)
             index[(line.account_id, line.symbol)] = r
         if line.side == "buy":
-            r["cost_basis_per_unit"] = (r["quantity"] * r["cost_basis_per_unit"] + line.quantity * inst.price) / (r["quantity"] + line.quantity)
+            r["cost_basis_per_unit"] = (r["quantity"] * r["cost_basis_per_unit"] + line.quantity * inst.price) / (
+                r["quantity"] + line.quantity
+            )
             r["quantity"] += line.quantity
         else:
             r["quantity"] -= line.quantity

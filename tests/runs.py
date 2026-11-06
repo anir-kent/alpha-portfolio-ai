@@ -1,6 +1,7 @@
 """Starting an Analysis Run from a test. Every test that starts a run through the API goes through `start_and_wait` (any
 outcome) or `run_and_wait` (results recorded): the run is started in the background (ADR-0005) and its snapshot is
 polled until it has an outcome."""
+
 import time
 
 from fastapi.testclient import TestClient

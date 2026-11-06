@@ -88,11 +88,16 @@ class Queue(BaseModel):
 
 
 @router.post(
-    "/analysis/runs", response_model=RunSnapshot, status_code=202, operation_id="runAnalysis",
+    "/analysis/runs",
+    response_model=RunSnapshot,
+    status_code=202,
+    operation_id="runAnalysis",
     responses={409: {"model": RunSnapshot, "description": "A run is already in flight: its snapshot"}},
 )
 def start_run(
-    user: User = Depends(require("analysis:run")), market: MarketData = Depends(get_market), llm=Depends(get_llm),
+    user: User = Depends(require("analysis:run")),
+    market: MarketData = Depends(get_market),
+    llm=Depends(get_llm),
     runs: AnalysisRuns = Depends(get_analysis_runs),
 ):
     """Start an Analysis Run in the background (ADR-0005). Only one runs at a time: while one is in flight, `409` with it."""
@@ -103,7 +108,9 @@ def start_run(
 
 
 @router.get(
-    "/analysis/runs/current", response_model=RunSnapshot, operation_id="getCurrentAnalysisRun",
+    "/analysis/runs/current",
+    response_model=RunSnapshot,
+    operation_id="getCurrentAnalysisRun",
     responses={204: {"description": "No run in flight"}},
 )
 def current_run(user: User = Depends(require("analysis:run")), runs: AnalysisRuns = Depends(get_analysis_runs)):
@@ -113,7 +120,9 @@ def current_run(user: User = Depends(require("analysis:run")), runs: AnalysisRun
 
 @router.get("/analysis/runs/{run_id}", response_model=RunSnapshot, operation_id="getAnalysisRun")
 def get_run(
-    run_id: int, user: User = Depends(require("analysis:run")), db: Session = Depends(get_db),
+    run_id: int,
+    user: User = Depends(require("analysis:run")),
+    db: Session = Depends(get_db),
     runs: AnalysisRuns = Depends(get_analysis_runs),
 ):
     """The run's live state while it is in flight, its saved result once it has finished."""
@@ -154,12 +163,18 @@ def _run_events(request: Request, runs: AnalysisRuns, run_id: int, last_seq: int
 
 
 @router.get(
-    "/analysis/runs/{run_id}/events", operation_id="streamAnalysisRun", response_class=StreamingResponse,
+    "/analysis/runs/{run_id}/events",
+    operation_id="streamAnalysisRun",
+    response_class=StreamingResponse,
     responses={200: {"content": {"text/event-stream": {}}}, 404: {"description": "Analysis Run not found"}},
 )
 def stream_run(
-    run_id: int, request: Request, user: User = Depends(require("analysis:run")), db: Session = Depends(get_db),
-    runs: AnalysisRuns = Depends(get_analysis_runs), last_event_id: str | None = Header(None),
+    run_id: int,
+    request: Request,
+    user: User = Depends(require("analysis:run")),
+    db: Session = Depends(get_db),
+    runs: AnalysisRuns = Depends(get_analysis_runs),
+    last_event_id: str | None = Header(None),
 ):
     """Push the run's full snapshot as a `progress` event, id = the run's sequence number, on connect and on every
     change; close after the final snapshot. A reconnect only needs the latest event: `Last-Event-ID` just stops an
@@ -174,14 +189,20 @@ def _narrative(db: Session, n: PriorityNarrativeRow | None) -> QueueNarrative | 
     if n is None:
         return None
     return QueueNarrative(
-        status=n.status, model=n.model, prompt_version=n.prompt_version, error=n.error, summary=n.summary,
+        status=n.status,
+        model=n.model,
+        prompt_version=n.prompt_version,
+        error=n.error,
+        summary=n.summary,
         claims=grounding.results_for(db, n.check_id) if n.check_id else [],
     )
 
 
 _SORTS = {
-    "score": PriorityResultRow.score, "review_due": PriorityResultRow.review_due,
-    "risk_profile": PriorityResultRow.risk_profile, "label": PriorityResultRow.score,  # label order == score order
+    "score": PriorityResultRow.score,
+    "review_due": PriorityResultRow.review_due,
+    "risk_profile": PriorityResultRow.risk_profile,
+    "label": PriorityResultRow.score,  # label order == score order
 }
 
 
@@ -200,11 +221,14 @@ def queue(
     run = db.scalar(select(AnalysisRunRow).where(AnalysisRunRow.completed).order_by(AnalysisRunRow.id.desc()).limit(1))
     if run is None:
         return Queue(run_id=None, as_of=None, items=[])
-    q = select(PriorityResultRow, ClientRow).join(ClientRow, ClientRow.id == PriorityResultRow.client_id).where(
-        PriorityResultRow.run_id == run.id
+    q = (
+        select(PriorityResultRow, ClientRow)
+        .join(ClientRow, ClientRow.id == PriorityResultRow.client_id)
+        .where(PriorityResultRow.run_id == run.id)
     )
     for column, value in (
-        (PriorityResultRow.label, label), (PriorityResultRow.risk_profile, risk_profile),
+        (PriorityResultRow.label, label),
+        (PriorityResultRow.risk_profile, risk_profile),
         (PriorityResultRow.sla_breached, sla_breached),
     ):
         if value is not None:
@@ -217,13 +241,24 @@ def queue(
     col = _SORTS[sort]
     q = q.order_by(col.desc() if desc else col.asc(), PriorityResultRow.score.desc(), PriorityResultRow.client_id)
     show_name = "client:pii" in PERMISSIONS[user.role]
-    narratives = {n.client_id: n for n in db.scalars(select(PriorityNarrativeRow).where(PriorityNarrativeRow.run_id == run.id))}
+    narratives = {
+        n.client_id: n for n in db.scalars(select(PriorityNarrativeRow).where(PriorityNarrativeRow.run_id == run.id))
+    }
     items = [
         QueueRow(
-            portfolio_id=r.client_id, client_id=r.client_id, client_name=c.name if show_name else None,
-            risk_profile=r.risk_profile, review_due=r.review_due, days_past_due=r.days_past_due,
-            sla_breached=r.sla_breached, score=r.score, label=r.label, components=json.loads(r.components_json),
-            portfolio_drift_pp=r.portfolio_drift_pp, asset_class_drift=json.loads(r.drift_json), total_value=r.total_value,
+            portfolio_id=r.client_id,
+            client_id=r.client_id,
+            client_name=c.name if show_name else None,
+            risk_profile=r.risk_profile,
+            review_due=r.review_due,
+            days_past_due=r.days_past_due,
+            sla_breached=r.sla_breached,
+            score=r.score,
+            label=r.label,
+            components=json.loads(r.components_json),
+            portfolio_drift_pp=r.portfolio_drift_pp,
+            asset_class_drift=json.loads(r.drift_json),
+            total_value=r.total_value,
             narrative=_narrative(db, narratives.get(r.client_id)),
         )
         for r, c in db.execute(q)

@@ -1,5 +1,6 @@
 """Versioned prompts. Bump the version whenever the wording changes: it is logged with every LLM call and is part of
 the recorded-response key, so a changed prompt can never silently replay an old recording."""
+
 from dataclasses import dataclass
 
 

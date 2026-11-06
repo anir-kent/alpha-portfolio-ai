@@ -87,7 +87,9 @@ class PortfolioDetail(BaseModel):
     drift: DriftOut | None  # null until an analysis run has completed
     sector_exposure: list[SectorExposureOut]
     suitability: SuitabilityOut | None  # null until an analysis run has completed
-    recommendation: RecommendationOut | None  # the current version; null when within tolerance (a latest version that is superseded was replaced by a newer run)
+    recommendation: (
+        RecommendationOut | None
+    )  # the current version; null when within tolerance (a latest version that is superseded was replaced by a newer run)
     history: HistoryOut
 
 
@@ -112,27 +114,45 @@ def portfolio(
     if run and result:
         cfg = json.loads(run.config_json)
         drift = DriftOut(
-            run_id=run.id, as_of=run.as_of, portfolio_drift_pp=result.portfolio_drift_pp,
-            tolerance_band=Band(**cfg["tolerance_bands"][c.risk_profile]), asset_classes=json.loads(result.drift_json),
+            run_id=run.id,
+            as_of=run.as_of,
+            portfolio_drift_pp=result.portfolio_drift_pp,
+            tolerance_band=Band(**cfg["tolerance_bands"][c.risk_profile]),
+            asset_classes=json.loads(result.drift_json),
         )
     if run:
         sr = db.get(SuitabilityResultRow, (run.id, c.id))
         if sr:
             suit = SuitabilityOut(run_id=run.id, status=sr.status, rules=json.loads(sr.results_json))
     latest = db.scalar(
-        select(RecommendationRow).where(RecommendationRow.client_id == c.id).order_by(RecommendationRow.id.desc()).limit(1)
+        select(RecommendationRow)
+        .where(RecommendationRow.client_id == c.id)
+        .order_by(RecommendationRow.id.desc())
+        .limit(1)
     )
     pii = "client:pii" in PERMISSIONS[user.role]
-    restrictions = db.scalars(select(RestrictionRow).where(RestrictionRow.client_id == c.id).order_by(RestrictionRow.id))
+    restrictions = db.scalars(
+        select(RestrictionRow).where(RestrictionRow.client_id == c.id).order_by(RestrictionRow.id)
+    )
     return PortfolioDetail(
         portfolio_id=c.id,
         client=ClientOut(
-            id=c.id, name=c.name if pii else None, email=c.email if pii else None, risk_profile=c.risk_profile,
-            objective=c.objective, horizon_years=c.horizon_years, liquidity_needs_pct=c.liquidity_needs_pct,
+            id=c.id,
+            name=c.name if pii else None,
+            email=c.email if pii else None,
+            risk_profile=c.risk_profile,
+            objective=c.objective,
+            horizon_years=c.horizon_years,
+            liquidity_needs_pct=c.liquidity_needs_pct,
             review_due=c.review_due,
         ),
         restrictions=[RestrictionOut(kind=r.kind, value=r.value) for r in restrictions],
-        as_of=market.as_of, total_value=total, holdings=rows, drift=drift,
-        sector_exposure=portfolio_view.sector_exposure(rows, market), suitability=suit,
-        recommendation=to_out(latest, get_config(db), db, user) if latest and latest.status != "superseded" else None, history=history_for(db, c.id),
+        as_of=market.as_of,
+        total_value=total,
+        holdings=rows,
+        drift=drift,
+        sector_exposure=portfolio_view.sector_exposure(rows, market),
+        suitability=suit,
+        recommendation=to_out(latest, get_config(db), db, user) if latest and latest.status != "superseded" else None,
+        history=history_for(db, c.id),
     )

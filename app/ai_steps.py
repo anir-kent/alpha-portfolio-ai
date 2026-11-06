@@ -4,6 +4,7 @@ Derived from the Exchange each step's Audit Event references. It carries only wh
 a step: mode, latency, grounded counts and the transport outcome. No system text, prompt or reply text ever leaves here;
 the Exchange id is included only when the caller may open the Exchange (`llm:read`).
 """
+
 import json
 from dataclasses import dataclass
 
@@ -32,9 +33,14 @@ class AiStep:
 
 def summaries(db: Session, recommendation_id: int, *, include_exchange_id: bool) -> list[AiStep]:
     latest: dict[str, AuditEventRow] = {}
-    for ev in db.scalars(select(AuditEventRow).where(
-        AuditEventRow.recommendation_id == str(recommendation_id), AuditEventRow.type.in_(STEP_OF_EVENT),
-    ).order_by(AuditEventRow.id)):
+    for ev in db.scalars(
+        select(AuditEventRow)
+        .where(
+            AuditEventRow.recommendation_id == str(recommendation_id),
+            AuditEventRow.type.in_(STEP_OF_EVENT),
+        )
+        .order_by(AuditEventRow.id)
+    ):
         latest[STEP_OF_EVENT[ev.type]] = ev
     out = []
     for step, ev in latest.items():
@@ -46,12 +52,17 @@ def summaries(db: Session, recommendation_id: int, *, include_exchange_id: bool)
         failed = payload.get("status") == "failed"
         counts = payload.get("summary") or {}
         reason = (exchange.error or payload.get("error") or "")[:REASON_CHARS] if failed else None
-        out.append(AiStep(
-            step=step, mode=exchange.mode, latency_ms=exchange.latency_ms,
-            telemetry="measured" if exchange.mode == "live" else "not_available_replayed",
-            outcome="failed" if failed else "ok", reason=reason or None,
-            grounded=counts.get("grounded") if not failed else None,
-            ungrounded=counts.get("ungrounded") if not failed else None,
-            exchange_id=exchange.id if include_exchange_id else None,
-        ))
+        out.append(
+            AiStep(
+                step=step,
+                mode=exchange.mode,
+                latency_ms=exchange.latency_ms,
+                telemetry="measured" if exchange.mode == "live" else "not_available_replayed",
+                outcome="failed" if failed else "ok",
+                reason=reason or None,
+                grounded=counts.get("grounded") if not failed else None,
+                ungrounded=counts.get("ungrounded") if not failed else None,
+                exchange_id=exchange.id if include_exchange_id else None,
+            )
+        )
     return out
