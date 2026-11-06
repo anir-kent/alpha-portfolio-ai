@@ -7,6 +7,7 @@ Callers only ever see `LlmClient.complete`. Two implementations sit behind it:
   in the format `RecordedLlm` replays.
 Every response carries the model and prompt version so the caller can log both to the audit chain.
 """
+
 import hashlib
 import json
 import re
@@ -17,7 +18,6 @@ from typing import Protocol
 
 import httpx
 
-
 TEMPERATURE = 0.0  # reported on the governance model card
 
 
@@ -25,8 +25,14 @@ class LlmError(Exception):
     """A failed LLM call. When capture recorded the failure, `exchange_id`/`exchange_hash` point at the error Exchange."""
 
     def __init__(
-        self, message: str = "", *, exchange_id: int | None = None, exchange_hash: str | None = None,
-        messages: list[dict] | None = None, raw_reply: str | None = None, usage: dict | None = None,
+        self,
+        message: str = "",
+        *,
+        exchange_id: int | None = None,
+        exchange_hash: str | None = None,
+        messages: list[dict] | None = None,
+        raw_reply: str | None = None,
+        usage: dict | None = None,
         latency_ms: int | None = None,
     ):
         super().__init__(message)
@@ -66,10 +72,9 @@ class LlmResponse:
 def exchange_ref(outcome: "LlmResponse | LlmError | None") -> dict:
     """What an Audit Event carries to anchor an LLM Exchange in the chain: pass the response or the error the call
     produced. Empty if capture did not store one, so a step needs no other change to inherit capture (ADR-0004)."""
-    exchange_id = getattr(outcome, "exchange_id", None)
-    if exchange_id is None:
+    if outcome is None or outcome.exchange_id is None:
         return {}
-    return {"exchange_id": exchange_id, "exchange_hash": outcome.exchange_hash}
+    return {"exchange_id": outcome.exchange_id, "exchange_hash": outcome.exchange_hash}
 
 
 class LlmClient(Protocol):
@@ -79,7 +84,13 @@ class LlmClient(Protocol):
 def recording_key(request: LlmRequest) -> str:
     """Identity of a call: task, prompt version, exact input, system text and schema. Editing a prompt without a
     version bump therefore misses the recording instead of silently replaying a stale one."""
-    parts = [request.task, request.prompt_version, request.system, json.dumps(request.schema, sort_keys=True), request.user]
+    parts = [
+        request.task,
+        request.prompt_version,
+        request.system,
+        json.dumps(request.schema, sort_keys=True),
+        request.user,
+    ]
     digest = hashlib.sha256("\n".join(parts).encode()).hexdigest()
     return digest[:20]
 
@@ -92,9 +103,19 @@ def write_recording(directory: str | Path, request: LlmRequest, response: LlmRes
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     path = _recording_path(directory, request)
-    path.write_text(json.dumps(
-        {"task": request.task, "prompt_version": request.prompt_version, "model": response.model,
-         "content": response.content}, indent=2, sort_keys=True) + "\n")
+    path.write_text(
+        json.dumps(
+            {
+                "task": request.task,
+                "prompt_version": request.prompt_version,
+                "model": response.model,
+                "content": response.content,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
     return path
 
 
@@ -117,7 +138,7 @@ def parse_json_reply(text: str) -> dict:
     try:
         value = json.loads(_FENCE.sub("", text.strip()))
     except ValueError as e:
-        raise LlmError(f"LLM reply was not valid JSON: {e}")
+        raise LlmError(f"LLM reply was not valid JSON: {e}") from e
     if not isinstance(value, dict):
         raise LlmError("LLM reply was not a JSON object")
     return value
@@ -125,20 +146,31 @@ def parse_json_reply(text: str) -> dict:
 
 class OpenAICompatibleLlm:
     def __init__(
-        self, *, base_url: str, api_key: str, model: str, record_dir: str | Path | None = None,
-        transport: httpx.BaseTransport | None = None, timeout: float = 120.0,
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        model: str,
+        record_dir: str | Path | None = None,
+        transport: httpx.BaseTransport | None = None,
+        timeout: float = 120.0,
     ):
         self.model = model
         self.record_dir = record_dir
         self._api_key = api_key
         self._http = httpx.Client(
-            base_url=base_url.rstrip("/") + "/", timeout=timeout, transport=transport,
+            base_url=base_url.rstrip("/") + "/",
+            timeout=timeout,
+            transport=transport,
             headers={"Authorization": f"Bearer {api_key}"},
         )
 
     def complete(self, request: LlmRequest) -> LlmResponse:
         messages = [
-            {"role": "system", "content": request.system + "\n\nJSON schema of the reply:\n" + json.dumps(request.schema)},
+            {
+                "role": "system",
+                "content": request.system + "\n\nJSON schema of the reply:\n" + json.dumps(request.schema),
+            },
             {"role": "user", "content": request.user},
         ]
         body = {
@@ -181,8 +213,14 @@ class OpenAICompatibleLlm:
         except LlmError as e:
             raise failure(str(e), raw_reply=reply, usage=usage) from e
         response = LlmResponse(
-            content=content, model=payload.get("model") or self.model, prompt_version=request.prompt_version,
-            messages=messages, raw_reply=reply, usage=usage, latency_ms=latency_ms)
+            content=content,
+            model=payload.get("model") or self.model,
+            prompt_version=request.prompt_version,
+            messages=messages,
+            raw_reply=reply,
+            usage=usage,
+            latency_ms=latency_ms,
+        )
         if self.record_dir:
             write_recording(self.record_dir, request, response)
         return response
@@ -195,7 +233,10 @@ def build_llm(settings, transport: httpx.BaseTransport | None = None) -> LlmClie
         if not settings.llm_api_key:
             raise RuntimeError("APP_LLM_API_KEY must be set when APP_LLM_MODE=live")
         return OpenAICompatibleLlm(
-            base_url=settings.llm_base_url, api_key=settings.llm_api_key, model=settings.llm_model,
-            record_dir=settings.llm_recordings_dir if settings.llm_record else None, transport=transport,
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key,
+            model=settings.llm_model,
+            record_dir=settings.llm_recordings_dir if settings.llm_record else None,
+            transport=transport,
         )
     raise RuntimeError(f"Unknown APP_LLM_MODE: {settings.llm_mode}")

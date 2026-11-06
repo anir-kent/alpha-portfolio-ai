@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
@@ -36,11 +36,16 @@ def login(body: LoginRequest, request: Request, response: Response, db: Session 
         raise HTTPException(401, "Invalid credentials")
     token = new_token()
     ttl = timedelta(hours=settings.session_ttl_hours)
-    db.add(SessionRow(token_hash=token_digest(token), user_id=user.id, expires_at=datetime.now(timezone.utc) + ttl))
+    db.add(SessionRow(token_hash=token_digest(token), user_id=user.id, expires_at=datetime.now(UTC) + ttl))
     db.commit()
     response.set_cookie(
-        COOKIE, token, httponly=True, samesite="lax", secure=settings.cookie_secure,
-        max_age=int(ttl.total_seconds()), path="/",
+        COOKIE,
+        token,
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+        max_age=int(ttl.total_seconds()),
+        path="/",
     )
     return _me(user)
 

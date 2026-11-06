@@ -1,15 +1,16 @@
 """Seam: the HTTP API. Every AI step (Research Tilt, Recommendation memo, prioritisation narrative) is captured as an
 LLM Exchange that its Audit Event references by id and hash, on success and on failure (ADR-0004). Prompts never carry
 a client name or email, which is what lets `llm:read` stand apart from `client:pii`. Recordings and stubs; no network."""
+
 import json
 import re
 
 import pytest
 from sqlalchemy import select, text
 
-from app import audit
 from app.db import AuditEventRow, ClientRow
 from app.exchanges import CapturingLlm
+from tests.runs import run_and_wait
 from tests.test_ai_recommendations import ai, tilt_for  # noqa: F401  (fixture)
 from tests.test_portfolio import url
 from tests.test_priority_narrative import narrative_reply
@@ -81,7 +82,7 @@ def test_losing_the_exchange_store_fails_each_ai_step_but_nothing_deterministic(
         db.execute(text("DROP TABLE llm_exchanges"))
         db.commit()
     advisor = captured.advisor
-    assert advisor.post("/api/analysis/runs").status_code == 200
+    run_and_wait(advisor)
 
     events = step_events(app, *STEPS)
     assert {t for t, _ in events} == set(STEPS)

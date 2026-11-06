@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.db import ConfigRow
 
-
 PROFILES = ("conservative", "moderate", "growth", "aggressive")
 
 

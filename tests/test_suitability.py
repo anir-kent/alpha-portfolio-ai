@@ -3,6 +3,7 @@
 Expected numbers are the planted weights in app/seeder.py (whole-unit quantities, hence the tolerances) and the
 default limits in the spec: equity cap by Risk Profile, 10% single position, 30% sector, cash floor by Risk Profile.
 """
+
 import json
 
 import pytest
@@ -11,6 +12,7 @@ from sqlalchemy import select
 from app import audit
 from app.db import AuditEventRow
 from app.seeder import PLANTED
+from tests.runs import run_and_wait
 from tests.test_portfolio import url
 from tests.test_queue import QUEUE, rows, seeded  # noqa: F401  (fixture)
 
@@ -20,7 +22,7 @@ RULE_IDS = ["SR-01", "SR-02", "SR-03", "SR-04", "SR-05", "SR-06", "SR-07"]
 @pytest.fixture
 def advisor(login, seeded):  # noqa: F811
     c = login("advisor")
-    assert c.post("/api/analysis/runs").status_code == 200
+    run_and_wait(c)
     return c
 
 
@@ -109,7 +111,7 @@ def test_sector_concentration_ignores_cash_and_fixed_income_pseudo_sectors(advis
 def test_cash_below_the_policy_floor_is_a_breach(advisor, login):
     owner = login("platform_owner")
     owner.patch("/api/config", json={"suitability": {"min_cash_pct": {"growth": 6}}})
-    advisor.post("/api/analysis/runs")
+    run_and_wait(advisor)
     r = rule(advisor, PLANTED["heavy_tech"], "SR-04")  # 5.0% cash vs raised 6% floor
     assert r["status"] == "breach"
     assert finding(r, "cash")["actual"] == pytest.approx(5.0, abs=0.1) and finding(r, "cash")["limit"] == 6
@@ -118,7 +120,7 @@ def test_cash_below_the_policy_floor_is_a_breach(advisor, login):
 def test_horizon_check_flags_equity_heavy_portfolio_with_a_short_horizon(advisor, login):
     assert rule(advisor, PLANTED["overweight_energy"], "SR-06")["status"] == "pass"  # 5-year horizon, not short
     login("platform_owner").patch("/api/config", json={"suitability": {"horizon_short_years": 6}})
-    advisor.post("/api/analysis/runs")
+    run_and_wait(advisor)
     r = rule(advisor, PLANTED["overweight_energy"], "SR-06")  # now short: 60% equity vs 40% cap
     assert r["status"] == "breach"
     f = finding(r, "equity")
@@ -130,7 +132,7 @@ def test_taxable_gain_warning_never_breaches(advisor, login):
     r = rule(advisor, PLANTED["overweight_energy"], "SR-07")
     assert r["status"] == "pass" and finding(r, "taxable gains")["actual"] == pytest.approx(10.67, abs=0.1)
     login("platform_owner").patch("/api/config", json={"suitability": {"taxable_gain_pct": 5}})
-    advisor.post("/api/analysis/runs")
+    run_and_wait(advisor)
     r = rule(advisor, PLANTED["overweight_energy"], "SR-07")
     assert r["status"] == "warning" and finding(r, "taxable gains")["limit"] == 5
     for cid in (PLANTED["heavy_tech"], PLANTED["restricted_breach"], PLANTED["clean"]):
@@ -139,7 +141,7 @@ def test_taxable_gain_warning_never_breaches(advisor, login):
 
 def test_value_close_to_a_limit_is_a_warning(advisor, login):
     login("platform_owner").patch("/api/config", json={"suitability": {"single_position_pct": 8.5}})
-    advisor.post("/api/analysis/runs")
+    run_and_wait(advisor)
     r = rule(advisor, PLANTED["restricted_breach"], "SR-02")  # AAPL/MSFT 8.0% is within 90% of an 8.5% limit
     assert r["status"] == "warning" and finding(r, "AAPL")["status"] == "warning"
 
@@ -151,7 +153,7 @@ def test_sector_restriction_breaches_on_direct_holdings_and_warns_on_fund_exposu
         db.add(RestrictionRow(client_id=PLANTED["overweight_energy"], kind="sector", value="Energy"))
         db.add(RestrictionRow(client_id=PLANTED["clean"], kind="sector", value="Energy"))
         db.commit()
-    advisor.post("/api/analysis/runs")
+    run_and_wait(advisor)
     r = rule(advisor, PLANTED["overweight_energy"], "SR-05")
     assert r["status"] == "breach" and finding(r, "XOM")["status"] == "breach"
     clean = rule(advisor, PLANTED["clean"], "SR-05")  # no Energy stock, only SPY's small look-through slice
@@ -160,8 +162,13 @@ def test_sector_restriction_breaches_on_direct_holdings_and_warns_on_fund_exposu
 
 def test_suitability_evaluation_is_audited_with_its_results(advisor, app):
     with app.state.session_factory() as db:
-        events = list(db.scalars(select(AuditEventRow).where(
-            AuditEventRow.type == "suitability_evaluated", AuditEventRow.recommendation_id.is_(None))))  # current Portfolios
+        events = list(
+            db.scalars(
+                select(AuditEventRow).where(
+                    AuditEventRow.type == "suitability_evaluated", AuditEventRow.recommendation_id.is_(None)
+                )
+            )
+        )  # current Portfolios
         started = db.scalar(select(AuditEventRow).where(AuditEventRow.type == "analysis_run_started"))
         assert len(events) == 25
         e = next(e for e in events if e.portfolio_id == PLANTED["restricted_breach"])
@@ -169,8 +176,11 @@ def test_suitability_evaluation_is_audited_with_its_results(advisor, app):
         assert payload["status"] == "breach" and [r["rule_id"] for r in payload["rules"]] == RULE_IDS
         assert any(f["subject"] == "XOM" for r in payload["rules"] for f in r["findings"])
         assert started.id in json.loads(e.parent_ids_json) and e.client_id == PLANTED["restricted_breach"]
-        scored = db.scalar(select(AuditEventRow).where(
-            AuditEventRow.type == "priority_scored", AuditEventRow.portfolio_id == PLANTED["restricted_breach"]))
+        scored = db.scalar(
+            select(AuditEventRow).where(
+                AuditEventRow.type == "priority_scored", AuditEventRow.portfolio_id == PLANTED["restricted_breach"]
+            )
+        )
         assert e.id in json.loads(scored.parent_ids_json)  # the score is traceable to its suitability result
         assert audit.verify(db).valid
 
@@ -204,18 +214,27 @@ def test_taxable_gain_counts_gains_only_and_is_not_offset_by_losses(advisor, app
 
     cid = PLANTED["overweight_energy"]
     with app.state.session_factory() as db:  # taxable equity at a 50% gain, every other taxable holding at a 50% loss
-        acct = {a.id for a in db.scalars(select(AccountRow).where(AccountRow.client_id == cid, AccountRow.tax_status == "taxable"))}
+        acct = {
+            a.id
+            for a in db.scalars(
+                select(AccountRow).where(AccountRow.client_id == cid, AccountRow.tax_status == "taxable")
+            )
+        }
         for h in db.scalars(select(HoldingRow).where(HoldingRow.account_id.in_(acct))):
             price = next(x["price"] for x in advisor.get(url(cid)).json()["holdings"] if x["symbol"] == h.symbol)
             h.cost_basis_per_unit = price * (0.5 if h.symbol in ("XOM", "XLE", "SPY", "JNJ", "PG") else 2.0)
         db.commit()
     body = advisor.get(url(cid)).json()
     taxable_equity_weight = sum(
-        h["weight_pct"] for h in body["holdings"] if h["tax_status"] == "taxable" and h["symbol"] in ("XOM", "XLE", "SPY", "JNJ", "PG")
+        h["weight_pct"]
+        for h in body["holdings"]
+        if h["tax_status"] == "taxable" and h["symbol"] in ("XOM", "XLE", "SPY", "JNJ", "PG")
     )
-    advisor.post("/api/analysis/runs")
+    run_and_wait(advisor)
     f = finding(rule(advisor, cid, "SR-07"), "taxable gains")
-    assert f["actual"] == pytest.approx(taxable_equity_weight / 2, abs=0.05)  # basis at half price: gain is half the value
+    assert f["actual"] == pytest.approx(
+        taxable_equity_weight / 2, abs=0.05
+    )  # basis at half price: gain is half the value
 
 
 def test_sector_etf_in_a_restricted_sector_is_a_direct_breach(advisor, app):
@@ -224,6 +243,6 @@ def test_sector_etf_in_a_restricted_sector_is_a_direct_breach(advisor, app):
     with app.state.session_factory() as db:
         db.add(RestrictionRow(client_id=PLANTED["overweight_energy"], kind="sector", value="Energy"))
         db.commit()
-    advisor.post("/api/analysis/runs")
+    run_and_wait(advisor)
     r = rule(advisor, PLANTED["overweight_energy"], "SR-05")
     assert finding(r, "XLE")["status"] == "breach" and finding(r, "XLE")["actual"] == pytest.approx(15.0, abs=0.1)

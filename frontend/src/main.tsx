@@ -24,8 +24,23 @@ const ROLE_LABEL: Record<string, string> = {
   auditor: "Auditor",
   platform_owner: "Platform Owner",
 };
-const LOGIN_ROLES = ["advisor", "relationship_manager", "compliance_officer", "investment_committee", "auditor", "platform_owner"];
-const NAV_ICON: Record<string, string> = { "/queue": "queue", "/approvals": "approvals", "/audit": "audit", "/governance": "governance", "/llm-exchanges": "spark", "/config": "config", "/health": "health" };
+const LOGIN_ROLES = [
+  "advisor",
+  "relationship_manager",
+  "compliance_officer",
+  "investment_committee",
+  "auditor",
+  "platform_owner",
+];
+const NAV_ICON: Record<string, string> = {
+  "/queue": "queue",
+  "/approvals": "approvals",
+  "/audit": "audit",
+  "/governance": "governance",
+  "/llm-exchanges": "spark",
+  "/config": "config",
+  "/health": "health",
+};
 /** Sidebar grouping only; which items appear is still decided by the server-issued permissions in nav.ts. */
 const NAV_GROUPS: { label: string; routes: string[] }[] = [
   { label: "MONITORING", routes: ["/queue", "/approvals"] },
@@ -47,7 +62,14 @@ function Login() {
   });
   return (
     <div className="grid min-h-screen place-items-center p-4">
-      <form className="panel w-[23rem] space-y-4 p-6" style={{ borderRadius: 28, boxShadow: "var(--shadow-pop), inset 0 1px 0 #fff" }} onSubmit={(e) => { e.preventDefault(); login.mutate(); }}>
+      <form
+        className="panel w-[23rem] space-y-4 p-6"
+        style={{ borderRadius: 28, boxShadow: "var(--shadow-pop), inset 0 1px 0 #fff" }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          login.mutate();
+        }}
+      >
         <div>
           <p className="eyebrow">Alpha Portfolio</p>
           <h1>Advisory workstation</h1>
@@ -55,18 +77,42 @@ function Login() {
         </div>
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Sign in as">
           {LOGIN_ROLES.map((r) => (
-            <button key={r} type="button" aria-pressed={username === r} onClick={() => setUsername(r)}
-              className={`pill ${username === r ? "pill-info" : "pill-mute"} cursor-pointer`}>{ROLE_LABEL[r]}</button>
+            <button
+              key={r}
+              type="button"
+              aria-pressed={username === r}
+              onClick={() => setUsername(r)}
+              className={`pill ${username === r ? "pill-info" : "pill-mute"} cursor-pointer`}
+            >
+              {ROLE_LABEL[r]}
+            </button>
           ))}
         </div>
-        <label className="label">Username (a role name)
-          <input className="field" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="username (a role name)" />
+        <label className="label">
+          Username (a role name)
+          <input
+            className="field"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="username (a role name)"
+          />
         </label>
-        <label className="label">Password
-          <input className="field" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="password" />
+        <label className="label">
+          Password
+          <input
+            className="field"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="password"
+          />
         </label>
         <button className="btn btn-primary w-full">Log in</button>
-        {login.isError && <p role="alert" className="callout callout-neg">{login.error.message}</p>}
+        {login.isError && (
+          <p role="alert" className="callout callout-neg">
+            {login.error.message}
+          </p>
+        )}
       </form>
     </div>
   );
@@ -90,22 +136,54 @@ function StatusStrip({ permissions }: { permissions: string[] }) {
   return (
     <div className="statusbar panel" role="status" aria-label="System status">
       {canQueue && (
-        <span>Market data as of <span className="mono text-ink">{queue.data?.as_of ?? "—"}</span>{queue.data?.run_id != null && <> · run <span className="mono text-ink">#{queue.data.run_id}</span></>}</span>
+        <span>
+          Market data as of <span className="mono text-ink">{queue.data?.as_of ?? "—"}</span>
+          {queue.data?.run_id != null && (
+            <>
+              {" "}
+              · run <span className="mono text-ink">#{queue.data.run_id}</span>
+            </>
+          )}
+        </span>
       )}
       {card ? (
         <span className="flex items-center gap-1.5">
-          <span aria-hidden className={`size-2 rounded-full ${card.llm_mode === "live" ? "bg-pos shadow-[0_0_8px_#2fb67a]" : "bg-warn shadow-[0_0_8px_#e3a42b]"}`} />
+          <span
+            aria-hidden
+            className={`size-2 rounded-full ${card.llm_mode === "live" ? "bg-pos shadow-[0_0_8px_#2fb67a]" : "bg-warn shadow-[0_0_8px_#e3a42b]"}`}
+          />
           LLM <span className="mono text-ink">{card.model}</span>
-          <Pill tone={card.llm_mode === "live" ? "pos" : "warn"} title={card.llm_mode === "live" ? "Calls go to the live endpoint" : "Replaying committed recordings; no live calls"}>{card.llm_mode}</Pill>
+          <Pill
+            tone={card.llm_mode === "live" ? "pos" : "warn"}
+            title={
+              card.llm_mode === "live"
+                ? "Calls go to the live endpoint"
+                : "Replaying committed recordings; no live calls"
+            }
+          >
+            {card.llm_mode}
+          </Pill>
         </span>
-      ) : canGov ? null : <span className="text-ink-3">LLM status visible to Governance roles</span>}
+      ) : canGov ? null : (
+        <span className="text-ink-3">LLM status visible to Governance roles</span>
+      )}
       <span className="ml-auto text-ink-3">Approved = cleared to act outside this system</span>
     </div>
   );
 }
 
 /** Floating, collapsible navigation capsule with grouped pill modules and glowing count alerts. */
-function Capsule({ username, role, permissions, onLogout }: { username: string; role: string; permissions: string[]; onLogout: () => void }) {
+function Capsule({
+  username,
+  role,
+  permissions,
+  onLogout,
+}: {
+  username: string;
+  role: string;
+  permissions: string[];
+  onLogout: () => void;
+}) {
   const [collapsed, setCollapsed] = useState(false);
   const items = visibleNav(permissions);
   const queue = useQueue({ sort: "score" });
@@ -119,17 +197,44 @@ function Capsule({ username, role, permissions, onLogout }: { username: string; 
     },
   });
   const counts: Record<string, { n: number; tone: "neg" | "info"; hint: string } | undefined> = {
-    "/queue": queue.data ? { n: queue.data.items.filter((i) => i.label === "High").length, tone: "neg", hint: "High-priority portfolios" } : undefined,
-    "/approvals": approvals.data ? { n: approvals.data.items.length, tone: "info", hint: "Waiting for a decision" } : undefined,
+    "/queue": queue.data
+      ? { n: queue.data.items.filter((i) => i.label === "High").length, tone: "neg", hint: "High-priority portfolios" }
+      : undefined,
+    "/approvals": approvals.data
+      ? { n: approvals.data.items.length, tone: "info", hint: "Waiting for a decision" }
+      : undefined,
   };
   return (
-    <nav className="capsule panel" data-collapsed={collapsed} style={{ width: collapsed ? "4.9rem" : "15.5rem" }} aria-label="Main">
+    <nav
+      className="capsule panel"
+      data-collapsed={collapsed}
+      style={{ width: collapsed ? "4.9rem" : "15.5rem" }}
+      aria-label="Main"
+    >
       <div className="flex items-center gap-2 px-1">
-        <span className="grid size-9 shrink-0 place-items-center rounded-full border border-white/80 bg-gradient-to-b from-white to-[#e4e9f1] text-[1.0769rem] font-bold text-brand shadow-[0_4px_10px_-2px_rgba(31,38,135,0.25),inset_0_1px_0_#fff]">α</span>
+        <span className="grid size-9 shrink-0 place-items-center rounded-full border border-white/80 bg-gradient-to-b from-white to-[#e4e9f1] text-[1.0769rem] font-bold text-brand shadow-[0_4px_10px_-2px_rgba(31,38,135,0.25),inset_0_1px_0_#fff]">
+          α
+        </span>
         <span className="nav-text font-semibold tracking-tight">Alpha Portfolio</span>
-        <button type="button" className="btn btn-ghost btn-sm nav-text ml-auto !px-2" onClick={() => setCollapsed(true)} aria-label="Collapse navigation"><Icon name="chevron" size={14} /></button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm nav-text ml-auto !px-2"
+          onClick={() => setCollapsed(true)}
+          aria-label="Collapse navigation"
+        >
+          <Icon name="chevron" size={14} />
+        </button>
       </div>
-      {collapsed && <button type="button" className="btn btn-sm mx-auto !px-2" onClick={() => setCollapsed(false)} aria-label="Expand navigation"><Icon name="chevron" size={14} /></button>}
+      {collapsed && (
+        <button
+          type="button"
+          className="btn btn-sm mx-auto !px-2"
+          onClick={() => setCollapsed(false)}
+          aria-label="Expand navigation"
+        >
+          <Icon name="chevron" size={14} />
+        </button>
+      )}
 
       <div className="flex flex-1 flex-col gap-3 overflow-y-auto">
         {NAV_GROUPS.map((g) => {
@@ -141,9 +246,23 @@ function Capsule({ username, role, permissions, onLogout }: { username: string; 
               {group.map((n) => {
                 const c = counts[n.to];
                 return (
-                  <NavLink key={n.to} to={n.to} title={collapsed ? n.label : undefined} className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}>
-                    <Icon name={NAV_ICON[n.to] ?? "queue"} size={17} /><span className="nav-text">{n.label}</span>
-                    {c && c.n > 0 && <span className={`nav-count ${c.tone === "info" ? "nav-count-info" : ""}`} title={c.hint} aria-label={`${c.n} ${c.hint}`}>{c.n}</span>}
+                  <NavLink
+                    key={n.to}
+                    to={n.to}
+                    title={collapsed ? n.label : undefined}
+                    className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
+                  >
+                    <Icon name={NAV_ICON[n.to] ?? "queue"} size={17} />
+                    <span className="nav-text">{n.label}</span>
+                    {c && c.n > 0 && (
+                      <span
+                        className={`nav-count ${c.tone === "info" ? "nav-count-info" : ""}`}
+                        title={c.hint}
+                        aria-label={`${c.n} ${c.hint}`}
+                      >
+                        {c.n}
+                      </span>
+                    )}
                   </NavLink>
                 );
               })}
@@ -159,7 +278,8 @@ function Capsule({ username, role, permissions, onLogout }: { username: string; 
           <Pill tone="info">{ROLE_LABEL[role] ?? role}</Pill>
         </div>
         <button className="nav-link" onClick={onLogout} title="Sign out and choose another role">
-          <Icon name="lock" size={16} /><span className="nav-text">Switch role</span>
+          <Icon name="lock" size={16} />
+          <span className="nav-text">Switch role</span>
         </button>
       </div>
     </nav>
@@ -184,13 +304,35 @@ function Shell({ username, role, permissions }: { username: string; role: string
         <main className="min-w-0 flex-1 px-1">
           <Routes>
             {permissions.includes("queue:read") && <Route path="/queue" element={<QueuePage />} />}
-            {permissions.includes("portfolio:read") && <Route path="/portfolios/:id" element={<PortfolioPage canDecide={permissions.includes("recommendation:decide")} />} />}
-            {permissions.includes("approvals:read") && <Route path="/approvals" element={<ApprovalsPage permissions={permissions} />} />}
+            {permissions.includes("portfolio:read") && (
+              <Route
+                path="/portfolios/:id"
+                element={<PortfolioPage canDecide={permissions.includes("recommendation:decide")} />}
+              />
+            )}
+            {permissions.includes("approvals:read") && (
+              <Route path="/approvals" element={<ApprovalsPage permissions={permissions} />} />
+            )}
             {permissions.includes("audit:read") && <Route path="/audit" element={<AuditPage />} />}
-            {permissions.includes("audit:read") && <Route path="/audit/recommendations/:id" element={<LineagePage canViewExchange={permissions.includes("llm:read")} />} />}
-            {permissions.includes("governance:read") && <Route path="/governance" element={<GovernancePage canRunFixtures={permissions.includes("governance:run")} />} />}
-            {permissions.includes("llm:read") && <Route path="/llm-exchanges" element={<ExchangesPage permissions={permissions} />} />}
-            <Route path="*" element={<p className="text-ink-2">Select a section. Screens arrive in later tickets.</p>} />
+            {permissions.includes("audit:read") && (
+              <Route
+                path="/audit/recommendations/:id"
+                element={<LineagePage canViewExchange={permissions.includes("llm:read")} />}
+              />
+            )}
+            {permissions.includes("governance:read") && (
+              <Route
+                path="/governance"
+                element={<GovernancePage canRunFixtures={permissions.includes("governance:run")} />}
+              />
+            )}
+            {permissions.includes("llm:read") && (
+              <Route path="/llm-exchanges" element={<ExchangesPage permissions={permissions} />} />
+            )}
+            <Route
+              path="*"
+              element={<p className="text-ink-2">Select a section. Screens arrive in later tickets.</p>}
+            />
           </Routes>
         </main>
       </div>
@@ -210,6 +352,8 @@ function App() {
 
 createRoot(document.getElementById("root")!).render(
   <QueryClientProvider client={new QueryClient()}>
-    <BrowserRouter><App /></BrowserRouter>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   </QueryClientProvider>,
 );

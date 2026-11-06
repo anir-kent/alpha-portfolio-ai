@@ -6,15 +6,16 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import ai_steps, approvals, audit, grounding, lineage as lineage_view, recommendations
+from app import ai_steps, approvals, audit, grounding, recommendations
+from app import lineage as lineage_view
 from app.config_service import Config, get_config
 from app.db import DecisionRow, RecommendationNarrativeRow, RecommendationRow, RecommendationTiltRow, User
 from app.deps import get_db, get_market, require
 from app.market_data import MarketData
 from app.rbac import PERMISSIONS
 from app.rebalance import TradeLine
-from app.routers.audit import ActorOut
 from app.routers.analysis import ClassDriftOut, RuleOut
+from app.routers.audit import ActorOut
 from app.routers.grounding import ClaimResultOut
 
 router = APIRouter(prefix="/api", tags=["recommendations"])
@@ -185,13 +186,25 @@ def research_for(db: Session, rec_id: int, *, exchange_ids: bool = False) -> Res
     return ResearchOut(
         steps=[AiStepOut(**vars(s)) for s in ai_steps.summaries(db, rec_id, include_exchange_id=exchange_ids)],
         tilt=TiltOut(
-            status=t.status, bound_pp=t.bound_pp, model=t.model, prompt_version=t.prompt_version, error=t.error,
+            status=t.status,
+            bound_pp=t.bound_pp,
+            model=t.model,
+            prompt_version=t.prompt_version,
+            error=t.error,
             entries=json.loads(t.entries_json),
-        ) if t else None,
+        )
+        if t
+        else None,
         narrative=NarrativeOut(
-            status=n.status, model=n.model, prompt_version=n.prompt_version, error=n.error, memo=n.memo,
+            status=n.status,
+            model=n.model,
+            prompt_version=n.prompt_version,
+            error=n.error,
+            memo=n.memo,
             claims=[ClaimResultOut(**c.model_dump(), memo_eligible=c.grounded) for c in claims],
-        ) if n else None,
+        )
+        if n
+        else None,
     )
 
 
@@ -199,40 +212,72 @@ def to_out(r: RecommendationRow, cfg: Config, db: Session, user: User) -> Recomm
     p = approvals.plan(r, cfg)
     return RecommendationOut(
         research=research_for(db, r.id, exchange_ids="llm:read" in PERMISSIONS[user.role]),
-        id=r.id, portfolio_id=r.client_id, version=r.version, parent_id=r.parent_id, root_id=r.root_id, run_id=r.run_id,
-        status=r.status, created_at=r.created_at, created_by=r.created_by, summary=r.summary, total_value=r.total_value,
-        turnover_pct=r.turnover_pct, trade_lines=json.loads(r.trade_lines_json),
+        id=r.id,
+        portfolio_id=r.client_id,
+        version=r.version,
+        parent_id=r.parent_id,
+        root_id=r.root_id,
+        run_id=r.run_id,
+        status=r.status,
+        created_at=r.created_at,
+        created_by=r.created_by,
+        summary=r.summary,
+        total_value=r.total_value,
+        turnover_pct=r.turnover_pct,
+        trade_lines=json.loads(r.trade_lines_json),
         suitability=PostTradeSuitability(status=r.suitability_status, rules=json.loads(r.suitability_json)),
         post_trade_drift=json.loads(r.post_trade_drift_json),
         approval=ApprovalOut(
-            required_steps=p.required_steps, needs_compliance=p.needs_compliance, high_impact=p.high_impact,
-            thresholds=ThresholdsOut(**p.thresholds.model_dump()), reasons=p.reasons,
+            required_steps=p.required_steps,
+            needs_compliance=p.needs_compliance,
+            high_impact=p.high_impact,
+            thresholds=ThresholdsOut(**p.thresholds.model_dump()),
+            reasons=p.reasons,
         ),
     )
 
 
 def _decision_out(d: DecisionRow) -> DecisionOut:
     return DecisionOut(
-        id=d.id, recommendation_id=d.recommendation_id, action=d.action, rationale=d.rationale, actor_name=d.actor_name,
-        actor_role=d.actor_role, created_at=d.created_at, resulting_status=d.resulting_status,
+        id=d.id,
+        recommendation_id=d.recommendation_id,
+        action=d.action,
+        rationale=d.rationale,
+        actor_name=d.actor_name,
+        actor_role=d.actor_role,
+        created_at=d.created_at,
+        resulting_status=d.resulting_status,
         resulting_recommendation_id=d.resulting_recommendation_id,
     )
 
 
 def history_for(db: Session, client_id: str) -> HistoryOut:
-    versions = db.scalars(select(RecommendationRow).where(RecommendationRow.client_id == client_id).order_by(RecommendationRow.id))
+    versions = db.scalars(
+        select(RecommendationRow).where(RecommendationRow.client_id == client_id).order_by(RecommendationRow.id)
+    )
     decisions = db.scalars(select(DecisionRow).where(DecisionRow.client_id == client_id).order_by(DecisionRow.id))
     return HistoryOut(
-        versions=[VersionOut(
-            id=v.id, version=v.version, parent_id=v.parent_id, status=v.status, created_at=v.created_at,
-            created_by=v.created_by, turnover_pct=v.turnover_pct, suitability_status=v.suitability_status,
-        ) for v in versions],
+        versions=[
+            VersionOut(
+                id=v.id,
+                version=v.version,
+                parent_id=v.parent_id,
+                status=v.status,
+                created_at=v.created_at,
+                created_by=v.created_by,
+                turnover_pct=v.turnover_pct,
+                suitability_status=v.suitability_status,
+            )
+            for v in versions
+        ],
         decisions=[_decision_out(d) for d in decisions],
     )
 
 
 @router.get("/recommendations/{recommendation_id}", response_model=RecommendationOut, operation_id="getRecommendation")
-def get_recommendation(recommendation_id: int, user: User = Depends(require("recommendation:read")), db: Session = Depends(get_db)):
+def get_recommendation(
+    recommendation_id: int, user: User = Depends(require("recommendation:read")), db: Session = Depends(get_db)
+):
     r = db.get(RecommendationRow, recommendation_id)
     if r is None:
         raise HTTPException(404, "Recommendation not found")
@@ -264,23 +309,44 @@ class Lineage(BaseModel):
     nodes: list[LineageNode]  # oldest first
 
 
-@router.get("/recommendations/{recommendation_id}/lineage", response_model=Lineage, operation_id="getRecommendationLineage",
-            dependencies=[Depends(require("audit:read"))])
+@router.get(
+    "/recommendations/{recommendation_id}/lineage",
+    response_model=Lineage,
+    operation_id="getRecommendationLineage",
+    dependencies=[Depends(require("audit:read"))],
+)
 def get_lineage(recommendation_id: int, db: Session = Depends(get_db)):
     if db.get(RecommendationRow, recommendation_id) is None:
         raise HTTPException(404, "Recommendation not found")
-    return Lineage(recommendation_id=recommendation_id, nodes=[
-        LineageNode(
-            id=n.event.id, type=n.event.type, stage=n.stage, timestamp=n.event.timestamp, payload=n.payload,
-            actor=ActorOut(kind=n.event.actor_kind, name=n.event.actor_name, role=n.event.actor_role,
-                           model=n.event.model, prompt_version=n.event.prompt_version),
-            parent_ids=n.parent_ids, override=n.override, human_verified=n.human_verified,
-            source=SourcePassage(**n.source) if n.source else None,
-        ) for n in lineage_view.lineage(db, recommendation_id)
-    ])
+    return Lineage(
+        recommendation_id=recommendation_id,
+        nodes=[
+            LineageNode(
+                id=n.event.id,
+                type=n.event.type,
+                stage=n.stage,
+                timestamp=n.event.timestamp,
+                payload=n.payload,
+                actor=ActorOut(
+                    kind=n.event.actor_kind,
+                    name=n.event.actor_name,
+                    role=n.event.actor_role,
+                    model=n.event.model,
+                    prompt_version=n.event.prompt_version,
+                ),
+                parent_ids=n.parent_ids,
+                override=n.override,
+                human_verified=n.human_verified,
+                source=SourcePassage(**n.source) if n.source else None,
+            )
+            for n in lineage_view.lineage(db, recommendation_id)
+        ],
+    )
 
 
-@router.post("/recommendations/{recommendation_id}/decision", response_model=DecisionResult, operation_id="decideRecommendation")
+@router.post(
+    "/recommendations/{recommendation_id}/decision", response_model=DecisionResult, operation_id="decideRecommendation"
+)
 def decide(
     recommendation_id: int,
     body: DecisionIn,
@@ -289,15 +355,27 @@ def decide(
     market: MarketData = Depends(get_market),
 ):
     cfg = get_config(db)
-    lines = [TradeLine(l.account_id, l.symbol, l.side, l.quantity) for l in body.trade_lines] if body.trade_lines is not None else None
+    lines = (
+        [TradeLine(line.account_id, line.symbol, line.side, line.quantity) for line in body.trade_lines]
+        if body.trade_lines is not None
+        else None
+    )
     try:
         rec, decision, new_breaches = recommendations.decide(
-            db, market, cfg, recommendation_id, body.action, body.rationale, lines,
+            db,
+            market,
+            cfg,
+            recommendation_id,
+            body.action,
+            body.rationale,
+            lines,
             audit.Actor.user(user.username, user.role),
         )
     except recommendations.DecisionError as e:
-        raise HTTPException(e.status, str(e))
-    return DecisionResult(decision=_decision_out(decision), recommendation=to_out(rec, cfg, db, user), new_breaches=new_breaches)
+        raise HTTPException(e.status, str(e)) from e
+    return DecisionResult(
+        decision=_decision_out(decision), recommendation=to_out(rec, cfg, db, user), new_breaches=new_breaches
+    )
 
 
 class ComplianceIn(BaseModel):
@@ -319,22 +397,38 @@ def _step(db: Session, recommendation_id: int, step: str, action: str, rationale
     cfg = get_config(db)
     try:
         rec, decision = recommendations.decide_step(
-            db, cfg, recommendation_id, step, action, rationale, audit.Actor.user(user.username, user.role),
+            db,
+            cfg,
+            recommendation_id,
+            step,
+            action,
+            rationale,
+            audit.Actor.user(user.username, user.role),
         )
     except recommendations.DecisionError as e:
-        raise HTTPException(e.status, str(e))
+        raise HTTPException(e.status, str(e)) from e
     return StepResult(decision=_decision_out(decision), recommendation=to_out(rec, cfg, db, user))
 
 
-@router.post("/recommendations/{recommendation_id}/compliance", response_model=StepResult, operation_id="decideCompliance")
+@router.post(
+    "/recommendations/{recommendation_id}/compliance", response_model=StepResult, operation_id="decideCompliance"
+)
 def decide_compliance(
-    recommendation_id: int, body: ComplianceIn, user: User = Depends(require("compliance:decide")), db: Session = Depends(get_db),
+    recommendation_id: int,
+    body: ComplianceIn,
+    user: User = Depends(require("compliance:decide")),
+    db: Session = Depends(get_db),
 ):
     return _step(db, recommendation_id, "compliance", body.action, body.rationale, user)
 
 
-@router.post("/recommendations/{recommendation_id}/committee", response_model=StepResult, operation_id="decideCommittee")
+@router.post(
+    "/recommendations/{recommendation_id}/committee", response_model=StepResult, operation_id="decideCommittee"
+)
 def decide_committee(
-    recommendation_id: int, body: CommitteeIn, user: User = Depends(require("committee:decide")), db: Session = Depends(get_db),
+    recommendation_id: int,
+    body: CommitteeIn,
+    user: User = Depends(require("committee:decide")),
+    db: Session = Depends(get_db),
 ):
     return _step(db, recommendation_id, "committee", body.action, body.rationale, user)

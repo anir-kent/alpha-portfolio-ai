@@ -6,6 +6,7 @@ is just Holdings, a later ticket can evaluate a proposed post-trade Portfolio wi
 
 Full tax-lot optimisation is out of scope: SR-07 only sums unrealised gains in taxable accounts.
 """
+
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from typing import Literal
@@ -69,7 +70,9 @@ def _equity_share(rows: list[dict], total: float) -> float:
     return sum(r["market_value"] for r in rows if r["asset_class"] == "equity") / total * 100 if total else 0.0
 
 
-def evaluate(rows: list[dict], client: ClientContext, limits: SuitabilityLimits, market: MarketData) -> list[RuleResult]:
+def evaluate(
+    rows: list[dict], client: ClientContext, limits: SuitabilityLimits, market: MarketData
+) -> list[RuleResult]:
     total = sum(r["market_value"] for r in rows)
     pct = lambda v: v / total * 100 if total else 0.0  # noqa: E731
     wr = limits.warn_ratio
@@ -80,10 +83,16 @@ def evaluate(rows: list[dict], client: ClientContext, limits: SuitabilityLimits,
 
     # SR-01 maximum equity share for the Risk Profile
     cap = limits.max_equity_pct[profile]
-    results.append(_result(
-        "SR-01", "Maximum equity share", [Finding("equity", _r(equity), cap, _limit_status(equity, cap, wr))],
-        lambda st, fs: f"Equity is {_r(equity)}% of the Portfolio against a {cap:g}% cap for a {profile} Risk Profile ({st})",
-    ))
+    results.append(
+        _result(
+            "SR-01",
+            "Maximum equity share",
+            [Finding("equity", _r(equity), cap, _limit_status(equity, cap, wr))],
+            lambda st, fs: (
+                f"Equity is {_r(equity)}% of the Portfolio against a {cap:g}% cap for a {profile} Risk Profile ({st})"
+            ),
+        )
+    )
 
     # SR-02 single-position limit (single names; diversified funds are exempt)
     by_symbol: dict[str, float] = defaultdict(float)
@@ -91,26 +100,37 @@ def evaluate(rows: list[dict], client: ClientContext, limits: SuitabilityLimits,
         if r["kind"] == "equity":
             by_symbol[r["symbol"]] += pct(r["market_value"])
     lim = limits.single_position_pct
-    results.append(_result(
-        "SR-02", "Single-position limit",
-        [Finding(s, _r(w), lim, _limit_status(w, lim, wr)) for s, w in sorted(by_symbol.items())],
-        lambda st, fs: (
-            "No single-name positions held" if not fs
-            else f"{', '.join(f'{f.subject} {f.actual}%' for f in fs)} against a {lim:g}% single-position limit ({st})"
-        ),
-    ))
+    results.append(
+        _result(
+            "SR-02",
+            "Single-position limit",
+            [Finding(s, _r(w), lim, _limit_status(w, lim, wr)) for s, w in sorted(by_symbol.items())],
+            lambda st, fs: (
+                "No single-name positions held"
+                if not fs
+                else f"{', '.join(f'{f.subject} {f.actual}%' for f in fs)} against a {lim:g}% single-position limit ({st})"
+            ),
+        )
+    )
 
     # SR-03 sector concentration with fund look-through
     lim = limits.sector_pct
-    results.append(_result(
-        "SR-03", "Sector concentration",
-        [Finding(e["sector"], _r(e["weight_pct"]), lim, _limit_status(e["weight_pct"], lim, wr))
-         for e in exposure if e["sector"] not in PSEUDO_SECTORS],
-        lambda st, fs: (
-            "No equity sector exposure" if not fs
-            else f"{', '.join(f'{f.subject} {f.actual}%' for f in fs)} including look-through against a {lim:g}% sector limit ({st})"
-        ),
-    ))
+    results.append(
+        _result(
+            "SR-03",
+            "Sector concentration",
+            [
+                Finding(e["sector"], _r(e["weight_pct"]), lim, _limit_status(e["weight_pct"], lim, wr))
+                for e in exposure
+                if e["sector"] not in PSEUDO_SECTORS
+            ],
+            lambda st, fs: (
+                "No equity sector exposure"
+                if not fs
+                else f"{', '.join(f'{f.subject} {f.actual}%' for f in fs)} including look-through against a {lim:g}% sector limit ({st})"
+            ),
+        )
+    )
 
     # SR-04 minimum cash: breach below the policy floor, warning when it does not cover stated liquidity needs
     cash = sum(pct(r["market_value"]) for r in rows if r["asset_class"] == "cash")
@@ -118,13 +138,21 @@ def evaluate(rows: list[dict], client: ClientContext, limits: SuitabilityLimits,
     if cash < floor:
         cash_f = Finding("cash", _r(cash), floor, "breach", "below the policy cash floor")
     elif cash < client.liquidity_needs_pct:
-        cash_f = Finding("cash", _r(cash), client.liquidity_needs_pct, "warning", "does not cover stated liquidity needs")
+        cash_f = Finding(
+            "cash", _r(cash), client.liquidity_needs_pct, "warning", "does not cover stated liquidity needs"
+        )
     else:
         cash_f = Finding("cash", _r(cash), client.liquidity_needs_pct, "pass")
-    results.append(_result(
-        "SR-04", "Minimum cash reserve", [cash_f],
-        lambda st, fs: f"Cash is {_r(cash)}% against a {floor:g}% floor and {client.liquidity_needs_pct:g}% liquidity needs ({st})",
-    ))
+    results.append(
+        _result(
+            "SR-04",
+            "Minimum cash reserve",
+            [cash_f],
+            lambda st, fs: (
+                f"Cash is {_r(cash)}% against a {floor:g}% floor and {client.liquidity_needs_pct:g}% liquidity needs ({st})"
+            ),
+        )
+    )
 
     # SR-05 Client Restrictions: direct holdings of a restricted Instrument or sector breach; fund look-through warns
     rest_findings: list[Finding] = []
@@ -144,36 +172,56 @@ def evaluate(rows: list[dict], client: ClientContext, limits: SuitabilityLimits,
             via = sector_exp.get(value, {}).get("via_funds_pct", 0.0)
             if via > 0:
                 rest_findings.append(Finding(value, _r(via), 0, "warning", "restricted sector reached through funds"))
-    results.append(RuleResult(
-        "SR-05", "Client Restrictions", worst(f.status for f in rest_findings),
-        "No Restriction is violated" if not rest_findings else "; ".join(
-            f"{f.subject} {f.actual}%: {f.note}" for f in rest_findings),
-        rest_findings,
-    ))
+    results.append(
+        RuleResult(
+            "SR-05",
+            "Client Restrictions",
+            worst(f.status for f in rest_findings),
+            "No Restriction is violated"
+            if not rest_findings
+            else "; ".join(f"{f.subject} {f.actual}%: {f.note}" for f in rest_findings),
+            rest_findings,
+        )
+    )
 
     # SR-06 horizon: a short horizon caps equity
     short = client.horizon_years < limits.horizon_short_years
     hcap = limits.horizon_short_equity_max_pct
     h_status: Status = "pass" if not short else _limit_status(equity, hcap, wr)
-    results.append(RuleResult(
-        "SR-06", "Horizon check", h_status,
-        (f"Horizon of {client.horizon_years} years is short (under {limits.horizon_short_years}); equity is "
-         f"{_r(equity)}% against a {hcap:g}% cap ({h_status})") if short
-        else f"Horizon of {client.horizon_years} years is not short (under {limits.horizon_short_years})",
-        [Finding("equity", _r(equity), hcap, h_status)] if short else [Finding("equity", _r(equity), hcap, "pass", "horizon is not short")],
-    ))
+    results.append(
+        RuleResult(
+            "SR-06",
+            "Horizon check",
+            h_status,
+            (
+                f"Horizon of {client.horizon_years} years is short (under {limits.horizon_short_years}); equity is "
+                f"{_r(equity)}% against a {hcap:g}% cap ({h_status})"
+            )
+            if short
+            else f"Horizon of {client.horizon_years} years is not short (under {limits.horizon_short_years})",
+            [Finding("equity", _r(equity), hcap, h_status)]
+            if short
+            else [Finding("equity", _r(equity), hcap, "pass", "horizon is not short")],
+        )
+    )
 
     # SR-07 taxable-gain warning (warning only; no tax-lot optimisation)
     # Gains only: selling the winners realises them whatever losses sit elsewhere, so losses do not offset.
-    gain = sum(max(0.0, r["price"] - r["cost_basis_per_unit"]) * r["quantity"] for r in rows if r["tax_status"] == "taxable")
+    gain = sum(
+        max(0.0, r["price"] - r["cost_basis_per_unit"]) * r["quantity"] for r in rows if r["tax_status"] == "taxable"
+    )
     gain_pct = pct(gain)
     g_status: Status = "warning" if gain_pct >= limits.taxable_gain_pct else "pass"
-    results.append(RuleResult(
-        "SR-07", "Taxable-gain warning", g_status,
-        f"Unrealised gains (not netted against losses) in taxable accounts are {_r(gain_pct)}% of the Portfolio against a "
-        f"{limits.taxable_gain_pct:g}% warning line ({g_status})",
-        [Finding("taxable gains", _r(gain_pct), limits.taxable_gain_pct, g_status)],
-    ))
+    results.append(
+        RuleResult(
+            "SR-07",
+            "Taxable-gain warning",
+            g_status,
+            f"Unrealised gains (not netted against losses) in taxable accounts are {_r(gain_pct)}% of the Portfolio against a "
+            f"{limits.taxable_gain_pct:g}% warning line ({g_status})",
+            [Finding("taxable gains", _r(gain_pct), limits.taxable_gain_pct, g_status)],
+        )
+    )
     return results
 
 

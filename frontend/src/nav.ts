@@ -1,6 +1,10 @@
 // Navigation is gated by server-issued permissions (from /api/auth/me); the
 // server still enforces every action, this only decides what to show.
-export interface NavItem { to: string; label: string; requires: string }
+export interface NavItem {
+  to: string;
+  label: string;
+  requires: string;
+}
 
 export const NAV: NavItem[] = [
   { to: "/queue", label: "Queue", requires: "queue:read" },
@@ -12,5 +16,4 @@ export const NAV: NavItem[] = [
   { to: "/health", label: "Health", requires: "health:read" },
 ];
 
-export const visibleNav = (permissions: string[]) =>
-  NAV.filter((n) => permissions.includes(n.requires));
+export const visibleNav = (permissions: string[]) => NAV.filter((n) => permissions.includes(n.requires));

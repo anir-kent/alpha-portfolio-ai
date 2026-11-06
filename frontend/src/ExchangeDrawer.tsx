@@ -43,7 +43,11 @@ export function recommendationOf(d: Detail): string | null {
 
 function Block({ children, label }: { children: ReactNode; label: string }) {
   return (
-    <pre tabIndex={0} aria-label={label} className="mono max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-line bg-sunken p-2 text-ink">
+    <pre
+      tabIndex={0}
+      aria-label={label}
+      className="mono max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-line bg-sunken p-2 text-ink"
+    >
       {children}
     </pre>
   );
@@ -66,19 +70,41 @@ function Claims({ verdicts }: { verdicts: Verdict[] }) {
       {verdicts.map((v) => (
         <div key={v.check_id} className="space-y-1">
           <p className="text-ink-2">
-            Grounding verdict <span className="mono">{v.check_id}</span>: {v.summary.grounded} of {v.summary.total} grounded
-            {v.summary.ungrounded > 0 && <> · <span className="font-semibold text-neg">{v.summary.ungrounded} ungrounded</span></>}
+            Grounding verdict <span className="mono">{v.check_id}</span>: {v.summary.grounded} of {v.summary.total}{" "}
+            grounded
+            {v.summary.ungrounded > 0 && (
+              <>
+                {" "}
+                · <span className="font-semibold text-neg">{v.summary.ungrounded} ungrounded</span>
+              </>
+            )}
           </p>
           <ul className="space-y-1">
             {v.claims.map((c) => (
-              <li key={c.index} data-grounded={c.grounded} className={`rounded-xl border p-2 ${c.grounded ? "border-line" : "border-neg bg-neg-bg"}`}
-                style={c.grounded ? undefined : { boxShadow: "inset 3px 0 var(--color-neg)" }}>
+              <li
+                key={c.index}
+                data-grounded={c.grounded}
+                className={`rounded-xl border p-2 ${c.grounded ? "border-line" : "border-neg bg-neg-bg"}`}
+                style={c.grounded ? undefined : { boxShadow: "inset 3px 0 var(--color-neg)" }}
+              >
                 <div className="flex flex-wrap items-center gap-1">
-                  {c.grounded ? <Pill tone="pos">grounded</Pill> : <Pill tone="neg"><Icon name="alert" size={10} />ungrounded</Pill>}
+                  {c.grounded ? (
+                    <Pill tone="pos">grounded</Pill>
+                  ) : (
+                    <Pill tone="neg">
+                      <Icon name="alert" size={10} />
+                      ungrounded
+                    </Pill>
+                  )}
                   {c.asset && <span className="mono text-ink-3">{c.asset}</span>}
                 </div>
                 <p className="mt-0.5">{c.text}</p>
-                {c.issues.map((i) => <p key={i.code + i.message} className="mt-0.5 flex items-center gap-1 text-neg"><Icon name="alert" size={12} />{i.message}</p>)}
+                {c.issues.map((i) => (
+                  <p key={i.code + i.message} className="mt-0.5 flex items-center gap-1 text-neg">
+                    <Icon name="alert" size={12} />
+                    {i.message}
+                  </p>
+                ))}
               </li>
             ))}
           </ul>
@@ -119,9 +145,13 @@ function Body({ d, tab, canLineage }: { d: Detail; tab: Tab; canLineage: boolean
             </div>
           )}
           <h3 className="font-semibold">Raw reply</h3>
-          {d.raw_reply === null || d.raw_reply === ""
-            ? <p className="text-ink-3">{d.outcome === "error" ? "No reply was captured before the call failed." : "No raw reply recorded."}</p>
-            : <Block label="Raw reply">{d.raw_reply}</Block>}
+          {d.raw_reply === null || d.raw_reply === "" ? (
+            <p className="text-ink-3">
+              {d.outcome === "error" ? "No reply was captured before the call failed." : "No raw reply recorded."}
+            </p>
+          ) : (
+            <Block label="Raw reply">{d.raw_reply}</Block>
+          )}
           {d.parsed_content !== null && (
             <>
               <h3 className="font-semibold">Parsed</h3>
@@ -142,9 +172,11 @@ function Body({ d, tab, canLineage }: { d: Detail; tab: Tab; canLineage: boolean
           <Field label="Endpoint host">{d.endpoint_host ?? "—"}</Field>
           <Field label="Mode">{d.mode}</Field>
           <Field label="Outcome">{d.outcome}</Field>
-          <Field label="Latency">{replayed ? "n/a (replayed)" : d.latency_ms === null ? "—" : `${d.latency_ms.toLocaleString("en-US")} ms`}</Field>
-          <Field label="Tokens in">{replayed ? "n/a (replayed)" : t.input?.toLocaleString("en-US") ?? "—"}</Field>
-          <Field label="Tokens out">{replayed ? "n/a (replayed)" : t.output?.toLocaleString("en-US") ?? "—"}</Field>
+          <Field label="Latency">
+            {replayed ? "n/a (replayed)" : d.latency_ms === null ? "—" : `${d.latency_ms.toLocaleString("en-US")} ms`}
+          </Field>
+          <Field label="Tokens in">{replayed ? "n/a (replayed)" : (t.input?.toLocaleString("en-US") ?? "—")}</Field>
+          <Field label="Tokens out">{replayed ? "n/a (replayed)" : (t.output?.toLocaleString("en-US") ?? "—")}</Field>
           <Field label="Hash">{d.hash}</Field>
         </dl>
       );
@@ -153,31 +185,45 @@ function Body({ d, tab, canLineage }: { d: Detail; tab: Tab; canLineage: boolean
         <>
           {rec && (
             <p>
-              {canLineage
-                ? <Link className="text-brand hover:underline" to={`/audit/recommendations/${rec}`}>View lineage of Recommendation <span className="mono">#{rec}</span></Link>
-                : <>Belongs to Recommendation <span className="mono">#{rec}</span></>}
+              {canLineage ? (
+                <Link className="text-brand hover:underline" to={`/audit/recommendations/${rec}`}>
+                  View lineage of Recommendation <span className="mono">#{rec}</span>
+                </Link>
+              ) : (
+                <>
+                  Belongs to Recommendation <span className="mono">#{rec}</span>
+                </>
+              )}
             </p>
           )}
-          {d.used_by.length === 0
-            ? <p className="text-ink-3">No Audit Event references this LLM Exchange.</p>
-            : (
-              <ul className="space-y-1">
-                {d.used_by.map((e) => (
-                  <li key={e.id} className="rounded-xl border border-line p-2">
-                    <span className="font-semibold">{e.type.replace(/_/g, " ")}</span> <span className="mono text-ink-3">Audit Event #{e.id}</span>
-                    <p className="mono text-[0.7692rem] text-ink-3">{e.timestamp} · {e.actor.name}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          {d.grounding.length === 0
-            ? <p className="text-ink-3">No grounding verdict is attached to this Exchange.</p>
-            : d.grounding.map((v) => (
+          {d.used_by.length === 0 ? (
+            <p className="text-ink-3">No Audit Event references this LLM Exchange.</p>
+          ) : (
+            <ul className="space-y-1">
+              {d.used_by.map((e) => (
+                <li key={e.id} className="rounded-xl border border-line p-2">
+                  <span className="font-semibold">{e.type.replace(/_/g, " ")}</span>{" "}
+                  <span className="mono text-ink-3">Audit Event #{e.id}</span>
+                  <p className="mono text-[0.7692rem] text-ink-3">
+                    {e.timestamp} · {e.actor.name}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+          {d.grounding.length === 0 ? (
+            <p className="text-ink-3">No grounding verdict is attached to this Exchange.</p>
+          ) : (
+            d.grounding.map((v) => (
               <p key={v.check_id}>
-                Grounding verdict <span className="mono">{v.check_id}</span>: {v.summary.grounded} of {v.summary.total} Claims grounded
-                {v.summary.ungrounded > 0 && <span className="font-semibold text-neg"> · {v.summary.ungrounded} ungrounded</span>}
+                Grounding verdict <span className="mono">{v.check_id}</span>: {v.summary.grounded} of {v.summary.total}{" "}
+                Claims grounded
+                {v.summary.ungrounded > 0 && (
+                  <span className="font-semibold text-neg"> · {v.summary.ungrounded} ungrounded</span>
+                )}
               </p>
-            ))}
+            ))
+          )}
         </>
       );
   }
@@ -189,7 +235,9 @@ export function ExchangeDrawer({ id, canLineage, onClose }: { id: number; canLin
   const q = useQuery({
     queryKey: ["llm-exchange", id],
     queryFn: async () => {
-      const { data, error } = await api.GET("/api/llm/exchanges/{exchange_id}", { params: { path: { exchange_id: id } } });
+      const { data, error } = await api.GET("/api/llm/exchanges/{exchange_id}", {
+        params: { path: { exchange_id: id } },
+      });
       if (error || !data) throw new Error(`Could not load LLM Exchange #${id}`);
       return data;
     },
@@ -197,21 +245,41 @@ export function ExchangeDrawer({ id, canLineage, onClose }: { id: number; canLin
   const d = q.data;
   return (
     <Drawer title={`LLM Exchange #${id}`} onClose={onClose}>
-      {q.isLoading && <p role="status" className="text-ink-3">Loading LLM Exchange…</p>}
+      {q.isLoading && (
+        <p role="status" className="text-ink-3">
+          Loading LLM Exchange…
+        </p>
+      )}
       {q.isError && <ErrorLine>{q.error.message}</ErrorLine>}
       {d && (
         <>
           <div className="flex flex-wrap items-center gap-2">
             <Pill tone={d.mode === "live" ? "pos" : "warn"}>{d.mode}</Pill>
-            {d.outcome === "error" ? <Pill tone="neg"><Icon name="alert" size={10} />failed</Pill> : <Pill tone="pos">ok</Pill>}
-            <span className="mono text-ink-3">{d.task} · {d.prompt_version}</span>
-            <button type="button" className="btn btn-sm ml-auto" onClick={() => downloadExchange(d)}>Download JSON</button>
+            {d.outcome === "error" ? (
+              <Pill tone="neg">
+                <Icon name="alert" size={10} />
+                failed
+              </Pill>
+            ) : (
+              <Pill tone="pos">ok</Pill>
+            )}
+            <span className="mono text-ink-3">
+              {d.task} · {d.prompt_version}
+            </span>
+            <button type="button" className="btn btn-sm ml-auto" onClick={() => downloadExchange(d)}>
+              Download JSON
+            </button>
           </div>
           <div role="tablist" aria-label="Exchange sections" className="seg">
             {TABS.map((t) => (
               <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
                 {t}
-                {t === "Reply" && d.grounding.some((v) => v.summary.ungrounded > 0) && <span className="ml-1 text-neg" title="This reply produced ungrounded Claims"><Icon name="alert" size={10} /><span className="sr-only"> has ungrounded Claims</span></span>}
+                {t === "Reply" && d.grounding.some((v) => v.summary.ungrounded > 0) && (
+                  <span className="ml-1 text-neg" title="This reply produced ungrounded Claims">
+                    <Icon name="alert" size={10} />
+                    <span className="sr-only"> has ungrounded Claims</span>
+                  </span>
+                )}
               </button>
             ))}
           </div>

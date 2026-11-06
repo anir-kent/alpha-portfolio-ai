@@ -3,6 +3,7 @@
 Same seed + same snapshot => identical Clients, Accounts, Holdings, Targets and Restrictions.
 Usage: uv run python -m app.seeder [--seed N]
 """
+
 import random
 import sys
 from datetime import date, timedelta
@@ -29,10 +30,56 @@ OBJECTIVES = {
     "growth": ["Long-term growth", "Balanced growth and income"],
     "aggressive": ["Maximum long-term growth", "Long-term growth"],
 }
-FIRST = ["Asha", "Ben", "Chen", "Dana", "Eli", "Farah", "Gus", "Hana", "Ivan", "Jia", "Kofi", "Lena", "Mateo", "Nia", "Omar",
-         "Priya", "Quinn", "Rosa", "Sam", "Tara", "Uma", "Vik", "Wen", "Xavi", "Yara", "Zane"]
-LAST = ["Almeida", "Brandt", "Castillo", "Dubois", "Ekström", "Fischer", "Gupta", "Haddad", "Ivanova", "Jensen", "Kim",
-        "Larsen", "Moreau", "Nakamura", "Okafor", "Petrov", "Quarles", "Rossi", "Silva", "Tanaka"]
+FIRST = [
+    "Asha",
+    "Ben",
+    "Chen",
+    "Dana",
+    "Eli",
+    "Farah",
+    "Gus",
+    "Hana",
+    "Ivan",
+    "Jia",
+    "Kofi",
+    "Lena",
+    "Mateo",
+    "Nia",
+    "Omar",
+    "Priya",
+    "Quinn",
+    "Rosa",
+    "Sam",
+    "Tara",
+    "Uma",
+    "Vik",
+    "Wen",
+    "Xavi",
+    "Yara",
+    "Zane",
+]
+LAST = [
+    "Almeida",
+    "Brandt",
+    "Castillo",
+    "Dubois",
+    "Ekström",
+    "Fischer",
+    "Gupta",
+    "Haddad",
+    "Ivanova",
+    "Jensen",
+    "Kim",
+    "Larsen",
+    "Moreau",
+    "Nakamura",
+    "Okafor",
+    "Petrov",
+    "Quarles",
+    "Rossi",
+    "Silva",
+    "Tanaka",
+]
 
 # Planted scenarios: fixed Client IDs so tests and demos can assert on them.
 PLANTED = {
@@ -45,15 +92,77 @@ PLANTED = {
 
 # (profile, {symbol: weight of Portfolio value}, restricted instruments, review-due offset in days)
 _PLANTED_SPECS = {
-    "C001": ("growth", {"AAPL": .15, "MSFT": .15, "NVDA": .12, "XLK": .12, "SPY": .10, "JPM": .03, "JNJ": .03,
-                        "AGG": .15, "LQD": .10, "SGOV": .05}, [], -10),
-    "C002": ("moderate", {"XOM": .15, "XLE": .15, "SPY": .15, "JNJ": .10, "PG": .05, "AGG": .15, "LQD": .10, "SHY": .10,
-                          "SGOV": .05}, [], 5),
-    "C003": ("conservative", {"SPY": .10, "XLV": .05, "XLP": .05, "AGG": .25, "SHY": .15, "SGOV": .40}, [], -30),
-    "C004": ("growth", {"XOM": .06, "SPY": .30, "AAPL": .08, "MSFT": .08, "JNJ": .06, "JPM": .06, "AGG": .15, "LQD": .10,
-                        "SGOV": .05, "XLV": .06}, ["XOM"], 12),
-    "C005": ("moderate", {"SPY": .10, "XLV": .06, "XLF": .06, "XLI": .05, "XLP": .05, "XLY": .04, "XLU": .04, "XLRE": .02,
-                          "XLC": .03, "AGG": .25, "LQD": .10, "SHY": .10, "SGOV": .10}, [], 30),
+    "C001": (
+        "growth",
+        {
+            "AAPL": 0.15,
+            "MSFT": 0.15,
+            "NVDA": 0.12,
+            "XLK": 0.12,
+            "SPY": 0.10,
+            "JPM": 0.03,
+            "JNJ": 0.03,
+            "AGG": 0.15,
+            "LQD": 0.10,
+            "SGOV": 0.05,
+        },
+        [],
+        -10,
+    ),
+    "C002": (
+        "moderate",
+        {
+            "XOM": 0.15,
+            "XLE": 0.15,
+            "SPY": 0.15,
+            "JNJ": 0.10,
+            "PG": 0.05,
+            "AGG": 0.15,
+            "LQD": 0.10,
+            "SHY": 0.10,
+            "SGOV": 0.05,
+        },
+        [],
+        5,
+    ),
+    "C003": ("conservative", {"SPY": 0.10, "XLV": 0.05, "XLP": 0.05, "AGG": 0.25, "SHY": 0.15, "SGOV": 0.40}, [], -30),
+    "C004": (
+        "growth",
+        {
+            "XOM": 0.06,
+            "SPY": 0.30,
+            "AAPL": 0.08,
+            "MSFT": 0.08,
+            "JNJ": 0.06,
+            "JPM": 0.06,
+            "AGG": 0.15,
+            "LQD": 0.10,
+            "SGOV": 0.05,
+            "XLV": 0.06,
+        },
+        ["XOM"],
+        12,
+    ),
+    "C005": (
+        "moderate",
+        {
+            "SPY": 0.10,
+            "XLV": 0.06,
+            "XLF": 0.06,
+            "XLI": 0.05,
+            "XLP": 0.05,
+            "XLY": 0.04,
+            "XLU": 0.04,
+            "XLRE": 0.02,
+            "XLC": 0.03,
+            "AGG": 0.25,
+            "LQD": 0.10,
+            "SHY": 0.10,
+            "SGOV": 0.10,
+        },
+        [],
+        30,
+    ),
 }
 
 
@@ -72,7 +181,7 @@ def _random_weights(rng: random.Random, profile: str, market: MarketData, banned
         pool = [i.symbol for i in market.instruments() if i.asset_class == cls and i.symbol not in banned]
         picks = rng.sample(pool, min(len(pool), rng.randint(4, 7) if cls == "equity" else rng.randint(1, 3)))
         raw = [rng.uniform(0.5, 1.5) for _ in picks]
-        for s, r in zip(picks, raw):
+        for s, r in zip(picks, raw, strict=True):
             weights[s] = w * r / sum(raw)
     return weights
 
@@ -99,7 +208,9 @@ def seed_clients(session_factory, market: MarketData, seed: int = DEFAULT_SEED) 
                 if rng.random() < 0.5:
                     sector = rng.choice(["Energy", "Financials", "Consumer Staples"])
                     restrictions.append(RestrictionRow(client_id=cid, kind="sector", value=sector))
-                    banned |= {i.symbol for i in market.instruments() if market.sector_weights(i.symbol).get(sector, 0) > 0}
+                    banned |= {
+                        i.symbol for i in market.instruments() if market.sector_weights(i.symbol).get(sector, 0) > 0
+                    }
                 else:
                     sym = rng.choice(["XOM", "NVDA", "JPM", "PG"])
                     restricted = [sym]
@@ -111,12 +222,18 @@ def seed_clients(session_factory, market: MarketData, seed: int = DEFAULT_SEED) 
             restrictions.append(RestrictionRow(client_id=cid, kind="instrument", value=sym))
 
         lo, hi = HORIZON[profile]
-        clients.append(ClientRow(
-            id=cid, name=name, email=f"{cid.lower()}@clients.example.invalid", risk_profile=profile,
-            objective=rng.choice(OBJECTIVES[profile]), horizon_years=rng.randint(lo, hi),
-            liquidity_needs_pct=round(rng.uniform(5, 15) if profile == "conservative" else rng.uniform(0, 10), 1),
-            review_due=(today + timedelta(days=due_offset)).isoformat(),
-        ))
+        clients.append(
+            ClientRow(
+                id=cid,
+                name=name,
+                email=f"{cid.lower()}@clients.example.invalid",
+                risk_profile=profile,
+                objective=rng.choice(OBJECTIVES[profile]),
+                horizon_years=rng.randint(lo, hi),
+                liquidity_needs_pct=round(rng.uniform(5, 15) if profile == "conservative" else rng.uniform(0, 10), 1),
+                review_due=(today + timedelta(days=due_offset)).isoformat(),
+            )
+        )
         for cls, w in TARGETS[profile].items():
             targets.append(TargetRow(client_id=cid, asset_class=cls, weight=w))
         acct_ids = {k: f"{cid}-{'TX' if k == 'taxable' else 'TA'}" for k in tax_kinds}
@@ -144,5 +261,9 @@ if __name__ == "__main__":
 
     s = Settings()
     seed = int(sys.argv[sys.argv.index("--seed") + 1]) if "--seed" in sys.argv else DEFAULT_SEED
-    seed_clients(make_session_factory(s.database_url), MarketData.load(s.market_data_snapshot_path, s.fund_lookthrough_path), seed)
+    seed_clients(
+        make_session_factory(s.database_url),
+        MarketData.load(s.market_data_snapshot_path, s.fund_lookthrough_path),
+        seed,
+    )
     print(f"seeded {N_CLIENTS} synthetic clients (seed {seed}) into {s.database_url}")

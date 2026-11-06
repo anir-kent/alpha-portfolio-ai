@@ -8,12 +8,16 @@ See the spec at `.scratch/run-analysis-progress/spec.md`.
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Broken market data (through the existing dependency override) makes Score Portfolios fail. The snapshot shows `failed` with that step failed and later steps skipped, and the error is a fixed safe message with no exception text
-- [ ] A Failed run leaves no Priority Results, Suitability results, Recommendations or Audit Events, and does not supersede any open Recommendation. The Queue still serves the previous run
-- [ ] A failed run's row keeps its outcome and Run Step results, and the traceback is logged with the run id
-- [ ] A fake LLM that raises during the narrative steps gives `completed_with_warnings`. The Queue moves to the new run and the failed narrative step carries the "AI step failed" wording
-- [ ] After a Failed run, a new run can start straight away
-- [ ] The modal shows the Failed and Completed with warnings states with the agreed wording. Only Completed with warnings refreshes the Queue and Recommendation queries and offers View updated queue
-- [ ] `npm run typecheck` and `npm run build` pass; the manual E2E checklist gains an item for Completed with warnings in recorded LLM mode
+- [x] Broken market data (through the existing dependency override) makes Score Portfolios fail. The snapshot shows `failed` with that step failed and later steps skipped, and the error is a fixed safe message with no exception text
+- [x] A Failed run leaves no Priority Results, Suitability results, Recommendations or Audit Events, and does not supersede any open Recommendation. The Queue still serves the previous run
+- [x] A failed run's row keeps its outcome and Run Step results, and the traceback is logged with the run id
+- [x] A fake LLM that raises during the narrative steps gives `completed_with_warnings`. The Queue moves to the new run and the failed narrative step carries the "AI step failed" wording
+- [x] After a Failed run, a new run can start straight away
+- [x] The modal shows the Failed and Completed with warnings states with the agreed wording. Only Completed with warnings refreshes the Queue and Recommendation queries and offers View updated queue
+- [x] `npm run typecheck` and `npm run build` pass; the manual E2E checklist gains an item for Completed with warnings in recorded LLM mode
+
+**Decisions (from review):**
+- A narrative step is failed if any Portfolio's narrative failed (an `LlmError` or a reply that fails validation, absorbed per Portfolio as before) or if the step raised. So a provider that is down gives Completed with warnings, not Completed. Ticket 02's frozen-run assertions moved to `completed_with_warnings`.
+- The two narrative steps run independently after the commit. A failed Priority narratives step does not skip Recommendation narratives. "Failed step, later steps skipped" is the rule only for the scoring steps (a Failed run).

@@ -9,8 +9,8 @@ Both the proposed and the allowed tilt are stored and audited. An Asset-Class ti
 (`tilted_targets`); a sector tilt is a switch inside equity (`rebalance.sector_sleeve`). The LLM never produces another
 number and never a compliance outcome; if it fails, the Recommendation is the plain rule-based one.
 """
+
 import json
-import math
 from dataclasses import dataclass, field
 
 from pydantic import BaseModel, Field, ValidationError
@@ -85,20 +85,35 @@ def exposures(rows: list[dict], market: MarketData) -> dict[str, dict[str, float
 
 def _request(client: ClientRow, exposure: dict, insights: list[InsightRow]) -> LlmRequest:
     payload = {
-        "portfolio_id": client.id, "risk_profile": client.risk_profile, "exposure": exposure,
+        "portfolio_id": client.id,
+        "risk_profile": client.risk_profile,
+        "exposure": exposure,
         "insights": [
-            {"id": i.id, "subject_kind": i.subject_kind, "subject": i.subject, "direction": i.direction,
-             "confidence": i.confidence, "report_id": i.report_id, "page": i.page, "passage": i.passage}
+            {
+                "id": i.id,
+                "subject_kind": i.subject_kind,
+                "subject": i.subject,
+                "direction": i.direction,
+                "confidence": i.confidence,
+                "report_id": i.report_id,
+                "page": i.page,
+                "passage": i.passage,
+            }
             for i in insights
         ],
     }
     return LlmRequest(
-        task=RESEARCH_TILT.name, prompt_version=RESEARCH_TILT.label, system=RESEARCH_TILT.system,
-        user=json.dumps(payload, sort_keys=True), schema=TiltProposal.model_json_schema(),
+        task=RESEARCH_TILT.name,
+        prompt_version=RESEARCH_TILT.label,
+        system=RESEARCH_TILT.system,
+        user=json.dumps(payload, sort_keys=True),
+        schema=TiltProposal.model_json_schema(),
     )
 
 
-def evaluate(proposal: TiltProposal, insights: list[InsightRow], exposure: dict, bound_pp: float) -> tuple[list[TiltEntry], list[dict]]:
+def evaluate(
+    proposal: TiltProposal, insights: list[InsightRow], exposure: dict, bound_pp: float
+) -> tuple[list[TiltEntry], list[dict]]:
     """The deterministic half: which proposals count, summed per subject and clipped to the bound."""
     by_id = {i.id: i for i in insights}
     groups: dict[tuple[str, str], dict] = {}
@@ -113,7 +128,9 @@ def evaluate(proposal: TiltProposal, insights: list[InsightRow], exposure: dict,
             dropped.append({"insight_id": t.insight_id, "reason": "duplicate proposal for the Insight"})
             continue
         seen.add(t.insight_id)
-        g = groups.setdefault((insight.subject_kind, insight.subject), {"proposed": 0.0, "usable": 0.0, "ids": [], "conflict": False})
+        g = groups.setdefault(
+            (insight.subject_kind, insight.subject), {"proposed": 0.0, "usable": 0.0, "ids": [], "conflict": False}
+        )
         g["proposed"] += t.tilt_pp
         g["ids"].append(insight.id)
         sign = _DIRECTION_SIGN[insight.direction]
@@ -130,15 +147,24 @@ def evaluate(proposal: TiltProposal, insights: list[InsightRow], exposure: dict,
             notes.append("part of the proposal contradicts the Insight direction and was not applied")
         if was_clipped:
             notes.append(f"clipped to the {bound_pp:g} pp bound")
-        entries.append(TiltEntry(
-            subject_kind=kind, subject=subject, exposure_pct=exposure[kind].get(subject, 0.0),
-            proposed_pp=round(g["proposed"], 2), allowed_pp=allowed, reason="; ".join(notes) or "within the bound",
-            insight_ids=g["ids"], clipped=was_clipped,
-        ))
+        entries.append(
+            TiltEntry(
+                subject_kind=kind,
+                subject=subject,
+                exposure_pct=exposure[kind].get(subject, 0.0),
+                proposed_pp=round(g["proposed"], 2),
+                allowed_pp=allowed,
+                reason="; ".join(notes) or "within the bound",
+                insight_ids=g["ids"],
+                clipped=was_clipped,
+            )
+        )
     return entries, dropped
 
 
-def assess(db: Session, llm: LlmClient, *, client: ClientRow, rows: list[dict], market: MarketData, cfg: Config) -> Assessment | None:
+def assess(
+    db: Session, llm: LlmClient, *, client: ClientRow, rows: list[dict], market: MarketData, cfg: Config
+) -> Assessment | None:
     """Ask the LLM for a tilt and bound it. None when there is nothing approved to tilt on (no LLM call is made)."""
     insights = reports.approved_insights(db)
     if not insights:
@@ -182,17 +208,33 @@ def tilted_targets(targets: dict[str, float], class_tilts_pp: dict[str, float], 
 
 def entry_dicts(a: Assessment) -> list[dict]:
     return [
-        {"subject_kind": e.subject_kind, "subject": e.subject, "exposure_pct": e.exposure_pct, "proposed_pp": e.proposed_pp,
-         "allowed_pp": e.allowed_pp, "clipped": e.clipped, "reason": e.reason, "insight_ids": e.insight_ids}
+        {
+            "subject_kind": e.subject_kind,
+            "subject": e.subject,
+            "exposure_pct": e.exposure_pct,
+            "proposed_pp": e.proposed_pp,
+            "allowed_pp": e.allowed_pp,
+            "clipped": e.clipped,
+            "reason": e.reason,
+            "insight_ids": e.insight_ids,
+        }
         for e in a.entries
     ]
 
 
 def store(db: Session, rec: RecommendationRow, a: Assessment) -> None:
-    db.add(RecommendationTiltRow(
-        recommendation_id=rec.id, status=a.status, error=a.error, bound_pp=a.bound_pp, model=a.model,
-        prompt_version=a.prompt_version, entries_json=json.dumps(entry_dicts(a)), dropped_json=json.dumps(a.dropped),
-    ))
+    db.add(
+        RecommendationTiltRow(
+            recommendation_id=rec.id,
+            status=a.status,
+            error=a.error,
+            bound_pp=a.bound_pp,
+            model=a.model,
+            prompt_version=a.prompt_version,
+            entries_json=json.dumps(entry_dicts(a)),
+            dropped_json=json.dumps(a.dropped),
+        )
+    )
     db.flush()
 
 
@@ -200,7 +242,9 @@ def _insight_event_ids(db: Session, insights: list[InsightRow]) -> list[int]:
     """The audit events that made each Insight usable: its approval (else its extraction), so lineage reaches the Report."""
     wanted = {i.id: i for i in insights}
     found: dict[int, int] = {}
-    for ev in db.scalars(select(AuditEventRow).where(AuditEventRow.type == "insight_approved").order_by(AuditEventRow.id)):
+    for ev in db.scalars(
+        select(AuditEventRow).where(AuditEventRow.type == "insight_approved").order_by(AuditEventRow.id)
+    ):
         found[json.loads(ev.payload_json).get("insight_id")] = ev.id
     return sorted({found.get(i, wanted[i].extract_event_id) for i in wanted})
 
@@ -212,17 +256,27 @@ def audit_assessment(db: Session, rec: RecommendationRow, a: Assessment) -> int:
     parents = _insight_event_ids(db, a.insights)
     if a.status != "ok":
         return audit.record(
-            db, "research_tilt_proposed", llm_actor, {"status": "failed", "error": a.error, "insight_ids": [i.id for i in a.insights], **a.exchange},
-            parents=parents, **scope,
+            db,
+            "research_tilt_proposed",
+            llm_actor,
+            {"status": "failed", "error": a.error, "insight_ids": [i.id for i in a.insights], **a.exchange},
+            parents=parents,
+            **scope,
         )
     names = {i.id: i.subject for i in a.insights}
     proposed = audit.record(
-        db, "research_tilt_proposed", llm_actor,
-        {"status": "ok", "tilts": [{**p, "subject": names.get(p["insight_id"])} for p in a.proposed], **a.exchange}, parents=parents, **scope,
+        db,
+        "research_tilt_proposed",
+        llm_actor,
+        {"status": "ok", "tilts": [{**p, "subject": names.get(p["insight_id"])} for p in a.proposed], **a.exchange},
+        parents=parents,
+        **scope,
     )
     return audit.record(
-        db, "research_tilt_applied", ENGINE,
-        {"bound_pp": a.bound_pp, "dropped": a.dropped,
-         "tilts": entry_dicts(a)},
-        parents=[proposed], **scope,
+        db,
+        "research_tilt_applied",
+        ENGINE,
+        {"bound_pp": a.bound_pp, "dropped": a.dropped, "tilts": entry_dicts(a)},
+        parents=[proposed],
+        **scope,
     )

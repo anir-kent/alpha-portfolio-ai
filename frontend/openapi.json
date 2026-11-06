@@ -87,14 +87,150 @@
           "queue"
         ],
         "summary": "Start Run",
+        "description": "Start an Analysis Run in the background (ADR-0005). Only one runs at a time: while one is in flight, `409` with it.",
         "operationId": "runAnalysis",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSnapshot"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A run is already in flight: its snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/runs/current": {
+      "get": {
+        "tags": [
+          "queue"
+        ],
+        "summary": "Current Run",
+        "operationId": "getCurrentAnalysisRun",
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunOut"
+                  "$ref": "#/components/schemas/RunSnapshot"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No run in flight"
+          }
+        }
+      }
+    },
+    "/api/analysis/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "queue"
+        ],
+        "summary": "Get Run",
+        "description": "The run's live state while it is in flight, its saved result once it has finished.",
+        "operationId": "getAnalysisRun",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSnapshot"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/runs/{run_id}/events": {
+      "get": {
+        "tags": [
+          "queue"
+        ],
+        "summary": "Stream Run",
+        "description": "Push the run's full snapshot as a `progress` event, id = the run's sequence number, on connect and on every\nchange; close after the final snapshot. A reconnect only needs the latest event: `Last-Event-ID` just stops an\nunchanged snapshot being sent again. A value that is not a sequence number is ignored.",
+        "operationId": "streamAnalysisRun",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "last-event-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/event-stream": {}
+            }
+          },
+          "404": {
+            "description": "Analysis Run not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -4952,23 +5088,159 @@
         ],
         "title": "RuleOut"
       },
-      "RunOut": {
+      "RunSnapshot": {
         "properties": {
           "run_id": {
             "type": "integer",
             "title": "Run Id"
           },
-          "portfolios_scored": {
-            "type": "integer",
-            "title": "Portfolios Scored"
+          "actor_name": {
+            "type": "string",
+            "title": "Actor Name"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "completed",
+                  "completed_with_warnings",
+                  "failed",
+                  "interrupted"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/RunStepOut"
+            },
+            "type": "array",
+            "title": "Steps"
           }
         },
         "type": "object",
         "required": [
           "run_id",
-          "portfolios_scored"
+          "actor_name",
+          "started_at",
+          "finished_at",
+          "outcome",
+          "steps"
         ],
-        "title": "RunOut"
+        "title": "RunSnapshot",
+        "description": "The whole state of one Analysis Run: what a client needs to draw the Run Analysis modal."
+      },
+      "RunStepOut": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "load_inputs",
+              "score_portfolios",
+              "record_run",
+              "priority_narratives",
+              "recommendation_narratives"
+            ],
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "done",
+              "failed",
+              "skipped"
+            ],
+            "title": "Outcome"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "done": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Done"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "outcome"
+        ],
+        "title": "RunStepOut"
       },
       "SectorExposureOut": {
         "properties": {

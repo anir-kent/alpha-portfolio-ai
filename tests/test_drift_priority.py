@@ -1,4 +1,5 @@
 """Pure drift engine and priority scorer: exact numbers, no I/O."""
+
 import pytest
 
 from app.config_service import Band, PriorityWeights
@@ -20,7 +21,9 @@ def test_asset_class_drift_is_absolute_point_deviation_and_portfolio_drift_is_ha
     assert d.portfolio_drift_pp == pytest.approx(15)
 
 
-@pytest.mark.parametrize("actual,status", [(0.47, "ok"), (0.48, "warn"), (0.50, "breach"), (0.41, "warn"), (0.35, "breach")])
+@pytest.mark.parametrize(
+    "actual,status", [(0.47, "ok"), (0.48, "warn"), (0.50, "breach"), (0.41, "warn"), (0.35, "breach")]
+)
 def test_tolerance_band_status_per_asset_class(actual, status):
     d = compute_drift({"equity": actual, "bond": 0.45, "cash": 0.10}, TARGET, BAND)
     assert {c.asset_class: c for c in d.classes}["equity"].status == status
@@ -61,7 +64,10 @@ def test_urgency_only_counts_days_past_due_and_flags_sla_breach_at_sla_days():
     not_due = score_portfolio(d, BAND, W, days_past_due=-5, sla_days=30)
     late = score_portfolio(d, BAND, W, days_past_due=10, sla_days=30)
     breached = score_portfolio(d, BAND, W, days_past_due=45, sla_days=30)
-    urg = lambda s: next(c for c in s.components if c.name == "urgency")
+
+    def urg(s):
+        return next(c for c in s.components if c.name == "urgency")
+
     assert urg(not_due).raw == 0 and not not_due.sla_breached
     assert urg(late).raw == pytest.approx(100 / 3) and not late.sla_breached
     assert urg(breached).raw == 100 and breached.sla_breached
@@ -73,11 +79,15 @@ def test_opportunity_input_feeds_the_opportunity_component():
     assert next(c for c in s.components if c.name == "opportunity").points == 10
 
 
-@pytest.mark.parametrize("score,label", [(100, "High"), (70, "High"), (69.9, "Medium"), (40, "Medium"), (39.9, "Low"), (0, "Low")])
+@pytest.mark.parametrize(
+    "score,label", [(100, "High"), (70, "High"), (69.9, "Medium"), (40, "Medium"), (39.9, "Low"), (0, "Low")]
+)
 def test_labels(score, label):
     assert label_for(score) == label
 
 
 def test_drift_exactly_on_a_band_edge_is_classified_at_that_edge():
-    d = compute_drift({"equity": 0.48, "bond": 0.42, "cash": 0.10}, TARGET, BAND)  # 0.48-0.45 is 2.9999999999999996 in floats
+    d = compute_drift(
+        {"equity": 0.48, "bond": 0.42, "cash": 0.10}, TARGET, BAND
+    )  # 0.48-0.45 is 2.9999999999999996 in floats
     assert {c.asset_class: c for c in d.classes}["equity"].status == "warn"

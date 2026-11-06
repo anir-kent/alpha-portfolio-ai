@@ -5,10 +5,11 @@ per call, as soon as the reply or error is in and before the caller writes its A
 hash back on the response or error so the event can reference them. If the Exchange cannot be stored the call fails
 closed with the existing `LlmError`: no model output exists without a record.
 """
+
 import dataclasses
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -28,9 +29,22 @@ def _loads(text: str | None):
 
 def exchange_digest(row: LlmExchangeRow) -> str:
     content = [
-        row.created_at, row.task, row.prompt_version, row.model, row.mode, row.endpoint_host, row.system_text,
-        row.user_prompt, json.loads(row.reply_schema_json), _loads(row.messages_json), row.raw_reply,
-        _loads(row.parsed_content_json), _loads(row.usage_json), row.latency_ms, row.outcome, row.error,
+        row.created_at,
+        row.task,
+        row.prompt_version,
+        row.model,
+        row.mode,
+        row.endpoint_host,
+        row.system_text,
+        row.user_prompt,
+        json.loads(row.reply_schema_json),
+        _loads(row.messages_json),
+        row.raw_reply,
+        _loads(row.parsed_content_json),
+        _loads(row.usage_json),
+        row.latency_ms,
+        row.outcome,
+        row.error,
     ]
     return hashlib.sha256(_canonical(content).encode()).hexdigest()
 
@@ -55,18 +69,32 @@ class CapturingLlm:
         return bound
 
     def _store(
-        self, request: LlmRequest, *, response: LlmResponse | None, error: LlmError | None = None,
+        self,
+        request: LlmRequest,
+        *,
+        response: LlmResponse | None,
+        error: LlmError | None = None,
     ) -> LlmExchangeRow:
         detail = response or error  # both carry whatever transport detail the adapter knew
+        assert detail is not None, "an Exchange is stored for a response or an error"
         row = LlmExchangeRow(
-            created_at=format_ts(datetime.now(timezone.utc)), task=request.task, prompt_version=request.prompt_version,
-            model=response.model if response else getattr(self.inner, "model", None), mode=self.mode,
-            endpoint_host=self.endpoint_host, system_text=request.system, user_prompt=request.user,
+            created_at=format_ts(datetime.now(UTC)),
+            task=request.task,
+            prompt_version=request.prompt_version,
+            model=response.model if response else getattr(self.inner, "model", None),
+            mode=self.mode,
+            endpoint_host=self.endpoint_host,
+            system_text=request.system,
+            user_prompt=request.user,
             reply_schema_json=_canonical(request.schema),
-            messages_json=_dump(detail.messages), raw_reply=detail.raw_reply,
+            messages_json=_dump(detail.messages),
+            raw_reply=detail.raw_reply,
             parsed_content_json=_dump(response.content if response else None),
-            usage_json=_dump(detail.usage), latency_ms=detail.latency_ms,
-            outcome="ok" if response else "error", error=str(error) if error else None, hash="",
+            usage_json=_dump(detail.usage),
+            latency_ms=detail.latency_ms,
+            outcome="ok" if response else "error",
+            error=str(error) if error else None,
+            hash="",
         )
         row.hash = exchange_digest(row)
         if self._db is not None:

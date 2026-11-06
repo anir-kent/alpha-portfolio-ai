@@ -54,17 +54,26 @@ class Verification(BaseModel):
 
 def event_out(r: AuditEventRow) -> AuditEvent:
     return AuditEvent(
-        id=r.id, type=r.type,
-        actor=ActorOut(kind=r.actor_kind, name=r.actor_name, role=r.actor_role,
-                       model=r.model, prompt_version=r.prompt_version),
-        timestamp=r.timestamp, payload=json.loads(r.payload_json), parent_ids=json.loads(r.parent_ids_json),
-        portfolio_id=r.portfolio_id, client_id=r.client_id, recommendation_id=r.recommendation_id,
-        report_id=r.report_id, previous_hash=r.previous_hash, hash=r.hash,
+        id=r.id,
+        type=r.type,
+        actor=ActorOut(
+            kind=r.actor_kind, name=r.actor_name, role=r.actor_role, model=r.model, prompt_version=r.prompt_version
+        ),
+        timestamp=r.timestamp,
+        payload=json.loads(r.payload_json),
+        parent_ids=json.loads(r.parent_ids_json),
+        portfolio_id=r.portfolio_id,
+        client_id=r.client_id,
+        recommendation_id=r.recommendation_id,
+        report_id=r.report_id,
+        previous_hash=r.previous_hash,
+        hash=r.hash,
     )
 
 
-@router.get("/events", response_model=AuditPage, operation_id="searchAuditEvents",
-            dependencies=[Depends(require("audit:read"))])
+@router.get(
+    "/events", response_model=AuditPage, operation_id="searchAuditEvents", dependencies=[Depends(require("audit:read"))]
+)
 def search_events(
     type: EventType | None = None,
     actor: str | None = None,
@@ -79,16 +88,34 @@ def search_events(
     db: Session = Depends(get_db),
 ):
     rows, total = audit.search(
-        db, type=type, actor=actor, portfolio_id=portfolio_id, client_id=client_id,
-        recommendation_id=recommendation_id, report_id=report_id,
-        date_from=date_from, date_to=date_to, limit=limit, offset=offset,
+        db,
+        type=type,
+        actor=actor,
+        portfolio_id=portfolio_id,
+        client_id=client_id,
+        recommendation_id=recommendation_id,
+        report_id=report_id,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        offset=offset,
     )
     return AuditPage(items=[event_out(r) for r in rows], total=total)
 
 
-@router.get("/verify", response_model=Verification, operation_id="verifyAuditChain",
-            dependencies=[Depends(require("audit:verify"))])
+@router.get(
+    "/verify",
+    response_model=Verification,
+    operation_id="verifyAuditChain",
+    dependencies=[Depends(require("audit:verify"))],
+)
 def verify_chain(db: Session = Depends(get_db)):
     v = audit.verify(db)
-    return Verification(valid=v.valid, checked=v.checked, first_broken_id=v.first_broken_id, reason=v.reason,
-                        exchanges_checked=v.exchanges_checked, first_broken_exchange_id=v.first_broken_exchange_id)
+    return Verification(
+        valid=v.valid,
+        checked=v.checked,
+        first_broken_id=v.first_broken_id,
+        reason=v.reason,
+        exchanges_checked=v.exchanges_checked,
+        first_broken_exchange_id=v.first_broken_exchange_id,
+    )

@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 
 def test_health_reports_database_snapshot_and_llm(login):
@@ -11,7 +11,7 @@ def test_health_reports_database_snapshot_and_llm(login):
 
 
 def test_health_reports_snapshot_age(settings, login):
-    ts = (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
+    ts = (datetime.now(UTC) - timedelta(hours=5)).isoformat()
     with open(settings.market_data_snapshot_path, "w") as f:
         json.dump({"as_of": ts}, f)
     h = login("platform_owner").get("/api/health").json()

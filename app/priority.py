@@ -7,6 +7,7 @@ Each component is normalised to 0-100, then weighted (weights from config):
 - opportunity: supplied by the caller (0 until Insights exist).
 - urgency: days past review-due as a share of the SLA; the SLA is breached once they reach it.
 """
+
 from dataclasses import dataclass
 from typing import Literal
 
@@ -45,8 +46,14 @@ def _pct(x: float) -> float:
 
 
 def score_portfolio(
-    drift: PortfolioDrift, band: Band, weights: PriorityWeights, *, days_past_due: int, sla_days: int,
-    opportunity: float = 0.0, suitability_risk: float = 0.0,
+    drift: PortfolioDrift,
+    band: Band,
+    weights: PriorityWeights,
+    *,
+    days_past_due: int,
+    sla_days: int,
+    opportunity: float = 0.0,
+    suitability_risk: float = 0.0,
 ) -> PriorityScore:
     raws = {
         "drift": _pct(100 * drift.portfolio_drift_pp / DRIFT_FULL_PP),

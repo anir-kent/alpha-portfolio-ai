@@ -1,4 +1,7 @@
-from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -19,7 +22,7 @@ class SessionRow(Base):
     __tablename__ = "sessions"
     token_hash: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    expires_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class ConfigRow(Base):
@@ -131,7 +134,11 @@ class AnalysisRunRow(Base):
     actor_name: Mapped[str] = mapped_column(String)
     as_of: Mapped[str] = mapped_column(String)  # review-due and urgency are measured at this date
     config_json: Mapped[str] = mapped_column(Text)  # config in force for this run
-    completed: Mapped[bool] = mapped_column(default=False)  # only completed runs are current
+    completed: Mapped[bool] = mapped_column(default=False)  # results recorded: only completed runs can be current
+    # completed | completed_with_warnings | failed | interrupted; null while the run is in flight (ADR-0005)
+    outcome: Mapped[str | None] = mapped_column(String, nullable=True)
+    finished_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    steps_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # the Run Step results, saved when the run ends
 
 
 class PriorityResultRow(Base):
@@ -171,7 +178,9 @@ class RecommendationRow(Base):
     parent_id: Mapped[int | None] = mapped_column(nullable=True)
     version: Mapped[int] = mapped_column()
     run_id: Mapped[int] = mapped_column(ForeignKey("analysis_runs.id"))
-    status: Mapped[str] = mapped_column(String, index=True)  # pending_advisor | pending_compliance | pending_committee | approved | rejected | superseded
+    status: Mapped[str] = mapped_column(
+        String, index=True
+    )  # pending_advisor | pending_compliance | pending_committee | approved | rejected | superseded
     created_at: Mapped[str] = mapped_column(String)
     created_by: Mapped[str] = mapped_column(String)
     summary: Mapped[str] = mapped_column(Text)
@@ -250,7 +259,9 @@ class GroundingResultRow(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     check_id: Mapped[str] = mapped_column(String, index=True)  # one validation call
     recommendation_id: Mapped[int | None] = mapped_column(ForeignKey("recommendations.id"), index=True, nullable=True)
-    run_id: Mapped[int | None] = mapped_column(ForeignKey("analysis_runs.id"), index=True, nullable=True)  # a priority narrative's claims
+    run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("analysis_runs.id"), index=True, nullable=True
+    )  # a priority narrative's claims
     client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), index=True)
     claim_index: Mapped[int] = mapped_column()
     text: Mapped[str] = mapped_column(Text)
@@ -282,7 +293,9 @@ class RecommendationTiltRow(Base):
     bound_pp: Mapped[float] = mapped_column()  # the bound in force when clipped
     model: Mapped[str | None] = mapped_column(String, nullable=True)
     prompt_version: Mapped[str] = mapped_column(String)
-    entries_json: Mapped[str] = mapped_column(Text)  # [{subject_kind, subject, exposure_pct, proposed_pp, allowed_pp, clipped, reason, insight_ids}]
+    entries_json: Mapped[str] = mapped_column(
+        Text
+    )  # [{subject_kind, subject, exposure_pct, proposed_pp, allowed_pp, clipped, reason, insight_ids}]
     dropped_json: Mapped[str] = mapped_column(Text)
 
 
@@ -316,7 +329,7 @@ class PriorityNarrativeRow(Base):
 
 
 def make_session_factory(url: str) -> sessionmaker:
-    kwargs = {}
+    kwargs: dict[str, Any] = {}
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
         if url in ("sqlite://", "sqlite:///:memory:"):
@@ -328,4 +341,17 @@ def make_session_factory(url: str) -> sessionmaker:
             os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     engine = create_engine(url, **kwargs)
     Base.metadata.create_all(engine)
+    _add_run_outcome_columns(engine)
     return sessionmaker(engine, expire_on_commit=False)
+
+
+def _add_run_outcome_columns(engine) -> None:
+    """An existing database predates the Analysis Run outcome columns: add them, and mark its completed runs completed."""
+    existing = {c["name"] for c in inspect(engine).get_columns("analysis_runs")}
+    if "outcome" in existing:
+        return
+    with engine.begin() as conn:
+        for name, kind in (("outcome", "VARCHAR"), ("finished_at", "VARCHAR"), ("steps_json", "TEXT")):
+            if name not in existing:
+                conn.execute(text(f"ALTER TABLE analysis_runs ADD COLUMN {name} {kind}"))
+        conn.execute(text("UPDATE analysis_runs SET outcome = 'completed' WHERE completed"))

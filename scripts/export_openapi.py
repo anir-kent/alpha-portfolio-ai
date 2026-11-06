@@ -1,4 +1,5 @@
 """Write the backend OpenAPI schema to frontend/openapi.json (the API contract)."""
+
 import json
 import sys
 from pathlib import Path

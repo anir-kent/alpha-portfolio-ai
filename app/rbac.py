@@ -11,21 +11,55 @@ ROLES = (
     "platform_owner",
 )
 
-_CLIENT_WORK = {"queue:read", "portfolio:read", "recommendation:read", "recommendation:decide", "analysis:run", "insight:read", "grounding:validate", "grounding:read"}
+_CLIENT_WORK = {
+    "queue:read",
+    "portfolio:read",
+    "recommendation:read",
+    "recommendation:decide",
+    "analysis:run",
+    "insight:read",
+    "grounding:validate",
+    "grounding:read",
+}
 
 PERMISSIONS: dict[str, frozenset[str]] = {
     "relationship_manager": frozenset(_CLIENT_WORK),
     "advisor": frozenset(_CLIENT_WORK | {"client:pii"}),
-    "portfolio_manager": frozenset({"portfolio:read", "recommendation:read", "config:read", "insight:read", "grounding:read"}),
+    "portfolio_manager": frozenset(
+        {"portfolio:read", "recommendation:read", "config:read", "insight:read", "grounding:read"}
+    ),
     "research_analyst": frozenset({"report:upload", "report:read", "insight:approve", "insight:read"}),
     "compliance_officer": frozenset(
-        {"portfolio:read", "recommendation:read", "compliance:decide", "approvals:read", "config:read", "client:pii", "insight:read", "grounding:read", "llm:read"}
+        {
+            "portfolio:read",
+            "recommendation:read",
+            "compliance:decide",
+            "approvals:read",
+            "config:read",
+            "client:pii",
+            "insight:read",
+            "grounding:read",
+            "llm:read",
+        }
     ),
     "investment_committee": frozenset({"recommendation:read", "committee:decide", "approvals:read"}),
     "auditor": frozenset(
-        {"audit:read", "audit:verify", "governance:read", "governance:run", "recommendation:read", "portfolio:read", "config:read", "insight:read", "grounding:read", "llm:read"}
+        {
+            "audit:read",
+            "audit:verify",
+            "governance:read",
+            "governance:run",
+            "recommendation:read",
+            "portfolio:read",
+            "config:read",
+            "insight:read",
+            "grounding:read",
+            "llm:read",
+        }
     ),
-    "platform_owner": frozenset({"config:read", "config:write", "health:read", "governance:read", "governance:run", "llm:read"}),
+    "platform_owner": frozenset(
+        {"config:read", "config:write", "health:read", "governance:read", "governance:run", "llm:read"}
+    ),
 }
 
 assert set(PERMISSIONS) == set(ROLES)

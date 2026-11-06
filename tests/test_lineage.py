@@ -4,6 +4,7 @@ Planted C003 with an approved `equity` Insight and a stub tilt, then fully proce
 Suitability breach (version 2), Compliance approves the exception, the Investment Committee approves. Lineage must
 reach back from the final Decision to the Report, through every approval step.
 """
+
 import pytest
 
 from app.research_seed import seed_research
@@ -22,7 +23,10 @@ def processed(ai, login):  # noqa: F811
     assert mod.status_code == 200, mod.text
     v2 = mod.json()["recommendation"]
     assert decide(ai.advisor, v2["id"], "accept").status_code == 200
-    assert act(login("compliance_officer"), "compliance", v2["id"], "approve", "Client understands the risk").status_code == 200
+    assert (
+        act(login("compliance_officer"), "compliance", v2["id"], "approve", "Client understands the risk").status_code
+        == 200
+    )
     assert act(login("investment_committee"), "committee", v2["id"], "approve", "Within mandate").status_code == 200
     ai.v1, ai.v2, ai.auditor = v1, v2, login("auditor")
     return ai
@@ -48,7 +52,9 @@ def test_lineage_runs_from_report_through_every_approval_step_to_the_final_decis
     assert by_stage["decision"] == ["decision_recorded", "decision_recorded", "exception_approved", "decision_recorded"]
     ids = [n["id"] for n in nodes]
     assert ids == sorted(ids), "oldest first"
-    assert all(set(n["parent_ids"]) <= set(ids) for n in nodes if n["stage"] != "decision" or n["parent_ids"]), "no dangling parents"
+    assert all(set(n["parent_ids"]) <= set(ids) for n in nodes if n["stage"] != "decision" or n["parent_ids"]), (
+        "no dangling parents"
+    )
 
 
 def node(nodes, type, nth=0):
@@ -70,7 +76,11 @@ def test_every_node_shows_actor_and_timestamp_and_ai_nodes_show_model_and_prompt
 def test_overrides_are_flagged_and_routine_steps_are_not(processed):
     nodes = lineage(processed.auditor, processed.v2["id"])
     flagged = [(n["type"], n["payload"].get("action")) for n in nodes if n["override"]]
-    assert flagged == [("decision_recorded", "modify"), ("recommendation_modified", None), ("exception_approved", "approve_exception")]
+    assert flagged == [
+        ("decision_recorded", "modify"),
+        ("recommendation_modified", None),
+        ("exception_approved", "approve_exception"),
+    ]
 
 
 def test_the_approved_insight_node_carries_its_report_passage(processed):
@@ -87,7 +97,9 @@ def test_only_the_auditor_can_open_lineage_and_unknown_ids_are_404(processed, lo
 
 def test_human_verified_items_are_marked_and_machine_extracted_ones_are_not(processed):
     nodes = lineage(processed.auditor, processed.v2["id"])
-    assert not any(n["human_verified"] for n in nodes), "a freshly uploaded and analyst-approved Report is not human-verified"
+    assert not any(n["human_verified"] for n in nodes), (
+        "a freshly uploaded and analyst-approved Report is not human-verified"
+    )
 
 
 def test_seeded_human_verified_report_and_insight_are_marked_in_lineage(ai, app, login):

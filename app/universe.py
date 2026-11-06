@@ -3,6 +3,7 @@
 Names, exchange, currency and prices come from the market-data snapshot; the
 classification below is ours, since the free data tier does not provide it.
 """
+
 from dataclasses import dataclass
 
 GICS_SECTORS = (
@@ -100,5 +101,5 @@ NAMES = {
     "TLT": "iShares 20+ Year Treasury Bond ETF",
     "LQD": "iShares iBoxx $ Investment Grade Corporate Bond ETF",
     "SHY": "iShares 1-3 Year Treasury Bond ETF",
-    "SGOV": "iShares 0-3 Month Treasury Bond ETF"
+    "SGOV": "iShares 0-3 Month Treasury Bond ETF",
 }

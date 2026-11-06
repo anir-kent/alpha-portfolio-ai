@@ -72,14 +72,18 @@ def _insight(i: InsightRow) -> InsightOut:
 def _report(db: Session, r: ReportRow) -> ReportOut:
     rows = db.scalars(select(InsightRow).where(InsightRow.report_id == r.id).order_by(InsightRow.id))
     return ReportOut(
-        **{f: getattr(r, f) for f in ReportOut.model_fields if f != "insights"}, insights=[_insight(i) for i in rows],
+        **{f: getattr(r, f) for f in ReportOut.model_fields if f != "insights"},
+        insights=[_insight(i) for i in rows],
     )
 
 
 @router.post("/reports", response_model=ReportOut, status_code=201, operation_id="uploadReport")
 async def upload_report(
-    file: UploadFile, title: str | None = None, user: User = Depends(require("report:upload")),
-    db: Session = Depends(get_db), llm: LlmClient = Depends(get_llm),
+    file: UploadFile,
+    title: str | None = None,
+    user: User = Depends(require("report:upload")),
+    db: Session = Depends(get_db),
+    llm: LlmClient = Depends(get_llm),
 ):
     content = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(content) > MAX_UPLOAD_BYTES:
@@ -87,17 +91,23 @@ async def upload_report(
     filename = file.filename or "report"
     try:
         row, _ = reports.ingest(
-            db, llm, title=title or filename, filename=filename, content=content,
+            db,
+            llm,
+            title=title or filename,
+            filename=filename,
+            content=content,
             uploader=Actor.user(user.username, user.role),
         )
     except reports.ReportError as e:
-        raise HTTPException(422, str(e))
+        raise HTTPException(422, str(e)) from e
     return _report(db, row)
 
 
 @router.get("/reports", response_model=ReportList, operation_id="listReports")
 def list_reports(user: User = Depends(require("report:read")), db: Session = Depends(get_db)):
-    return ReportList(items=[_report(db, r) for r in db.scalars(select(ReportRow).order_by(ReportRow.uploaded_at, ReportRow.id))])
+    return ReportList(
+        items=[_report(db, r) for r in db.scalars(select(ReportRow).order_by(ReportRow.uploaded_at, ReportRow.id))]
+    )
 
 
 @router.get("/reports/{report_id}", response_model=ReportOut, operation_id="getReport")
@@ -118,7 +128,9 @@ def get_page(report_id: str, page: int, user: User = Depends(require("insight:re
 
 @router.get("/insights", response_model=InsightList, operation_id="listInsights")
 def list_insights(
-    subject: str | None = Query(None), user: User = Depends(require("insight:read")), db: Session = Depends(get_db),
+    subject: str | None = Query(None),
+    user: User = Depends(require("insight:read")),
+    db: Session = Depends(get_db),
 ):
     """Approved Insights only: the set available for tilt and advisor use."""
     return InsightList(items=[_insight(i) for i in reports.approved_insights(db, subject=subject)])
@@ -126,7 +138,10 @@ def list_insights(
 
 @router.post("/insights/{insight_id}/decision", response_model=InsightOut, operation_id="decideInsight")
 def decide_insight(
-    insight_id: int, body: InsightDecision, user: User = Depends(require("insight:approve")), db: Session = Depends(get_db),
+    insight_id: int,
+    body: InsightDecision,
+    user: User = Depends(require("insight:approve")),
+    db: Session = Depends(get_db),
 ):
     row = db.get(InsightRow, insight_id)
     if row is None:
@@ -134,5 +149,5 @@ def decide_insight(
     try:
         reports.decide(db, row, Actor.user(user.username, user.role), body.action, body.note)
     except reports.ReportError as e:
-        raise HTTPException(409, str(e))
+        raise HTTPException(409, str(e)) from e
     return _insight(row)

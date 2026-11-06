@@ -1,4 +1,5 @@
 """Seam: analysis run + ranked queue through the HTTP API against seeded data."""
+
 import shutil
 
 import pytest
@@ -8,6 +9,7 @@ from app import audit
 from app.db import AuditEventRow
 from app.market_data import MarketData
 from app.seeder import PLANTED, seed_clients
+from tests.runs import RUNS, run_and_wait
 from tests.test_market_data import LOOKTHROUGH, SNAPSHOT
 
 QUEUE = "/api/queue"
@@ -23,7 +25,7 @@ def seeded(app, settings):
 @pytest.fixture
 def advisor(login, seeded):
     c = login("advisor")
-    assert c.post("/api/analysis/runs").status_code == 200
+    run_and_wait(c)
     return c
 
 
@@ -72,7 +74,7 @@ def test_config_weights_change_scores(advisor, login):
     before = {i["client_id"]: i["score"] for i in rows(advisor)}
     owner = login("platform_owner")
     owner.patch("/api/config", json={"priority_weights": {"drift": 0, "risk": 0, "opportunity": 0, "urgency": 1}})
-    assert advisor.post("/api/analysis/runs").status_code == 200
+    run_and_wait(advisor)
     after = {i["client_id"]: i for i in rows(advisor)}
     assert after[PLANTED["clean"]]["score"] == 0
     assert after[PLANTED["cash_drag"]]["score"] == 100
@@ -81,7 +83,7 @@ def test_config_weights_change_scores(advisor, login):
 
 def test_new_run_supersedes_the_previous_one(advisor):
     first = advisor.get(QUEUE).json()["run_id"]
-    second = advisor.post("/api/analysis/runs").json()["run_id"]
+    second = run_and_wait(advisor)
     assert second != first
     body = advisor.get(QUEUE).json()
     assert body["run_id"] == second and len(body["items"]) == 25
@@ -128,14 +130,25 @@ def test_client_name_is_masked_without_pii_permission(login, advisor):
     assert next(i for i in rows(rm) if i["client_id"] == "C001")["client_name"] is None
 
 
-@pytest.mark.parametrize("role,ok", [
-    ("advisor", True), ("relationship_manager", True),
-    ("portfolio_manager", False), ("compliance_officer", False), ("auditor", False),
-    ("research_analyst", False), ("investment_committee", False), ("platform_owner", False),
-])
+@pytest.mark.parametrize(
+    "role,ok",
+    [
+        ("advisor", True),
+        ("relationship_manager", True),
+        ("portfolio_manager", False),
+        ("compliance_officer", False),
+        ("auditor", False),
+        ("research_analyst", False),
+        ("investment_committee", False),
+        ("platform_owner", False),
+    ],
+)
 def test_only_advisor_and_rm_can_run_and_read_the_queue(login, seeded, role, ok):
     c = login(role)
-    assert (c.post("/api/analysis/runs").status_code == 200) is ok
+    if ok:
+        run_and_wait(c)
+    else:
+        assert c.post(RUNS).status_code == 403
     assert (c.get(QUEUE).status_code == 200) is ok
 
 
@@ -147,4 +160,5 @@ def test_denied_attempts_are_audited(login, seeded, app):
 
 def test_cli_runs_analysis(seeded, settings):
     from app.analysis import main
+
     assert main(settings) == 25

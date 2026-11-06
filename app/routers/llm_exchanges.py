@@ -1,7 +1,8 @@
 import json
 import time
-from datetime import datetime, timezone
-from typing import Iterator, Literal
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -14,6 +15,7 @@ from app.audit import format_ts
 from app.db import AuditEventRow, LlmExchangeRow
 from app.deps import get_db, require
 from app.routers.audit import AuditEvent, event_out
+from app.sse import KEEPALIVE_SECONDS, event_stream, last_event_number
 
 router = APIRouter(prefix="/api/llm", tags=["llm"])
 
@@ -66,12 +68,25 @@ def _loads(text: str | None):
 
 def exchange_out(r: LlmExchangeRow) -> ExchangeOut:
     return ExchangeOut(
-        id=r.id, created_at=r.created_at, task=r.task, prompt_version=r.prompt_version, model=r.model, mode=r.mode,
-        endpoint_host=r.endpoint_host, system_text=r.system_text, user_prompt=r.user_prompt,
-        reply_schema=json.loads(r.reply_schema_json), messages=_loads(r.messages_json), raw_reply=r.raw_reply,
-        parsed_content=_loads(r.parsed_content_json), usage=_loads(r.usage_json), latency_ms=r.latency_ms,
+        id=r.id,
+        created_at=r.created_at,
+        task=r.task,
+        prompt_version=r.prompt_version,
+        model=r.model,
+        mode=r.mode,
+        endpoint_host=r.endpoint_host,
+        system_text=r.system_text,
+        user_prompt=r.user_prompt,
+        reply_schema=json.loads(r.reply_schema_json),
+        messages=_loads(r.messages_json),
+        raw_reply=r.raw_reply,
+        parsed_content=_loads(r.parsed_content_json),
+        usage=_loads(r.usage_json),
+        latency_ms=r.latency_ms,
         telemetry="measured" if r.mode == "live" else "not_available_replayed",
-        outcome=r.outcome, error=r.error, hash=r.hash,
+        outcome=r.outcome,
+        error=r.error,
+        hash=r.hash,
     )
 
 
@@ -105,7 +120,9 @@ def referencing_events(db: Session, exchange_ids: list[int]) -> dict[int, list[A
     if not exchange_ids:
         return found
     wanted = set(exchange_ids)
-    for ev in db.scalars(select(AuditEventRow).where(AuditEventRow.payload_json.contains('"exchange_id"')).order_by(AuditEventRow.id)):
+    for ev in db.scalars(
+        select(AuditEventRow).where(AuditEventRow.payload_json.contains('"exchange_id"')).order_by(AuditEventRow.id)
+    ):
         exchange_id = audit.exchange_reference(ev.payload_json)[0]
         if exchange_id in wanted:
             found.setdefault(exchange_id, []).append(ev)
@@ -118,16 +135,28 @@ ERROR_SUMMARY_CHARS = 200
 def exchange_summary(r: LlmExchangeRow, events: list[AuditEventRow]) -> ExchangeSummary:
     return ExchangeSummary(
         error=None if r.error is None else r.error[:ERROR_SUMMARY_CHARS],
-        id=r.id, created_at=r.created_at, task=r.task, prompt_version=r.prompt_version, model=r.model, mode=r.mode,
-        outcome=r.outcome, latency_ms=r.latency_ms, usage=_loads(r.usage_json), hash=r.hash,
+        id=r.id,
+        created_at=r.created_at,
+        task=r.task,
+        prompt_version=r.prompt_version,
+        model=r.model,
+        mode=r.mode,
+        outcome=r.outcome,
+        latency_ms=r.latency_ms,
+        usage=_loads(r.usage_json),
+        hash=r.hash,
         telemetry="measured" if r.mode == "live" else "not_available_replayed",
         recommendation_id=next((e.recommendation_id for e in events if e.recommendation_id), None),
         portfolio_id=next((e.portfolio_id for e in events if e.portfolio_id), None),
     )
 
 
-@router.get("/exchanges", response_model=ExchangePage, operation_id="listLlmExchanges",
-            dependencies=[Depends(require("llm:read"))])
+@router.get(
+    "/exchanges",
+    response_model=ExchangePage,
+    operation_id="listLlmExchanges",
+    dependencies=[Depends(require("llm:read"))],
+)
 def list_exchanges(
     task: str | None = None,
     prompt_version: str | None = None,
@@ -140,8 +169,12 @@ def list_exchanges(
     db: Session = Depends(get_db),
 ):
     q = select(LlmExchangeRow)
-    for column, value in ((LlmExchangeRow.task, task), (LlmExchangeRow.prompt_version, prompt_version),
-                          (LlmExchangeRow.mode, mode), (LlmExchangeRow.outcome, outcome)):
+    for column, value in (
+        (LlmExchangeRow.task, task),
+        (LlmExchangeRow.prompt_version, prompt_version),
+        (LlmExchangeRow.mode, mode),
+        (LlmExchangeRow.outcome, outcome),
+    ):
         if value:
             q = q.where(column == value)
     if date_from:
@@ -154,7 +187,6 @@ def list_exchanges(
     return ExchangePage(items=[exchange_summary(r, events.get(r.id, [])) for r in rows], total=total)
 
 
-KEEPALIVE_SECONDS = 15.0
 STREAM_BATCH = 100
 LINK_GRACE_SECONDS = 2.0  # an Exchange is stored just before the Audit Event that references it; wait this long for it
 
@@ -165,7 +197,9 @@ def _sse(summary: ExchangeSummary) -> str:
 
 def _awaiting_link(row: LlmExchangeRow, events: dict[int, list[AuditEventRow]]) -> bool:
     """A fresh Exchange whose event is not written yet: streaming it now would show it with no linked Recommendation."""
-    age = (datetime.now(timezone.utc) - datetime.strptime(row.created_at, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)).total_seconds()
+    age = (
+        datetime.now(UTC) - datetime.strptime(row.created_at, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=UTC)
+    ).total_seconds()
     return row.id not in events and age < LINK_GRACE_SECONDS
 
 
@@ -184,8 +218,9 @@ def _exchange_events(request: Request, after_id: int | None) -> Iterator[str]:
     yield f"id: {cursor}\n\n"  # an id-only block: even a client that sees no Exchange resumes from here
     while time.monotonic() < deadline:
         with factory() as db:
-            rows = db.scalars(select(LlmExchangeRow).where(LlmExchangeRow.id > cursor)
-                              .order_by(LlmExchangeRow.id).limit(STREAM_BATCH)).all()
+            rows = db.scalars(
+                select(LlmExchangeRow).where(LlmExchangeRow.id > cursor).order_by(LlmExchangeRow.id).limit(STREAM_BATCH)
+            ).all()
             events = referencing_events(db, [r.id for r in rows])
             ready = []
             for r in rows:  # in id order; the first one still waiting for its event holds back those after it
@@ -206,19 +241,26 @@ def _exchange_events(request: Request, after_id: int | None) -> Iterator[str]:
         time.sleep(settings.llm_stream_poll_seconds)
 
 
-@router.get("/exchanges/stream", operation_id="streamLlmExchanges", dependencies=[Depends(require("llm:read"))],
-            response_class=StreamingResponse, responses={200: {"content": {"text/event-stream": {}}}})
+@router.get(
+    "/exchanges/stream",
+    operation_id="streamLlmExchanges",
+    dependencies=[Depends(require("llm:read"))],
+    response_class=StreamingResponse,
+    responses={200: {"content": {"text/event-stream": {}}}},
+)
 def stream_exchanges(request: Request, last_event_id: str | None = Header(None), db: Session = Depends(get_db)):
     """Push each new Exchange (as a summary row) once, in id order. A reconnect sends the standard `Last-Event-ID`;
     a value that is not an id is ignored and the stream starts at the tail."""
     db.close()  # hand the auth session's connection back: a stream lives for minutes and polls on its own sessions
-    after = int(last_event_id) if last_event_id and last_event_id.strip().isascii() and last_event_id.strip().isdigit() else None
-    return StreamingResponse(_exchange_events(request, after), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return event_stream(_exchange_events(request, last_event_number(last_event_id)))
 
 
-@router.get("/exchanges/{exchange_id}", response_model=ExchangeDetail, operation_id="getLlmExchange",
-            dependencies=[Depends(require("llm:read"))])
+@router.get(
+    "/exchanges/{exchange_id}",
+    response_model=ExchangeDetail,
+    operation_id="getLlmExchange",
+    dependencies=[Depends(require("llm:read"))],
+)
 def get_exchange(exchange_id: int, db: Session = Depends(get_db)):
     row = db.get(LlmExchangeRow, exchange_id)
     if row is None:
@@ -227,5 +269,7 @@ def get_exchange(exchange_id: int, db: Session = Depends(get_db)):
     verdicts = []
     for check_id in dict.fromkeys(c for e in events if (c := json.loads(e.payload_json).get("check_id"))):
         claims = grounding.results_for(db, check_id)
-        verdicts.append(GroundingVerdict(check_id=check_id, summary=GroundingSummary(**grounding.summarise(claims)), claims=claims))
+        verdicts.append(
+            GroundingVerdict(check_id=check_id, summary=GroundingSummary(**grounding.summarise(claims)), claims=claims)
+        )
     return ExchangeDetail(**exchange_out(row).model_dump(), used_by=[event_out(e) for e in events], grounding=verdicts)

@@ -32,7 +32,9 @@ class GroundingOut(BaseModel):
 
 def _out(rec_id: int, check_id: str | None, results: list[grounding.ClaimResult]) -> GroundingOut:
     return GroundingOut(
-        recommendation_id=rec_id, check_id=check_id, summary=SummaryOut(**grounding.summarise(results)),
+        recommendation_id=rec_id,
+        check_id=check_id,
+        summary=SummaryOut(**grounding.summarise(results)),
         results=[ClaimResultOut(**r.model_dump(), memo_eligible=r.grounded) for r in results],
     )
 
@@ -44,9 +46,13 @@ def _rec(db: Session, recommendation_id: int) -> RecommendationRow:
     return rec
 
 
-@router.post("/recommendations/{recommendation_id}/grounding", response_model=GroundingOut, operation_id="validateClaims")
+@router.post(
+    "/recommendations/{recommendation_id}/grounding", response_model=GroundingOut, operation_id="validateClaims"
+)
 def validate_claims(
-    recommendation_id: int, body: GroundingIn, user: User = Depends(require("grounding:validate")),
+    recommendation_id: int,
+    body: GroundingIn,
+    user: User = Depends(require("grounding:validate")),
     db: Session = Depends(get_db),
 ):
     rec = _rec(db, recommendation_id)
@@ -55,6 +61,8 @@ def validate_claims(
 
 
 @router.get("/recommendations/{recommendation_id}/grounding", response_model=GroundingOut, operation_id="getGrounding")
-def get_grounding(recommendation_id: int, user: User = Depends(require("grounding:read")), db: Session = Depends(get_db)):
+def get_grounding(
+    recommendation_id: int, user: User = Depends(require("grounding:read")), db: Session = Depends(get_db)
+):
     rec = _rec(db, recommendation_id)
     return _out(rec.id, None, grounding.latest_results(db, rec.id))
