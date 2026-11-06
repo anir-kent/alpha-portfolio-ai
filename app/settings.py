@@ -21,5 +21,6 @@ class Settings(BaseSettings):
     llm_record: bool = False  # live mode only: save each response as a recording
     llm_stream_poll_seconds: float = 1.0  # how often the Exchange stream looks for new rows
     llm_stream_max_seconds: float = 300.0  # a stream closes after this; the browser reconnects with its last event id
+    assistant_history_pairs: int = 6  # Question/Answer pairs of earlier turns sent with each Question
     seed_dir: str = "data/seed"
     cors_origins: list[str] = ["http://localhost:5173"]

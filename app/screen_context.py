@@ -100,9 +100,13 @@ def _portfolio(db: Session, market: MarketData, user: User, screen: ScreenIdenti
             else "No Analysis Run has completed for this Portfolio yet."
         ),
     }
-    return ScreenContext(
-        label=f"Portfolio {detail.portfolio_id}", portfolio_id=detail.portfolio_id, text=serialise(context)
-    )
+    return ScreenContext(label=label(screen), portfolio_id=detail.portfolio_id, text=serialise(context))
+
+
+def label(screen: ScreenIdentity) -> str:
+    """How the drawer names a screen's context, e.g. "Portfolio C001". Derived from the identity alone, so a stored
+    turn is named the same way after a reload."""
+    return f"Portfolio {screen.entity_ids.get('portfolio_id')}"
 
 
 def build(db: Session, market: MarketData, user: User, screen: ScreenIdentity) -> ScreenContext | None:

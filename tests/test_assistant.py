@@ -3,11 +3,12 @@ the same capture wrapper the app uses, so every turn's Exchange is real; the cap
 what the model saw."""
 
 import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
 
-from app.db import AuditEventRow, ClientRow
+from app.db import AssistantTurnRow, AuditEventRow, ClientRow, ConversationRow, SessionRow
 from app.exchanges import CapturingLlm
 from app.llm import LlmRequest, LlmResponse
 from app.seeder import PLANTED
@@ -93,9 +94,8 @@ def test_the_prompt_holds_the_portfolio_screen_context_from_the_portfolio_screen
 
 
 def test_the_same_screen_and_data_give_a_byte_identical_prompt(login, model):
-    advisor = login("advisor")
-    ask(advisor, "Why?", portfolio_screen("C001"))
-    ask(advisor, "Why?", portfolio_screen("C001"))
+    ask(login("advisor"), "Why?", portfolio_screen("C001"))  # two logins: each is the first turn of its Conversation
+    ask(login("advisor"), "Why?", portfolio_screen("C001"))
     first, second = model.requests
     assert first.user == second.user and first.system == second.system
 
@@ -214,3 +214,158 @@ def test_refusing_an_unreadable_portfolio_is_audited_without_an_exchange(app, lo
     (event,) = events(app, "assistant.refused")
     assert "exchange_id" not in event and event["screen_context_hash"] is None
     assert login("auditor").get("/api/audit/verify").json()["valid"]
+
+
+CONVERSATION = "/api/assistant/conversation"
+
+
+def test_reading_the_conversation_before_the_first_question_is_204(login, model):
+    assert login("advisor").get(CONVERSATION).status_code == 204
+
+
+def test_reading_the_conversation_returns_its_turns_in_order(login, model):
+    advisor = login("advisor")
+    asked = [ask(advisor, f"Question {n}", portfolio_screen("C001")).json() for n in range(3)]
+    r = advisor.get(CONVERSATION)
+    assert r.status_code == 200, r.text
+    turns = r.json()["turns"]
+    assert [t["question"] for t in turns] == ["Question 0", "Question 1", "Question 2"]
+    assert turns == asked
+
+
+def ask_answered(c, model, n, screen):
+    model.reply = answer(f"Answer {n}.")
+    return ask(c, f"Question {n}?", screen).json()
+
+
+def test_after_eight_turns_the_prompt_carries_only_the_last_six_pairs_and_no_earlier_screen_context(login, model):
+    advisor = login("advisor")
+    for n in range(1, 9):  # the first four on another Portfolio, whose context must not leak into later prompts
+        ask_answered(advisor, model, n, portfolio_screen("C002" if n <= 4 else "C001"))
+    ask(advisor, "Question 9?", portfolio_screen("C001"))
+    prompt = model.requests[-1].user
+    assert "CONVERSATION SO FAR" in prompt
+    for n in (1, 2):
+        assert f"Question {n}?" not in prompt and f"Answer {n}." not in prompt
+    for n in range(3, 9):
+        assert f"Question: Question {n}?\nAnswer: Answer {n}." in prompt
+    assert prompt.index("Question 3?") < prompt.index("Question 8?") < prompt.index("QUESTION\nQuestion 9?")
+    assert prompt.count("SCREEN CONTEXT") == 1 and '"portfolio_id":"C002"' not in prompt
+
+
+def test_the_transcript_is_text_only(login, model):
+    advisor = login("advisor")
+    model.reply = {**answer("Equity drives it."), "claims": [{"text": "Claim text", "citations": []}]}
+    model.reply["follow_up_questions"] = ["Follow-up?"]
+    ask(advisor, "Why?", portfolio_screen("C001"))
+    ask(advisor, "And then?", portfolio_screen("C001"))
+    transcript = model.requests[-1].user.split("CONVERSATION SO FAR")[1].split("QUESTION\n")[0]
+    assert "Question: Why?\nAnswer: Equity drives it." in transcript
+    assert "Claim text" not in transcript and "Follow-up?" not in transcript
+
+
+def test_the_first_question_has_no_transcript(login, model):
+    ask(login("advisor"), "Why?", portfolio_screen("C001"))
+    assert "CONVERSATION SO FAR" not in model.requests[0].user
+
+
+def test_the_history_window_is_configurable(app, login, model):
+    app.state.settings.assistant_history_pairs = 2
+    advisor = login("advisor")
+    for n in range(1, 4):
+        ask_answered(advisor, model, n, portfolio_screen("C001"))
+    ask(advisor, "Question 4?", portfolio_screen("C001"))
+    prompt = model.requests[-1].user
+    assert "Question 1?" not in prompt and "Question: Question 2?" in prompt and "Question: Question 3?" in prompt
+
+
+def conversations(app):
+    with app.state.session_factory() as db:
+        return db.scalars(select(ConversationRow).order_by(ConversationRow.id)).all()
+
+
+def expire_sessions(app):
+    with app.state.session_factory() as db:
+        for s in db.scalars(select(SessionRow)).all():
+            s.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+        db.commit()
+
+
+def test_logout_ends_the_conversation_and_the_next_login_starts_a_new_one(app, login, model):
+    advisor = login("advisor")
+    first = ask(advisor, "Question 1?", portfolio_screen("C001")).json()
+    assert advisor.post("/api/auth/logout").status_code == 204
+    (ended,) = conversations(app)
+    assert ended.ended_at is not None
+
+    again = login("advisor")
+    assert again.get(CONVERSATION).status_code == 204
+    turn = ask(again, "Question 2?", portfolio_screen("C001")).json()
+    assert turn["seq"] == 1
+    assert "Question 1?" not in model.requests[-1].user  # the old Conversation is not resumed, not even as history
+    assert [t["question"] for t in again.get(CONVERSATION).json()["turns"]] == ["Question 2?"]
+    old, new = (e["conversation_id"] for e in events(app, "assistant.answered"))
+    assert old != new and first["seq"] == 1
+
+
+def test_session_expiry_ends_the_conversation(app, login, model):
+    advisor = login("advisor")
+    ask(advisor, "Question 1?", portfolio_screen("C001"))
+    expire_sessions(app)
+    assert advisor.get(CONVERSATION).status_code == 401
+    (ended,) = conversations(app)
+    assert ended.ended_at is not None
+    assert login("advisor").get(CONVERSATION).status_code == 204
+
+
+def test_a_conversation_whose_session_expired_unseen_is_ended_at_the_next_login(app, login, model):
+    ask(login("advisor"), "Question 1?", portfolio_screen("C001"))
+    expire_sessions(app)  # nobody uses the old cookie again
+    login("advisor")
+    (ended,) = conversations(app)
+    assert ended.ended_at is not None
+
+
+def test_an_ended_conversations_turns_are_still_stored_and_verify_in_the_audit_chain(app, login, model):
+    advisor = login("advisor")
+    asked = [ask(advisor, f"Question {n}?", portfolio_screen("C001")).json() for n in range(2)]
+    advisor.post("/api/auth/logout")
+    with app.state.session_factory() as db:
+        stored = db.scalars(select(AssistantTurnRow).order_by(AssistantTurnRow.seq)).all()
+        assert [(t.question, t.exchange_hash) for t in stored] == [(t["question"], t["exchange_hash"]) for t in asked]
+    verdict = login("auditor").get("/api/audit/verify").json()
+    assert verdict["valid"] and verdict["exchanges_checked"] >= 2
+
+
+def test_each_turn_keeps_the_screen_it_was_asked_against(login, model):
+    advisor = login("advisor")
+    for cid in ("C001", "C001", "C002"):
+        ask(advisor, "Why?", portfolio_screen(cid))
+    advisor.get(url("C003"))  # moving screens later changes nothing about earlier turns
+    turns = advisor.get(CONVERSATION).json()["turns"]
+    assert [t["screen"]["entity_ids"]["portfolio_id"] for t in turns] == ["C001", "C001", "C002"]
+    assert [t["context_label"] for t in turns] == ["Portfolio C001", "Portfolio C001", "Portfolio C002"]
+
+
+def test_a_refused_turn_read_back_names_no_context(login, model):
+    analyst = login("research_analyst")
+    asked = ask(analyst, "What does this hold?", portfolio_screen("C001")).json()
+    (turn,) = analyst.get(CONVERSATION).json()["turns"]
+    assert turn == asked and turn["context_label"] is None
+
+
+def test_reading_the_conversation_without_assistant_use_is_403(login, model, monkeypatch):
+    from app import rbac
+
+    monkeypatch.setitem(rbac.PERMISSIONS, "advisor", rbac.PERMISSIONS["advisor"] - {"assistant:use"})
+    assert login("advisor").get(CONVERSATION).status_code == 403
+
+
+def test_a_failed_turn_has_no_answer_so_it_is_left_out_of_the_transcript(login, model):
+    advisor = login("advisor")
+    ask_answered(advisor, model, 1, portfolio_screen("C001"))
+    model.reply = {"unexpected": "shape"}
+    ask(advisor, "Question 2?", portfolio_screen("C001"))
+    ask_answered(advisor, model, 3, portfolio_screen("C001"))
+    prompt = model.requests[-1].user
+    assert "Question: Question 1?\nAnswer: Answer 1." in prompt and "Question 2?" not in prompt

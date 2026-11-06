@@ -458,6 +458,31 @@
         }
       }
     },
+    "/api/assistant/conversation": {
+      "get": {
+        "tags": [
+          "assistant"
+        ],
+        "summary": "Conversation",
+        "description": "The current login session's Conversation, turns in order, for rendering after a reload.",
+        "operationId": "getAssistantConversation",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Question asked yet in this login session"
+          }
+        }
+      }
+    },
     "/api/audit/events": {
       "get": {
         "tags": [
@@ -2806,6 +2831,32 @@
         "type": "object",
         "title": "ConfigUpdate",
         "description": "Partial update: only supplied top-level keys change."
+      },
+      "Conversation": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/Turn"
+            },
+            "type": "array",
+            "title": "Turns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "started_at",
+          "turns"
+        ],
+        "title": "Conversation"
       },
       "DatabaseHealth": {
         "properties": {
@@ -5911,6 +5962,10 @@
             "type": "integer",
             "title": "Seq"
           },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
           "outcome": {
             "type": "string",
             "enum": [
@@ -5981,6 +6036,7 @@
         "type": "object",
         "required": [
           "seq",
+          "question",
           "outcome",
           "answer",
           "message",

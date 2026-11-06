@@ -30,6 +30,9 @@ def find_session(db: Session, request: Request) -> SessionRow | None:
     if row is None:
         return None
     if as_utc(row.expires_at) < datetime.now(UTC):
+        from app.assistant import end_conversation  # local: the Assistant imports the routers through screen_context
+
+        end_conversation(db, row.token_hash)
         db.delete(row)
         db.commit()
         return None

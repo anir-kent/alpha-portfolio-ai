@@ -539,6 +539,20 @@
   .assistant[hidden] {
     display: none;
   }
+  /* "Context changed" divider between turns asked on different screens. */
+  .assistant-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-ink-3);
+    font-size: 0.8462rem;
+  }
+  .assistant-divider::before,
+  .assistant-divider::after {
+    content: "";
+    flex: 1;
+    border-top: 1px solid var(--color-line);
+  }
   .assistant-md > * + * {
     margin-top: 0.5rem;
   }

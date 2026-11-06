@@ -58,6 +58,9 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] Ask "Which asset class drives the drift?" on C001: "Thinking…" shows, then the Answer renders as Markdown (bold, lists) with no raw HTML; follow-up questions fill the Question box when clicked
 - [ ] Ask "Should I buy NVDA?": the fixed refusal shows ("I can only help with questions about this platform…"), never the model's text
 - [ ] As auditor, the turn's LLM Exchange (task `assistant_answer`, `assistant_answer@v1`) is listed on LLM Exchanges with no Client name or email in its prompt, an `assistant.answered` or `assistant.refused` Audit Event references it, and Verify chain passes
+- [ ] Ask two Questions on C001, then reload the page: reopening the drawer shows both turns in order
+- [ ] Ask on C001, open `/portfolios/C002` and ask again: a "Context changed · Portfolio C002" divider separates the turns; the earlier turn still reads as asked on C001; a follow-up ("and why?") gets an Answer that uses the earlier turn (its Exchange prompt has a CONVERSATION SO FAR block with text only, no earlier Screen Context)
+- [ ] Switch role (logout) and log back in: the drawer is empty, and the first Question is turn 1 of a new Conversation
 
 ## Approvals
 

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.assistant import end_conversation, end_orphaned_conversations
 from app.db import SessionRow, User
 from app.deps import COOKIE, current_user, find_session, get_db
 from app.rbac import PERMISSIONS
@@ -36,6 +37,7 @@ def login(body: LoginRequest, request: Request, response: Response, db: Session 
         raise HTTPException(401, "Invalid credentials")
     token = new_token()
     ttl = timedelta(hours=settings.session_ttl_hours)
+    end_orphaned_conversations(db, user)  # a session that expired unseen still ends its Conversation
     db.add(SessionRow(token_hash=token_digest(token), user_id=user.id, expires_at=datetime.now(UTC) + ttl))
     db.commit()
     response.set_cookie(
@@ -53,6 +55,7 @@ def login(body: LoginRequest, request: Request, response: Response, db: Session 
 @router.post("/logout", status_code=204, operation_id="logout")
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     if row := find_session(db, request):
+        end_conversation(db, row.token_hash)  # the next login starts a new Conversation; this one can't be resumed
         db.delete(row)
         db.commit()
     response.delete_cookie(COOKIE, path="/")

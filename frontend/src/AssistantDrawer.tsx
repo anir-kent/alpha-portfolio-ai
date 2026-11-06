@@ -1,5 +1,5 @@
-import { useMutation } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Fragment, useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import { useMatch } from "react-router-dom";
 import { api } from "./api/client";
@@ -8,9 +8,21 @@ import { Icon } from "./ui";
 
 type Turn = components["schemas"]["Turn"];
 type Screen = components["schemas"]["ScreenIdentity"];
-interface Asked {
-  question: string;
-  turn: Turn;
+type Conversation = components["schemas"]["Conversation"];
+
+/** Cached under this key, so logout (which drops every query but "me") clears the Conversation from the page too. */
+const CONVERSATION_KEY = ["assistant-conversation"];
+
+/** How the drawer names a turn's context: the server's label, or for a turn whose screen the user couldn't read
+ * (the server names nothing) the identity the browser itself sent. */
+function turnLabel(turn: Turn): string {
+  return turn.context_label ?? `${turn.screen.kind} ${Object.values(turn.screen.entity_ids).join(", ")}`;
+}
+
+function sameScreen(a: Screen, b: Screen): boolean {
+  return (
+    JSON.stringify([a.kind, a.entity_ids, a.selected_item]) === JSON.stringify([b.kind, b.entity_ids, b.selected_item])
+  );
 }
 
 /** The screen identity the current route publishes to the Assistant, and how the drawer names it. Null off a supported screen. */
@@ -34,10 +46,19 @@ function AnswerMarkdown({ text }: { text: string }) {
   );
 }
 
-function TurnView({ question, turn, onFollowUp }: Asked & { onFollowUp: (q: string) => void }) {
+/** Marks where the Conversation moved to another screen; each earlier turn stays tied to its own context. */
+function ContextDivider({ turn }: { turn: Turn }) {
+  return (
+    <li className="assistant-divider" role="separator" aria-label={`Context changed to ${turnLabel(turn)}`}>
+      <span>Context changed · {turnLabel(turn)}</span>
+    </li>
+  );
+}
+
+function TurnView({ turn, onFollowUp }: { turn: Turn; onFollowUp: (q: string) => void }) {
   return (
     <li className="space-y-1.5">
-      <p className="ml-auto w-fit max-w-[90%] rounded-2xl bg-brand/10 px-3 py-1.5">{question}</p>
+      <p className="ml-auto w-fit max-w-[90%] rounded-2xl bg-brand/10 px-3 py-1.5">{turn.question}</p>
       {turn.outcome === "answered" && turn.answer && (
         <div className="space-y-1.5">
           <AnswerMarkdown text={turn.answer.markdown} />
@@ -64,15 +85,29 @@ function TurnView({ question, turn, onFollowUp }: Asked & { onFollowUp: (q: stri
 export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const current = useCurrentScreen();
   const [question, setQuestion] = useState("");
-  const [turns, setTurns] = useState<Asked[]>([]);
+  const qc = useQueryClient();
+  // The server keeps the Conversation for the login session, so a reload restores it from here. 204 means none yet.
+  const conversation = useQuery({
+    queryKey: CONVERSATION_KEY,
+    queryFn: async (): Promise<Conversation | null> => {
+      const { data, error } = await api.GET("/api/assistant/conversation");
+      if (error) throw new Error("The Conversation couldn't be loaded.");
+      return data ?? null;
+    },
+    staleTime: Infinity, // only this drawer adds turns, and it writes them into the cache itself
+  });
+  const turns = conversation.data?.turns ?? [];
   const ask = useMutation({
     mutationFn: async ({ question, screen }: { question: string; screen: Screen }) => {
       const { data, error } = await api.POST("/api/assistant/questions", { body: { question, screen } });
       if (error || !data) throw new Error("The Assistant couldn't answer, try again.");
-      return { question, turn: data };
+      return data;
     },
-    onSuccess: (asked) => {
-      setTurns((ts) => [...ts, asked]);
+    onSuccess: async (turn) => {
+      const known = qc.getQueryData<Conversation | null>(CONVERSATION_KEY);
+      if (known) qc.setQueryData<Conversation>(CONVERSATION_KEY, { ...known, turns: [...known.turns, turn] });
+      // The first turn created the Conversation; awaiting the refetch keeps "Thinking…" up until it shows.
+      else await qc.invalidateQueries({ queryKey: CONVERSATION_KEY });
       setQuestion("");
     },
   });
@@ -102,7 +137,8 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
         </button>
       </div>
       <div className="flex-1 overflow-y-auto p-4">
-        {turns.length === 0 && !ask.isPending && (
+        {conversation.isError && <p className="callout callout-neg mb-3">{conversation.error.message}</p>}
+        {turns.length === 0 && !ask.isPending && !conversation.isPending && (
           <p className="text-ink-3">
             Ask about the data on this screen. The Assistant explains engine figures; it gives no investment advice and
             changes nothing.
@@ -110,7 +146,10 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
         )}
         <ol className="space-y-4">
           {turns.map((t, i) => (
-            <TurnView key={i} {...t} onFollowUp={setQuestion} />
+            <Fragment key={t.seq}>
+              {i > 0 && !sameScreen(turns[i - 1].screen, t.screen) && <ContextDivider turn={t} />}
+              <TurnView turn={t} onFollowUp={setQuestion} />
+            </Fragment>
           ))}
         </ol>
         <div aria-live="polite">
