@@ -21,6 +21,9 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] Run analysis opens the modal at once, listing Load inputs, Score Portfolios, Record run, Priority narratives, Recommendation narratives
 - [ ] Each Run Step goes pending -> running -> done with its time; the active one has a ticking timer; the header total keeps counting
 - [ ] Score Portfolios counts up `n/25`
+- [ ] Steps tick to done without polling: DevTools Network shows one `events` request (EventStream) and no repeated `/api/analysis/runs/<id>` requests
+- [ ] Restart the API mid-watch: the modal shows "Reconnecting…" (or, behind the Vite dev proxy, "Live updates unavailable; checking every 1s"), then goes live again on its own once the API is back (no reload)
+- [ ] Stream refused (any non-200 on `events`): the modal shows "Live updates unavailable; checking every 1s" and keeps updating by polling the snapshot; if polling fails too (e.g. session cookie cleared) it shows "Could not load the run's progress. Retrying…"
 - [ ] Without an LLM configured, both narrative steps show skipped and the run ends Completed
 - [ ] On Completed the Queue behind refreshes (new run number in the subtitle); View updated queue closes the modal on it
 - [ ] Focus lands in the modal and Tab stays inside; Escape hides it; focus returns to Run analysis

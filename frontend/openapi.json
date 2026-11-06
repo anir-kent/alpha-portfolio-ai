@@ -180,6 +180,64 @@
         }
       }
     },
+    "/api/analysis/runs/{run_id}/events": {
+      "get": {
+        "tags": [
+          "queue"
+        ],
+        "summary": "Stream Run",
+        "description": "Push the run's full snapshot as a `progress` event, id = the run's sequence number, on connect and on every\nchange; close after the final snapshot. A reconnect only needs the latest event: `Last-Event-ID` just stops an\nunchanged snapshot being sent again. A value that is not a sequence number is ignored.",
+        "operationId": "streamAnalysisRun",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "last-event-id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/event-stream": {}
+            }
+          },
+          "404": {
+            "description": "Analysis Run not found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/queue": {
       "get": {
         "tags": [

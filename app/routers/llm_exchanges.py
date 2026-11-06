@@ -14,6 +14,7 @@ from app.audit import format_ts
 from app.db import AuditEventRow, LlmExchangeRow
 from app.deps import get_db, require
 from app.routers.audit import AuditEvent, event_out
+from app.sse import KEEPALIVE_SECONDS, event_stream, last_event_number
 
 router = APIRouter(prefix="/api/llm", tags=["llm"])
 
@@ -154,7 +155,6 @@ def list_exchanges(
     return ExchangePage(items=[exchange_summary(r, events.get(r.id, [])) for r in rows], total=total)
 
 
-KEEPALIVE_SECONDS = 15.0
 STREAM_BATCH = 100
 LINK_GRACE_SECONDS = 2.0  # an Exchange is stored just before the Audit Event that references it; wait this long for it
 
@@ -212,9 +212,7 @@ def stream_exchanges(request: Request, last_event_id: str | None = Header(None),
     """Push each new Exchange (as a summary row) once, in id order. A reconnect sends the standard `Last-Event-ID`;
     a value that is not an id is ignored and the stream starts at the tail."""
     db.close()  # hand the auth session's connection back: a stream lives for minutes and polls on its own sessions
-    after = int(last_event_id) if last_event_id and last_event_id.strip().isascii() and last_event_id.strip().isdigit() else None
-    return StreamingResponse(_exchange_events(request, after), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return event_stream(_exchange_events(request, last_event_number(last_event_id)))
 
 
 @router.get("/exchanges/{exchange_id}", response_model=ExchangeDetail, operation_id="getLlmExchange",

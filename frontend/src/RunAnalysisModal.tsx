@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { api } from "./api/client";
@@ -9,6 +9,7 @@ export type RunSnapshot = components["schemas"]["RunSnapshot"];
 type Step = RunSnapshot["steps"][number];
 
 const POLL_MS = 1000;
+const STREAM_RETRY_MS = 5000; // while polling, how often a successful poll may try the stream again
 const SUCCESS = new Set<RunSnapshot["outcome"]>(["completed", "completed_with_warnings"]);
 
 /** Server timestamps carry microseconds; Date wants milliseconds at most. */
@@ -32,20 +33,66 @@ function useNow(on: boolean) {
   return now;
 }
 
-/** The run's snapshot, polled until it has an outcome. `initial` is what the start request returned. */
-function useRunSnapshot(initial: RunSnapshot) {
-  return useQuery({
-    queryKey: ["analysis-run", initial.run_id],
-    queryFn: async () => {
-      const { data, error } = await api.GET("/api/analysis/runs/{run_id}", { params: { path: { run_id: initial.run_id } } });
-      if (error || !data) throw new Error("Could not load the run's progress");
-      return data;
-    },
-    initialData: initial,
-    initialDataUpdatedAt: 0, // fetch at once: the start response is already behind
-    refetchInterval: (q) => (q.state.data?.outcome ? false : POLL_MS),
-  });
+/** connecting/live: stream open · reconnecting: dropped, the browser is reconnecting on its own · unavailable: the stream
+ * was refused (any non-200, e.g. the dev proxy's 502 while the API restarts), so the snapshot is polled instead and the
+ * stream is tried again once a poll gets through. */
+type StreamState = "connecting" | "live" | "reconnecting" | "unavailable";
+
+/**
+ * The run's latest snapshot, pushed over the run's event stream (ADR-0005). Each event is the whole snapshot, so the latest
+ * one always replaces what is shown, and a reconnect (the browser's own, with Last-Event-ID) needs nothing else. When the
+ * stream is unavailable the snapshot is polled until the run has an outcome. `initial` is what the start request returned.
+ */
+function useRunProgress(initial: RunSnapshot) {
+  const runId = initial.run_id;
+  const [snap, setSnap] = useState(initial);
+  const [stream, setStream] = useState<StreamState>("connecting");
+  const [pollFailed, setPollFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0); // bumping it reopens the stream
+  const opened = useRef(0);
+  const finished = snap.outcome != null;
+
+  useEffect(() => {
+    opened.current = Date.now();
+    setStream("connecting");
+    const es = new EventSource(`/api/analysis/runs/${runId}/events`, { withCredentials: true });
+    es.onopen = () => setStream("live");
+    es.addEventListener("progress", (e) => {
+      let next: RunSnapshot;
+      try { next = JSON.parse((e as MessageEvent).data) as RunSnapshot; } catch { return; } // the next event carries it all again
+      setSnap(next);
+      setStream("live");
+      if (next.outcome) es.close(); // final: the server closes too, and the browser must not reconnect
+    });
+    es.onerror = () => setStream(es.readyState === EventSource.CLOSED ? "unavailable" : "reconnecting"); // CLOSED: refused (401/403/404) or no retry coming
+    return () => es.close();
+  }, [runId, attempt]);
+
+  useEffect(() => { // the fallback: poll the snapshot while the stream is unavailable and the run goes on
+    if (stream !== "unavailable" || finished) return;
+    let stopped = false;
+    const poll = async () => {
+      const { data } = await api.GET("/api/analysis/runs/{run_id}", { params: { path: { run_id: runId } } }).catch(() => ({ data: undefined }));
+      if (stopped) return;
+      setPollFailed(!data);
+      if (!data) return;
+      setSnap(data);
+      if (!data.outcome && Date.now() - opened.current >= STREAM_RETRY_MS) setAttempt((a) => a + 1); // the server is back: go live again
+    };
+    poll();
+    const t = setInterval(poll, POLL_MS);
+    return () => { stopped = true; clearInterval(t); };
+  }, [stream, finished, runId]);
+
+  return { snap, stream, pollFailed };
 }
+
+const STREAM_NOTE: Record<StreamState, string | null> = {
+  connecting: "Connecting…",
+  live: null,
+  reconnecting: "Reconnecting… progress may be briefly behind.",
+  unavailable: `Live updates unavailable; checking every ${POLL_MS / 1000}s.`,
+};
 
 function StepIcon({ outcome }: { outcome: Step["outcome"] }) {
   if (outcome === "running") return <span className="run-spin" aria-hidden="true" />;
@@ -87,8 +134,7 @@ const HEADLINE: Record<NonNullable<RunSnapshot["outcome"]>, string> = {
  */
 export function RunAnalysisModal({ initial, onClose, trigger }: { initial: RunSnapshot; onClose: () => void; trigger: RefObject<HTMLElement | null> }) {
   const qc = useQueryClient();
-  const run = useRunSnapshot(initial);
-  const snap = run.data;
+  const { snap, stream, pollFailed } = useRunProgress(initial);
   const finished = snap.outcome != null;
   const now = useNow(!finished);
   const dialog = useRef<HTMLDivElement>(null);
@@ -144,7 +190,9 @@ export function RunAnalysisModal({ initial, onClose, trigger }: { initial: RunSn
           <p role="status" className={finished ? "font-semibold" : "text-ink-3"}>
             {snap.outcome ? HEADLINE[snap.outcome] : "Running… You can close this; the run carries on."}
           </p>
-          {run.isError && <p className="text-ink-3">Progress is out of date: {run.error.message}. Retrying…</p>}
+          {!finished && STREAM_NOTE[stream] && (
+            <p className="text-ink-3">{pollFailed ? "Could not load the run's progress. Retrying…" : STREAM_NOTE[stream]}</p>
+          )}
         </div>
         <div className="flex justify-end gap-2 border-t border-[rgb(31_38_80/0.08)] px-4 py-2.5">
           <button type="button" className="btn" onClick={onClose}>Close</button>

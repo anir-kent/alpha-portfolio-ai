@@ -147,7 +147,7 @@ DENIED = [r for r in ROLES if r not in ("advisor", "relationship_manager")]
 @pytest.mark.parametrize("role", DENIED)
 def test_roles_without_analysis_run_are_denied_every_run_endpoint_and_the_denial_is_audited(app, login, seeded, role):  # noqa: F811
     c = login(role)
-    paths = [("post", RUNS), ("get", f"{RUNS}/current"), ("get", f"{RUNS}/1")]
+    paths = [("post", RUNS), ("get", f"{RUNS}/current"), ("get", f"{RUNS}/1"), ("get", f"{RUNS}/1/events")]
     for method, path in paths:
         assert getattr(c, method)(path).status_code == 403, path
     with app.state.session_factory() as db:

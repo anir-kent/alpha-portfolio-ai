@@ -1,13 +1,14 @@
 import json
-from typing import Literal
+import time
+from typing import Iterator, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import audit, grounding
+from app import audit, grounding, sse
 from app.analysis_runs import AnalysisRuns, RunSnapshot
 from app.db import AnalysisRunRow, ClientRow, PriorityNarrativeRow, PriorityResultRow, User
 from app.deps import get_analysis_runs, get_db, get_llm, get_market, require
@@ -119,6 +120,53 @@ def get_run(
     if snapshot is None:
         raise HTTPException(404, "Analysis Run not found")
     return snapshot
+
+
+def _progress(snapshot: RunSnapshot, seq: int) -> str:
+    return f"id: {seq}\nevent: progress\ndata: {snapshot.model_dump_json()}\n\n"
+
+
+def _run_events(request: Request, runs: AnalysisRuns, run_id: int, last_seq: int | None) -> Iterator[str]:
+    """Server-sent events for one run: its full snapshot on connect and whenever it changes, changes combined at the
+    stream poll interval (the Exchange stream's). Ends once the snapshot with the outcome is sent, or after the stream's
+    maximum duration, when the browser reconnects with `Last-Event-ID`. An unchanged snapshot is never sent twice."""
+    settings = request.app.state.settings
+    factory = request.app.state.session_factory
+    deadline = time.monotonic() + settings.llm_stream_max_seconds
+    last_ping = time.monotonic()
+    sent = last_seq
+    while time.monotonic() < deadline:
+        with factory() as db:
+            latest = runs.latest(db, run_id)
+        if latest is None:
+            return
+        snapshot, seq = latest  # seq 0: read from the run row, once the registry no longer holds the run
+        if seq != sent:
+            sent, last_ping = seq, time.monotonic()
+            yield _progress(snapshot, seq)
+        elif time.monotonic() - last_ping >= sse.KEEPALIVE_SECONDS:
+            last_ping = time.monotonic()
+            yield ": keepalive\n\n"
+        if snapshot.outcome is not None:
+            return
+        time.sleep(settings.llm_stream_poll_seconds)
+
+
+@router.get(
+    "/analysis/runs/{run_id}/events", operation_id="streamAnalysisRun", response_class=StreamingResponse,
+    responses={200: {"content": {"text/event-stream": {}}}, 404: {"description": "Analysis Run not found"}},
+)
+def stream_run(
+    run_id: int, request: Request, user: User = Depends(require("analysis:run")), db: Session = Depends(get_db),
+    runs: AnalysisRuns = Depends(get_analysis_runs), last_event_id: str | None = Header(None),
+):
+    """Push the run's full snapshot as a `progress` event, id = the run's sequence number, on connect and on every
+    change; close after the final snapshot. A reconnect only needs the latest event: `Last-Event-ID` just stops an
+    unchanged snapshot being sent again. A value that is not a sequence number is ignored."""
+    if runs.latest(db, run_id) is None:
+        raise HTTPException(404, "Analysis Run not found")
+    db.close()  # hand the auth session's connection back, as the Exchange stream does: a stream polls on its own sessions
+    return sse.event_stream(_run_events(request, runs, run_id, sse.last_event_number(last_event_id)))
 
 
 def _narrative(db: Session, n: PriorityNarrativeRow | None) -> QueueNarrative | None:

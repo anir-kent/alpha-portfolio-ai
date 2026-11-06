@@ -10,6 +10,7 @@ from app import audit
 from app.db import AuditEventRow, GroundingResultRow, LlmExchangeRow
 from app.exchanges import exchange_digest
 from tests.conftest import ROLES
+from tests.sse import data_events
 
 READERS = ("auditor", "compliance_officer", "platform_owner")
 BULK = ("system_text", "user_prompt", "reply_schema", "messages", "raw_reply", "parsed_content")
@@ -130,19 +131,7 @@ def read_stream(app, c, last_event_id=None, seconds=0.6, while_open=None):
     r = c.get("/api/llm/exchanges/stream", headers={"Last-Event-ID": str(last_event_id)} if last_event_id is not None else {})
     assert r.status_code == 200, r.text
     assert r.headers["content-type"].startswith("text/event-stream")
-    events: list[tuple[int, dict]] = []
-    current: dict[str, str] = {}
-    for line in r.text.splitlines():
-        if line.startswith(":"):
-            continue
-        if not line:
-            if "data" in current:
-                events.append((int(current["id"]), json.loads(current["data"])))
-            current = {}
-            continue
-        key, _, value = line.partition(": ")
-        current[key] = value
-    return events
+    return data_events(r.text)
 
 
 def test_stream_resumes_after_last_event_id_in_id_order_without_gaps_or_repeats(app, login):

@@ -188,11 +188,17 @@ class AnalysisRuns:
         return self.registry.in_flight()
 
     def snapshot(self, db: Session, run_id: int) -> RunSnapshot | None:
+        latest = self.latest(db, run_id)
+        return latest[0] if latest else None
+
+    def latest(self, db: Session, run_id: int) -> tuple[RunSnapshot, int] | None:
+        """The run's snapshot with its sequence number: from the registry while it holds the run, otherwise from the
+        run row with sequence 0 (a row only changes once more, when an interrupted run is marked on startup)."""
         latest = self.registry.latest(run_id)
         if latest is not None:
-            return latest[0]
+            return latest
         run = db.get(AnalysisRunRow, run_id)
-        return snapshot_from_row(run) if run else None
+        return (snapshot_from_row(run), 0) if run else None
 
     def _run(
         self, run_id: int, reporter: SnapshotReporter, market: MarketData, actor: audit.Actor, llm: LlmClient | None,
