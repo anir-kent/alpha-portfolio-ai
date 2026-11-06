@@ -1,5 +1,6 @@
 """Seam: the grounding validator through the HTTP API. Claims are checked against ingested Reports (page + verbatim
-quote) and the engine's figures for one Recommendation (ADR-0001). Adversarial claims must be flagged, valid ones pass."""
+quote) and an engine figure set: one Recommendation's, or one tied to no Client (ADR-0001). Adversarial claims must be
+flagged, valid ones pass."""
 
 import json
 
@@ -9,6 +10,7 @@ from sqlalchemy import select
 from app import grounding
 from app.db import AuditEventRow, GroundingResultRow
 from tests.runs import run_and_wait
+from tests.test_llm_exchange_api import add_exchange
 from tests.test_queue import seeded  # noqa: F401  (fixture)
 from tests.test_research import upload
 
@@ -239,3 +241,43 @@ def test_permissions(login, ctx, role, validate, read):
     c = login(role)
     assert (c.post(f"/api/recommendations/{rec['id']}/grounding", json={"claims": []}).status_code == 200) is validate
     assert (c.get(f"/api/recommendations/{rec['id']}/grounding").status_code == 200) is read
+
+
+# --- a figure set tied to no Client (the Assistant's Queue context) ----------------------------------------------
+
+
+def test_a_check_against_figures_tied_to_no_client_is_stored_audited_and_reported(app, login):
+    figures = {"queue.client_count": 12.0, "queue.top_priority_score": 87.5}
+    claims = [
+        {"text": "12 Clients are on the Queue.", "citations": [engine_cite("queue.client_count")]},
+        {"text": "The top score is 90.", "citations": [engine_cite("queue.top_priority_score")]},
+    ]
+    with app.state.session_factory() as db:
+        check_id, results = grounding.validate_figures(
+            db,
+            [grounding.Claim.model_validate(c) for c in claims],
+            figures,
+            client_id=None,
+            subject=grounding.CheckSubject(subject_kind="assistant_turn", subject_id="T-1"),
+        )
+    assert [r.grounded for r in results] == [True, False]
+
+    xid = add_exchange(app, ts="2026-01-01T00:00:00.000000Z", event={"status": "complete", "check_id": check_id})
+    [verdict] = login("auditor").get(f"/api/llm/exchanges/{xid}").json()["grounding"]
+    assert verdict["check_id"] == check_id
+    assert verdict["summary"] == {"total": 2, "grounded": 1, "ungrounded": 1}
+    assert [i["code"] for i in verdict["claims"][1]["issues"]] == ["number_mismatch"]
+
+    auditor = login("auditor")
+    [checked] = auditor.get("/api/audit/events", params={"type": "grounding_checked"}).json()["items"]
+    [flagged] = auditor.get("/api/audit/events", params={"type": "claim_ungrounded"}).json()["items"]
+    assert (checked["client_id"], checked["portfolio_id"], checked["recommendation_id"]) == (None, None, None)
+    assert {k: checked["payload"][k] for k in ("subject_kind", "subject_id")} == {
+        "subject_kind": "assistant_turn",
+        "subject_id": "T-1",
+    }
+    assert checked["payload"]["summary"] == {"total": 2, "grounded": 1, "ungrounded": 1}
+    assert flagged["parent_ids"] == [checked["id"]] and flagged["payload"]["subject_id"] == "T-1"
+
+    quality = login("auditor").get("/api/governance").json()["quality"]
+    assert (quality["checks"], quality["claims_total"], quality["claims_grounded"]) == (1, 2, 1)

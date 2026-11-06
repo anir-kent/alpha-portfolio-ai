@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine, inspect, text
+from sqlalchemy import DateTime, Engine, ForeignKey, String, Text, create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -262,7 +262,11 @@ class GroundingResultRow(Base):
     run_id: Mapped[int | None] = mapped_column(
         ForeignKey("analysis_runs.id"), index=True, nullable=True
     )  # a priority narrative's claims
-    client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), index=True)
+    client_id: Mapped[str | None] = mapped_column(
+        ForeignKey("clients.id"), index=True, nullable=True
+    )  # None when the figure set spans Clients (the Queue)
+    subject_kind: Mapped[str | None] = mapped_column(String, nullable=True)  # any other subject, e.g. assistant_turn
+    subject_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     claim_index: Mapped[int] = mapped_column()
     text: Mapped[str] = mapped_column(Text)
     asset: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -342,6 +346,7 @@ def make_session_factory(url: str) -> sessionmaker:
     engine = create_engine(url, **kwargs)
     Base.metadata.create_all(engine)
     _add_run_outcome_columns(engine)
+    _generalise_grounding_results(engine)
     return sessionmaker(engine, expire_on_commit=False)
 
 
@@ -355,3 +360,20 @@ def _add_run_outcome_columns(engine) -> None:
             if name not in existing:
                 conn.execute(text(f"ALTER TABLE analysis_runs ADD COLUMN {name} {kind}"))
         conn.execute(text("UPDATE analysis_runs SET outcome = 'completed' WHERE completed"))
+
+
+def _generalise_grounding_results(engine: Engine) -> None:
+    """An existing database predates checks tied to no Client: afterwards `client_id` is optional and the subject
+    columns exist, with every stored grounding result kept."""
+    existing = [c["name"] for c in inspect(engine).get_columns("grounding_results")]
+    if "subject_kind" in existing:
+        return
+    table = Base.metadata.tables["grounding_results"]
+    with engine.begin() as conn:  # SQLite cannot drop NOT NULL in place: rebuild the table and copy the rows across
+        conn.execute(text("ALTER TABLE grounding_results RENAME TO grounding_results_old"))
+        for index in inspect(conn).get_indexes("grounding_results_old"):  # names would clash with the new table's
+            conn.execute(text(f'DROP INDEX "{index["name"]}"'))
+        table.create(conn)
+        columns = ", ".join(existing)
+        conn.execute(text(f"INSERT INTO grounding_results ({columns}) SELECT {columns} FROM grounding_results_old"))
+        conn.execute(text("DROP TABLE grounding_results_old"))

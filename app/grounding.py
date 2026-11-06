@@ -1,9 +1,10 @@
 """Grounding validator: every LLM claim must be traceable (spec: responsible GenAI usage, ADR-0001).
 
 A claim is grounded only if it carries at least one citation, every Report citation names a real Report and page and
-quotes it verbatim, every engine citation names a figure the engine produced for the Recommendation, and every number
-in the claim text equals a cited engine figure at the precision the claim states. A claim that calls a view on an asset
-(sector, Asset Class or Instrument) also needs a Report citation: engine figures alone cannot support a view.
+quotes it verbatim, every engine citation names a figure in the figure set it is checked against (a Recommendation's, a
+priority result's, or one tied to no Client such as the Queue's), and every number in the claim text equals a cited
+engine figure at the precision the claim states. A claim that calls a view on an asset (sector, Asset Class or
+Instrument) also needs a Report citation: engine figures alone cannot support a view.
 
 Ungrounded claims are never dropped: they are flagged with the reasons, kept out of memos (`memo_claims`) and stay
 visible to the Advisor.
@@ -68,6 +69,13 @@ class Claim(BaseModel):
 class Issue(BaseModel):
     code: IssueCode
     message: str
+
+
+class CheckSubject(BaseModel):
+    """What a check is about when it is neither a Recommendation nor a priority result."""
+
+    subject_kind: Literal["assistant_turn"]
+    subject_id: str
 
 
 class ClaimResult(BaseModel):
@@ -201,13 +209,16 @@ def validate_figures(
     claims: list[Claim],
     figures: dict[str, float],
     *,
-    client_id: str,
+    client_id: str | None,
     recommendation_id: int | None = None,
     run_id: int | None = None,
+    subject: CheckSubject | None = None,
     parents: Iterable[int] = (),
 ) -> tuple[str, list[ClaimResult]]:
-    """Validate, store and audit claims against any engine figure set (a Recommendation's, or a priority result's)."""
+    """Validate, store and audit claims against any engine figure set: a Recommendation's, a priority result's, or one
+    tied to no Client (the Queue). The stored check and its Audit Events carry whichever links are given."""
     results = [validate_claim(db, c, i, figures) for i, c in enumerate(claims)]
+    subject_ref = {} if subject is None else subject.model_dump()
     check_id = "GRD-" + uuid.uuid4().hex[:8]
     now = audit.format_ts(datetime.now(UTC))
     db.add_all(
@@ -216,6 +227,7 @@ def validate_figures(
             recommendation_id=recommendation_id,
             run_id=run_id,
             client_id=client_id,
+            **subject_ref,
             claim_index=r.index,
             text=r.text,
             asset=r.asset,
@@ -241,6 +253,7 @@ def validate_figures(
             "summary": summarise(results),
             "figure_count": len(figures),
             **({"run_id": run_id} if run_id is not None else {}),
+            **subject_ref,
         },
         parents=parents,
         **scope,
@@ -257,6 +270,7 @@ def validate_figures(
                     "text": r.text,
                     "asset": r.asset,
                     "issues": [i.model_dump() for i in r.issues],
+                    **subject_ref,
                 },
                 parents=[checked],
                 **scope,
