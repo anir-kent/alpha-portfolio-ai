@@ -50,6 +50,31 @@ class AuditEventRow(Base):
     hash: Mapped[str] = mapped_column(String)
 
 
+class LlmExchangeRow(Base):
+    """One request and reply through the LLM interface (ADR-0004). Append-only: written once, never updated or deleted.
+    `hash` is a SHA-256 over the content fields (everything but `id`); the calling step's Audit Event references it."""
+
+    __tablename__ = "llm_exchanges"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_at: Mapped[str] = mapped_column(String, index=True)
+    task: Mapped[str] = mapped_column(String, index=True)
+    prompt_version: Mapped[str] = mapped_column(String, index=True)
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
+    mode: Mapped[str] = mapped_column(String, index=True)  # live | recorded
+    endpoint_host: Mapped[str | None] = mapped_column(String, nullable=True)
+    system_text: Mapped[str] = mapped_column(Text)
+    user_prompt: Mapped[str] = mapped_column(Text)
+    reply_schema_json: Mapped[str] = mapped_column(Text)
+    messages_json: Mapped[str | None] = mapped_column(Text, nullable=True)  # exactly what was sent (live only)
+    raw_reply: Mapped[str | None] = mapped_column(Text, nullable=True)  # before parsing (live only)
+    parsed_content_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    usage_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(nullable=True)
+    outcome: Mapped[str] = mapped_column(String, index=True)  # ok | error (transport only)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hash: Mapped[str] = mapped_column(String)
+
+
 class ClientRow(Base):
     """Synthetic Client (ADR-0003). name and email are the sensitive fields masked by role."""
 

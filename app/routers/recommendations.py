@@ -6,11 +6,12 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import approvals, audit, grounding, lineage as lineage_view, recommendations
+from app import ai_steps, approvals, audit, grounding, lineage as lineage_view, recommendations
 from app.config_service import Config, get_config
 from app.db import DecisionRow, RecommendationNarrativeRow, RecommendationRow, RecommendationTiltRow, User
 from app.deps import get_db, get_market, require
 from app.market_data import MarketData
+from app.rbac import PERMISSIONS
 from app.rebalance import TradeLine
 from app.routers.audit import ActorOut
 from app.routers.analysis import ClassDriftOut, RuleOut
@@ -84,11 +85,26 @@ class NarrativeOut(BaseModel):
     claims: list[ClaimResultOut]  # every rationale claim; ungrounded ones are flagged and excluded from the memo
 
 
+class AiStepOut(BaseModel):
+    """How far to rely on one AI step. No prompt or reply text; the Exchange id only for roles holding `llm:read`."""
+
+    step: Literal["tilt", "memo"]
+    mode: Literal["live", "recorded"]
+    latency_ms: int | None  # absent for a replay: there was no real call to time
+    telemetry: Literal["measured", "not_available_replayed"]
+    outcome: Literal["ok", "failed"]
+    reason: str | None  # a failed step's transport outcome, cut short
+    grounded: int | None  # Claims the validator accepted; null for a step that makes no Claims
+    ungrounded: int | None
+    exchange_id: int | None = None
+
+
 class ResearchOut(BaseModel):
     """The AI contribution to a Recommendation. The numbers are the engine's; the LLM only proposed and explained."""
 
     tilt: TiltOut | None
     narrative: NarrativeOut | None
+    steps: list[AiStepOut] = []
 
 
 class RecommendationOut(BaseModel):
@@ -160,13 +176,14 @@ class DecisionResult(BaseModel):
     new_breaches: list[RuleOut]  # rules in breach on a modified version that were not before
 
 
-def research_for(db: Session, rec_id: int) -> ResearchOut | None:
+def research_for(db: Session, rec_id: int, *, exchange_ids: bool = False) -> ResearchOut | None:
     t = db.get(RecommendationTiltRow, rec_id)
     n = db.get(RecommendationNarrativeRow, rec_id)
     if t is None and n is None:
         return None
     claims = grounding.results_for(db, n.check_id) if n and n.check_id else []
     return ResearchOut(
+        steps=[AiStepOut(**vars(s)) for s in ai_steps.summaries(db, rec_id, include_exchange_id=exchange_ids)],
         tilt=TiltOut(
             status=t.status, bound_pp=t.bound_pp, model=t.model, prompt_version=t.prompt_version, error=t.error,
             entries=json.loads(t.entries_json),
@@ -178,10 +195,10 @@ def research_for(db: Session, rec_id: int) -> ResearchOut | None:
     )
 
 
-def to_out(r: RecommendationRow, cfg: Config, db: Session) -> RecommendationOut:
+def to_out(r: RecommendationRow, cfg: Config, db: Session, user: User) -> RecommendationOut:
     p = approvals.plan(r, cfg)
     return RecommendationOut(
-        research=research_for(db, r.id),
+        research=research_for(db, r.id, exchange_ids="llm:read" in PERMISSIONS[user.role]),
         id=r.id, portfolio_id=r.client_id, version=r.version, parent_id=r.parent_id, root_id=r.root_id, run_id=r.run_id,
         status=r.status, created_at=r.created_at, created_by=r.created_by, summary=r.summary, total_value=r.total_value,
         turnover_pct=r.turnover_pct, trade_lines=json.loads(r.trade_lines_json),
@@ -219,7 +236,7 @@ def get_recommendation(recommendation_id: int, user: User = Depends(require("rec
     r = db.get(RecommendationRow, recommendation_id)
     if r is None:
         raise HTTPException(404, "Recommendation not found")
-    return to_out(r, get_config(db), db)
+    return to_out(r, get_config(db), db, user)
 
 
 class SourcePassage(BaseModel):
@@ -280,7 +297,7 @@ def decide(
         )
     except recommendations.DecisionError as e:
         raise HTTPException(e.status, str(e))
-    return DecisionResult(decision=_decision_out(decision), recommendation=to_out(rec, cfg, db), new_breaches=new_breaches)
+    return DecisionResult(decision=_decision_out(decision), recommendation=to_out(rec, cfg, db, user), new_breaches=new_breaches)
 
 
 class ComplianceIn(BaseModel):
@@ -306,7 +323,7 @@ def _step(db: Session, recommendation_id: int, step: str, action: str, rationale
         )
     except recommendations.DecisionError as e:
         raise HTTPException(e.status, str(e))
-    return StepResult(decision=_decision_out(decision), recommendation=to_out(rec, cfg, db))
+    return StepResult(decision=_decision_out(decision), recommendation=to_out(rec, cfg, db, user))
 
 
 @router.post("/recommendations/{recommendation_id}/compliance", response_model=StepResult, operation_id="decideCompliance")

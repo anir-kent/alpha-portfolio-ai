@@ -84,7 +84,7 @@ def run_analysis(db: Session, market: MarketData, actor: audit.Actor, llm: LlmCl
         ))
         tilt = None
         if llm is not None and rebalance.outside_tolerance(drift):
-            tilt = research_tilt.assess(db, llm, client=c, rows=rows, market=market, cfg=cfg)
+            tilt = research_tilt.assess(db, llm.bind(db) if hasattr(llm, "bind") else llm, client=c, rows=rows, market=market, cfg=cfg)
         rec = recommendations.draft(
             db, run_id=run.id, rows=rows, client=c, targets=targets[c.id], restrictions=restrictions[c.id],
             tax={h["account_id"]: h["tax_status"] for h in rows}, cfg=cfg, market=market, drift=drift, tilt=tilt,

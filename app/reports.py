@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app import audit
 from app.audit import Actor, format_ts
 from app.db import InsightRow, ReportPageRow, ReportRow
-from app.llm import LlmClient, LlmError, LlmRequest
+from app.llm import LlmClient, LlmError, LlmRequest, exchange_ref
 from app.prompts import INSIGHT_EXTRACTION
 from app.universe import GICS_SECTORS
 
@@ -155,6 +155,11 @@ def ingest(
     except (LlmError, ValidationError) as e:
         row.extraction_status, row.extraction_error = "failed", str(e)[:500]
         db.commit()
+        audit.record(
+            db, "insight_extracted", Actor.system("insight-extractor", prompt_version=request.prompt_version),
+            {"outcome": "failed", "insight_count": 0, "error": str(e)[:500], **exchange_ref(e if isinstance(e, LlmError) else response)},
+            parents=[ingested], report_id=report_id,
+        )
         return row, []
     kept, dropped = [], []
     for e in extraction.insights:
@@ -169,7 +174,8 @@ def ingest(
     system = Actor.system("insight-extractor", model=response.model, prompt_version=response.prompt_version)
     event = audit.record(
         db, "insight_extracted", system,
-        {"insight_count": len(kept), "dropped": dropped}, parents=[ingested], report_id=report_id,
+        {"outcome": "ok", "insight_count": len(kept), "dropped": dropped,
+         **exchange_ref(response)}, parents=[ingested], report_id=report_id,
     )
     return row, [add_insight(db, report_id, e, extract_event_id=event) for e in kept]
 

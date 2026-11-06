@@ -46,6 +46,16 @@ The warn and breach thresholds for Asset-Class Drift, configurable per Risk Prof
 **Portfolio Drift**:
 Half the sum of absolute Asset-Class Drifts: the share of the Portfolio that would have to move to return to target.
 
+### Analysis
+
+**Analysis Run**:
+One on-demand scoring of every Portfolio, ending completed, completed with warnings (an AI step failed after the results were recorded), failed or interrupted. The latest run with recorded results is current; only one can be in flight at a time.
+_Avoid_: Job, batch, analysis (on its own)
+
+**Run Step**:
+One named stage of an Analysis Run, with an outcome of pending, running, done, failed or skipped.
+_Avoid_: Phase, task, stage
+
 ### Research
 
 **Report**:
@@ -61,7 +71,7 @@ A bounded, configurable adjustment to target weights derived from an Insight and
 ### Recommendation and decision
 
 **Recommendation**:
-The proposed set of Trade Lines for one Portfolio from one analysis run, with rationale and citations. Modifying it creates a new linked version.
+The proposed set of Trade Lines for one Portfolio from one Analysis Run, with rationale and citations. Modifying it creates a new linked version.
 _Avoid_: Advice, proposal, suggestion
 
 **Trade Line**:
@@ -89,3 +99,9 @@ One statement an LLM makes about a Portfolio, Recommendation or asset, with its 
 
 **Grounded**:
 A Claim whose Report citations quote a real Report page verbatim, whose engine citations name real engine figures, and whose numbers all match those figures. Anything else is flagged ungrounded: kept out of memos but still shown to the Advisor.
+
+### Transparency
+
+**LLM Exchange**:
+One request and reply through the single LLM interface: the full prompt, reply schema, raw reply, model, prompt version, timing, token counts and outcome, labelled live or recorded. An Audit Event can point to the Exchange that produced it.
+_Avoid_: Log entry, trace, transcript

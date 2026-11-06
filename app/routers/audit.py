@@ -48,9 +48,11 @@ class Verification(BaseModel):
     checked: int
     first_broken_id: int | None
     reason: str | None
+    exchanges_checked: int
+    first_broken_exchange_id: int | None  # set when the break is an altered or missing LLM Exchange
 
 
-def _out(r: AuditEventRow) -> AuditEvent:
+def event_out(r: AuditEventRow) -> AuditEvent:
     return AuditEvent(
         id=r.id, type=r.type,
         actor=ActorOut(kind=r.actor_kind, name=r.actor_name, role=r.actor_role,
@@ -81,11 +83,12 @@ def search_events(
         recommendation_id=recommendation_id, report_id=report_id,
         date_from=date_from, date_to=date_to, limit=limit, offset=offset,
     )
-    return AuditPage(items=[_out(r) for r in rows], total=total)
+    return AuditPage(items=[event_out(r) for r in rows], total=total)
 
 
 @router.get("/verify", response_model=Verification, operation_id="verifyAuditChain",
             dependencies=[Depends(require("audit:verify"))])
 def verify_chain(db: Session = Depends(get_db)):
     v = audit.verify(db)
-    return Verification(valid=v.valid, checked=v.checked, first_broken_id=v.first_broken_id, reason=v.reason)
+    return Verification(valid=v.valid, checked=v.checked, first_broken_id=v.first_broken_id, reason=v.reason,
+                        exchanges_checked=v.exchanges_checked, first_broken_exchange_id=v.first_broken_exchange_id)

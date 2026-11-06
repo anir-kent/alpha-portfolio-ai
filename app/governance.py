@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import audit, config_service, grounding, llm, prompts
-from app.db import AuditEventRow, FixtureRunRow, GroundingResultRow, ReportPageRow, ReportRow, make_session_factory
+from app.db import AuditEventRow, FixtureRunRow, LlmExchangeRow, GroundingResultRow, ReportPageRow, ReportRow, make_session_factory
 from app.settings import Settings
 
 
@@ -44,6 +44,30 @@ def quality(db: Session) -> Quality:
         pass_rate=grounded / total if total else None,
         ungrounded_by_issue=[IssueCount(code=c, count=n) for c, n in sorted(issues.items(), key=lambda kv: (-kv[1], kv[0]))],
     )
+
+
+# --- capture health -----------------------------------------------------------------------------------------------
+
+class CaptureHealth(BaseModel):
+    total: int  # LLM Exchanges stored
+    live: int
+    recorded: int  # replayed from recordings
+    errors: int  # Exchanges whose call failed at the transport level
+    unreferenced: int  # Exchanges no Audit Event points at: a step failed to anchor its call, or an event was removed
+
+
+def capture_health(db: Session) -> CaptureHealth:
+    total, live, recorded, errors = db.execute(select(
+        func.count(), func.count().filter(LlmExchangeRow.mode == "live"),
+        func.count().filter(LlmExchangeRow.mode == "recorded"), func.count().filter(LlmExchangeRow.outcome == "error"),
+    )).one()
+    referenced: set[int] = set()
+    for (raw,) in db.execute(select(AuditEventRow.payload_json).where(AuditEventRow.payload_json.contains('"exchange_id"'))):
+        exchange_id = audit.exchange_reference(raw)[0]
+        if exchange_id is not None:
+            referenced.add(exchange_id)
+    stored = set(db.scalars(select(LlmExchangeRow.id)))
+    return CaptureHealth(total=total, live=live, recorded=recorded, errors=errors, unreferenced=len(stored - referenced))
 
 
 # --- prompt / version log -----------------------------------------------------------------------------------------

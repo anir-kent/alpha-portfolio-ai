@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app import audit, portfolio_view, reports
 from app.config_service import Config
 from app.db import AuditEventRow, ClientRow, InsightRow, RecommendationRow, RecommendationTiltRow
-from app.llm import LlmClient, LlmError, LlmRequest
+from app.llm import LlmClient, LlmError, LlmRequest, exchange_ref
 from app.market_data import MarketData
 from app.prompts import RESEARCH_TILT
 
@@ -61,6 +61,7 @@ class Assessment:
     model: str | None = None
     prompt_version: str = RESEARCH_TILT.label
     error: str | None = None
+    exchange: dict = field(default_factory=dict)  # id and hash of the LLM Exchange, for the Audit Event
 
     def allowed(self, kind: str) -> dict[str, float]:
         return {e.subject: e.allowed_pp for e in self.entries if e.subject_kind == kind and e.allowed_pp}
@@ -144,12 +145,15 @@ def assess(db: Session, llm: LlmClient, *, client: ClientRow, rows: list[dict], 
         return None
     exposure = exposures(rows, market)
     result = Assessment(status="failed", bound_pp=cfg.tilt_bound_pp, insights=insights)
+    response = None
     try:
         response = llm.complete(_request(client, exposure, insights))
         proposal = TiltProposal.model_validate(response.content)
     except (LlmError, ValidationError) as e:
         result.error = str(e)[:300]
+        result.exchange = exchange_ref(e if isinstance(e, LlmError) else response)
         return result
+    result.exchange = exchange_ref(response)
     result.status, result.model, result.prompt_version = "ok", response.model, response.prompt_version
     result.proposed = [{"insight_id": t.insight_id, "proposed_pp": t.tilt_pp} for t in proposal.tilts]
     result.entries, result.dropped = evaluate(proposal, insights, exposure, cfg.tilt_bound_pp)
@@ -208,13 +212,13 @@ def audit_assessment(db: Session, rec: RecommendationRow, a: Assessment) -> int:
     parents = _insight_event_ids(db, a.insights)
     if a.status != "ok":
         return audit.record(
-            db, "research_tilt_proposed", llm_actor, {"status": "failed", "error": a.error, "insight_ids": [i.id for i in a.insights]},
+            db, "research_tilt_proposed", llm_actor, {"status": "failed", "error": a.error, "insight_ids": [i.id for i in a.insights], **a.exchange},
             parents=parents, **scope,
         )
     names = {i.id: i.subject for i in a.insights}
     proposed = audit.record(
         db, "research_tilt_proposed", llm_actor,
-        {"status": "ok", "tilts": [{**p, "subject": names.get(p["insight_id"])} for p in a.proposed]}, parents=parents, **scope,
+        {"status": "ok", "tilts": [{**p, "subject": names.get(p["insight_id"])} for p in a.proposed], **a.exchange}, parents=parents, **scope,
     )
     return audit.record(
         db, "research_tilt_applied", ENGINE,

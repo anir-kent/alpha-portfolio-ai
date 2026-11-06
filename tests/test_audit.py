@@ -63,7 +63,8 @@ def test_verify_passes_on_intact_chain(app, login):
         append(app)
     r = login("auditor").get("/api/audit/verify")
     assert r.status_code == 200
-    assert r.json() == {"valid": True, "checked": 3, "first_broken_id": None, "reason": None}
+    assert r.json() == {"valid": True, "checked": 3, "first_broken_id": None, "reason": None,
+                        "exchanges_checked": 0, "first_broken_exchange_id": None}
 
 
 def test_verify_on_empty_chain_is_valid(login):

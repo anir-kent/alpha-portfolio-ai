@@ -10,6 +10,7 @@ Every response carries the model and prompt version so the caller can log both t
 import hashlib
 import json
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -21,7 +22,21 @@ TEMPERATURE = 0.0  # reported on the governance model card
 
 
 class LlmError(Exception):
-    pass
+    """A failed LLM call. When capture recorded the failure, `exchange_id`/`exchange_hash` point at the error Exchange."""
+
+    def __init__(
+        self, message: str = "", *, exchange_id: int | None = None, exchange_hash: str | None = None,
+        messages: list[dict] | None = None, raw_reply: str | None = None, usage: dict | None = None,
+        latency_ms: int | None = None,
+    ):
+        super().__init__(message)
+        self.exchange_id = exchange_id
+        self.exchange_hash = exchange_hash
+        # Whatever transport detail was known when the call failed (the request sent, any reply text received).
+        self.messages = messages
+        self.raw_reply = raw_reply
+        self.usage = usage
+        self.latency_ms = latency_ms
 
 
 @dataclass(frozen=True)
@@ -38,6 +53,23 @@ class LlmResponse:
     content: dict
     model: str
     prompt_version: str
+    # Set by the capture wrapper once the Exchange is stored (ADR-0004).
+    exchange_id: int | None = None
+    exchange_hash: str | None = None
+    # Transport detail an adapter may know; absent for a replay.
+    messages: list[dict] | None = None
+    raw_reply: str | None = None
+    usage: dict | None = None
+    latency_ms: int | None = None
+
+
+def exchange_ref(outcome: "LlmResponse | LlmError | None") -> dict:
+    """What an Audit Event carries to anchor an LLM Exchange in the chain: pass the response or the error the call
+    produced. Empty if capture did not store one, so a step needs no other change to inherit capture (ADR-0004)."""
+    exchange_id = getattr(outcome, "exchange_id", None)
+    if exchange_id is None:
+        return {}
+    return {"exchange_id": exchange_id, "exchange_hash": outcome.exchange_hash}
 
 
 class LlmClient(Protocol):
@@ -98,36 +130,65 @@ class OpenAICompatibleLlm:
     ):
         self.model = model
         self.record_dir = record_dir
+        self._api_key = api_key
         self._http = httpx.Client(
             base_url=base_url.rstrip("/") + "/", timeout=timeout, transport=transport,
             headers={"Authorization": f"Bearer {api_key}"},
         )
 
     def complete(self, request: LlmRequest) -> LlmResponse:
+        messages = [
+            {"role": "system", "content": request.system + "\n\nJSON schema of the reply:\n" + json.dumps(request.schema)},
+            {"role": "user", "content": request.user},
+        ]
         body = {
             "model": self.model,
             "temperature": TEMPERATURE,
-            "messages": [
-                {"role": "system", "content": request.system + "\n\nJSON schema of the reply:\n" + json.dumps(request.schema)},
-                {"role": "user", "content": request.user},
-            ],
+            "messages": messages,
             "response_format": {"type": "json_schema", "json_schema": {"name": request.task, "schema": request.schema}},
         }
+        started = time.perf_counter()
+
+        def elapsed_ms() -> int:
+            return round((time.perf_counter() - started) * 1000)
+
+        def failure(message: str, *, raw_reply: str | None = None, usage: dict | None = None) -> LlmError:
+            # The key travels only in the request header, but a provider can echo anything back: never keep it.
+            if self._api_key:
+                message = message.replace(self._api_key, "[redacted]")
+                raw_reply = raw_reply.replace(self._api_key, "[redacted]") if raw_reply else raw_reply
+            return LlmError(message, messages=messages, raw_reply=raw_reply, usage=usage, latency_ms=elapsed_ms())
+
         try:
             r = self._http.post("chat/completions", json=body)
-            r.raise_for_status()
+        except httpx.HTTPError as e:
+            raise failure(f"LLM call failed: {type(e).__name__}: {e}") from e
+        if not r.is_success:
+            raise failure(f"LLM call failed: HTTP {r.status_code}: {r.text[:500]}", raw_reply=r.text or None)
+        latency_ms = elapsed_ms()
+        try:
             payload = r.json()
             reply = payload["choices"][0]["message"]["content"]
-            model = payload.get("model") or self.model
-        except (httpx.HTTPError, KeyError, IndexError, ValueError) as e:
-            raise LlmError(f"LLM call failed: {e}")
-        response = LlmResponse(content=parse_json_reply(reply), model=model, prompt_version=request.prompt_version)
+            if not isinstance(reply, str):
+                raise TypeError(f"message content was {type(reply).__name__}, not text")
+        except (KeyError, IndexError, TypeError, ValueError) as e:
+            raise failure(f"LLM call failed: unexpected reply shape ({type(e).__name__}: {e})", raw_reply=r.text) from e
+        if self._api_key:
+            reply = reply.replace(self._api_key, "[redacted]")
+        usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else None
+        try:
+            content = parse_json_reply(reply)
+        except LlmError as e:
+            raise failure(str(e), raw_reply=reply, usage=usage) from e
+        response = LlmResponse(
+            content=content, model=payload.get("model") or self.model, prompt_version=request.prompt_version,
+            messages=messages, raw_reply=reply, usage=usage, latency_ms=latency_ms)
         if self.record_dir:
             write_recording(self.record_dir, request, response)
         return response
 
 
-def build_llm(settings) -> LlmClient:
+def build_llm(settings, transport: httpx.BaseTransport | None = None) -> LlmClient:
     if settings.llm_mode == "recorded":
         return RecordedLlm(settings.llm_recordings_dir)
     if settings.llm_mode == "live":
@@ -135,6 +196,6 @@ def build_llm(settings) -> LlmClient:
             raise RuntimeError("APP_LLM_API_KEY must be set when APP_LLM_MODE=live")
         return OpenAICompatibleLlm(
             base_url=settings.llm_base_url, api_key=settings.llm_api_key, model=settings.llm_model,
-            record_dir=settings.llm_recordings_dir if settings.llm_record else None,
+            record_dir=settings.llm_recordings_dir if settings.llm_record else None, transport=transport,
         )
     raise RuntimeError(f"Unknown APP_LLM_MODE: {settings.llm_mode}")

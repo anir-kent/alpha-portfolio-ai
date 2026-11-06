@@ -86,7 +86,7 @@ def pending_approvals(
         restrictions = db.scalars(select(RestrictionRow).where(RestrictionRow.client_id == c.id).order_by(RestrictionRow.id))
         items.append(ApprovalItem(
             step=approvals.STEP_OF[rec.status], status=rec.status, portfolio_id=c.id, client_name=c.name if pii else None,
-            risk_profile=c.risk_profile, recommendation=to_out(rec, cfg, db), rules=_flagged(rec, market),
+            risk_profile=c.risk_profile, recommendation=to_out(rec, cfg, db, user), rules=_flagged(rec, market),
             restrictions=[RestrictionOut(kind=r.kind, value=r.value) for r in restrictions],
         ))
     return ApprovalsOut(items=items)

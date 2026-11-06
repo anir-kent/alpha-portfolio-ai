@@ -12,9 +12,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from app.db import AuditEventRow
+from app.db import AuditEventRow, LlmExchangeRow
 from app.timeutil import as_utc
 
 EVENT_TYPES = (
@@ -123,23 +124,59 @@ class Verification:
     checked: int
     first_broken_id: int | None = None
     reason: str | None = None
+    exchanges_checked: int = 0
+    first_broken_exchange_id: int | None = None
+
+
+def exchange_reference(row_payload_json: str) -> tuple[int | None, str | None]:
+    """The (id, hash) of the LLM Exchange an event's payload references; (None, None) for a pre-capture event."""
+    payload = json.loads(row_payload_json)
+    return payload.get("exchange_id"), payload.get("exchange_hash")
+
+
+def _exchange_problem(db: Session, row: AuditEventRow) -> tuple[int, str] | None:
+    """Recompute the Exchange an event references (ADR-0004). None if it is intact; events with no reference are
+    pre-capture and are not checked. The event's own hash covers the referenced hash, so a rewritten Exchange whose
+    hash was also recomputed still fails against the hash the chain pinned."""
+    from app.exchanges import exchange_digest  # local: app.exchanges imports this module
+
+    exchange_id, pinned = exchange_reference(row.payload_json)
+    if exchange_id is None:
+        return None
+    try:
+        ex = db.get(LlmExchangeRow, exchange_id)
+    except OperationalError:  # the whole store is gone, which is the same finding as a missing row
+        ex = None
+    if ex is None:
+        return exchange_id, f"LLM Exchange #{exchange_id} referenced by this event is missing"
+    if exchange_digest(ex) != pinned or ex.hash != pinned:
+        return exchange_id, f"LLM Exchange #{exchange_id} referenced by this event was altered (its hash no longer matches)"
+    return None
 
 
 def verify(db: Session) -> Verification:
-    """Walk the chain in order and report the first broken link."""
+    """Walk the chain in order and report the first broken link, or the first event whose referenced Exchange is
+    altered or missing."""
     expected_prev = GENESIS_HASH
     checked = 0
+    exchanges = 0
     for row in db.scalars(select(AuditEventRow).order_by(AuditEventRow.id)):
         if row.previous_hash != expected_prev:
             return Verification(
                 False, checked, row.id,
                 "previous hash does not match the preceding event (an earlier event was altered or removed)",
+                exchanges_checked=exchanges,
             )
         if _digest(row) != row.hash:
-            return Verification(False, checked, row.id, "stored hash does not match event content")
+            return Verification(False, checked, row.id, "stored hash does not match event content", exchanges_checked=exchanges)
+        problem = _exchange_problem(db, row)
+        if problem:
+            return Verification(False, checked, row.id, problem[1], exchanges_checked=exchanges, first_broken_exchange_id=problem[0])
+        if exchange_reference(row.payload_json)[0] is not None:
+            exchanges += 1
         expected_prev = row.hash
         checked += 1
-    return Verification(True, checked)
+    return Verification(True, checked, exchanges_checked=exchanges)
 
 
 def search(

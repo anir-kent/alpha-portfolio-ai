@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app import audit, grounding, recommendations, reports
 from app.db import RecommendationNarrativeRow, RecommendationRow, RecommendationTiltRow
-from app.llm import LlmClient, LlmError, LlmRequest
+from app.llm import LlmClient, LlmError, LlmRequest, exchange_ref
 from app.prompts import RECOMMENDATION_NARRATIVE
 
 
@@ -69,6 +69,7 @@ def build_memo(rec: RecommendationRow, tilt: RecommendationTiltRow | None, resul
 def generate(db: Session, llm: LlmClient, rec: RecommendationRow) -> RecommendationNarrativeRow:
     now = audit.format_ts(datetime.now(timezone.utc))
     scope = dict(portfolio_id=rec.client_id, client_id=rec.client_id, recommendation_id=str(rec.id))
+    response = None
     try:
         response = llm.complete(_request(db, rec))
         reply = NarrativeReply.model_validate(response.content)
@@ -81,7 +82,7 @@ def generate(db: Session, llm: LlmClient, rec: RecommendationRow) -> Recommendat
         db.commit()
         audit.record(
             db, "memo_generated", audit.Actor.system("memo-writer", prompt_version=RECOMMENDATION_NARRATIVE.label),
-            {"status": "failed", "error": row.error}, parents=[p for p in [recommendations.last_event_id(db, rec.id)] if p], **scope,
+            {"status": "failed", "error": row.error, **exchange_ref(e if isinstance(e, LlmError) else response)}, parents=[p for p in [recommendations.last_event_id(db, rec.id)] if p], **scope,
         )
         return row
     check_id, results = grounding.validate(db, rec, reply.claims)
@@ -94,7 +95,7 @@ def generate(db: Session, llm: LlmClient, rec: RecommendationRow) -> Recommendat
     db.commit()
     audit.record(
         db, "memo_generated", audit.Actor.system("memo-writer", model=response.model, prompt_version=response.prompt_version),
-        {"status": "complete", "check_id": check_id, "summary": grounding.summarise(results), "memo_chars": len(row.memo)},
+        {"status": "complete", "check_id": check_id, "summary": grounding.summarise(results), "memo_chars": len(row.memo), **exchange_ref(response)},
         parents=[p for p in [recommendations.last_event_id(db, rec.id)] if p], **scope,
     )
     return row
