@@ -4,10 +4,10 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] At app startup, every Analysis Run row without an outcome gets `interrupted` and a finish time, and its Run Step results show the steps that never finished as not done
-- [ ] API test: an outcome-less row plus an app restart gives `GET /analysis/runs/{id}` returning `interrupted`, `current` returning `204`, and a new start returning `202`
-- [ ] The Queue still serves the latest completed run
-- [ ] The modal shows the Interrupted state with the agreed wording and refreshes nothing
-- [ ] `npm run typecheck` passes; the manual E2E checklist gains an item for stopping the API mid-run and restarting it
+- [x] At app startup, every Analysis Run row without an outcome gets `interrupted` and a finish time, and its Run Step results show the steps that never finished as not done
+- [x] API test: an outcome-less row plus an app restart gives `GET /analysis/runs/{id}` returning `interrupted`, `current` returning `204`, and a new start returning `202`
+- [x] The Queue still serves the latest completed run
+- [x] The modal shows the Interrupted state with the agreed wording and refreshes nothing
+- [x] `npm run typecheck` passes; the manual E2E checklist gains an item for stopping the API mid-run and restarting it

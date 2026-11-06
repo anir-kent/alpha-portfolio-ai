@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app import audit
@@ -19,7 +20,7 @@ from app.analysis import open_run, run_analysis
 from app.db import AnalysisRunRow
 from app.llm import LlmClient
 from app.market_data import MarketData
-from app.run_steps import RUN_STEP_KEYS, RUN_STEPS, RunStepKey, step
+from app.run_steps import RUN_STEP_KEYS, RUN_STEPS, SCORING_STEP_KEYS, RunStepKey, step
 
 log = logging.getLogger(__name__)
 
@@ -161,6 +162,27 @@ def snapshot_from_row(run: AnalysisRunRow) -> RunSnapshot:
     )
 
 
+def save_outcome(run: AnalysisRunRow, outcome: RunOutcome, finished_at: str, steps: list[RunStepOut]) -> None:
+    run.outcome, run.finished_at = outcome, finished_at
+    run.steps_json = json.dumps([s.model_dump() for s in steps])
+
+
+def mark_stranded_runs_interrupted(session_factory: sessionmaker) -> None:
+    """At startup, no run can be in flight (one API process, ADR-0005): a row with no outcome is a run the process died
+    in. Mark it interrupted. Its in-memory progress is gone; what its row says is what happened: the scoring steps are
+    done only if their transaction committed (`completed`), and every other step never finished."""
+    finished_at = _now()
+    with session_factory() as db:
+        for run in db.scalars(select(AnalysisRunRow).where(AnalysisRunRow.outcome.is_(None))):
+            steps = [
+                RunStepOut(key=s.key, label=s.label, outcome="done" if run.completed and s.key in SCORING_STEP_KEYS else "skipped")
+                for s in RUN_STEPS
+            ]
+            save_outcome(run, "interrupted", finished_at, steps)
+            log.warning("Analysis Run %s: interrupted by a restart", run.id)
+        db.commit()
+
+
 class AnalysisRuns:
     """Starts Analysis Runs in the background, one at a time, and answers what a run looks like now."""
 
@@ -221,8 +243,7 @@ class AnalysisRuns:
         try:
             with self._session_factory() as db:
                 run = db.get_one(AnalysisRunRow, run_id)
-                run.outcome, run.finished_at = outcome, finished_at
-                run.steps_json = json.dumps([s.model_dump() for s in reporter.snapshot.steps])
+                save_outcome(run, outcome, finished_at, reporter.snapshot.steps)
                 db.commit()
         except Exception:
             log.exception("Analysis Run %s: could not save its outcome", run_id)

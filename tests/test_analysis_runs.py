@@ -208,9 +208,7 @@ def test_a_database_from_before_run_outcomes_gets_them_and_its_completed_runs_re
             " config_json TEXT, completed BOOLEAN)"
         )
         conn.execute("INSERT INTO analysis_runs VALUES (1, '2026-01-01T00:00:00.000000Z', 'advisor', '2026-01-01', '{}', 1)")
-    c = TestClient(create_app(settings))
-    assert c.post("/api/auth/login", json={"username": "advisor", "password": SEED_PASSWORD}).status_code == 200
-    snap = c.get(f"{RUNS}/1").json()
+    snap = restart(settings).get(f"{RUNS}/1").json()
     assert snap["outcome"] == "completed" and outcomes(snap) == ["done"] * 5
 
 
@@ -325,3 +323,49 @@ def test_recommendation_narratives_still_run_after_the_priority_narratives_step_
     assert outcomes(snap) == ["done", "done", "done", "failed", "done"]
     assert snap["steps"][3]["error"] == AI_STEP_FAILED and "secret" not in json.dumps(snap)
     assert any(f"Analysis Run {snap['run_id']}" in r.getMessage() and r.exc_info for r in caplog.records)
+
+
+def strand_a_run(settings, *, completed: bool) -> int:
+    """Leave an Analysis Run row with no outcome, as a process that died mid-run does: before its scoring committed, or
+    (`completed`) after it committed, during the narrative steps."""
+    with sqlite3.connect(settings.database_url.removeprefix("sqlite:///")) as conn:
+        cur = conn.execute(
+            "INSERT INTO analysis_runs (started_at, actor_name, as_of, config_json, completed)"
+            " VALUES ('2026-01-01T00:00:00.000000Z', 'advisor', '2026-01-01', '{}', ?)", (completed,),
+        )
+        assert cur.lastrowid is not None
+        return cur.lastrowid
+
+
+def restart(settings) -> TestClient:
+    c = TestClient(create_app(settings))
+    assert c.post("/api/auth/login", json={"username": "advisor", "password": SEED_PASSWORD}).status_code == 200
+    return c
+
+
+def test_a_run_the_server_died_in_is_interrupted_on_restart_and_never_blocks_a_new_run(advisor, settings):
+    previous = run_and_wait(advisor)
+    stranded = strand_a_run(settings, completed=False)
+
+    c = restart(settings)
+    snap = c.get(f"{RUNS}/{stranded}").json()
+    assert snap["outcome"] == "interrupted" and snap["finished_at"]
+    assert outcomes(snap) == ["skipped"] * 5  # nothing it did was kept
+    assert c.get(f"{RUNS}/current").status_code == 204
+    assert c.get("/api/queue").json()["run_id"] == previous
+
+    r = c.post(RUNS)
+    assert r.status_code == 202, r.text
+    assert wait_for_outcome(c, r.json()["run_id"])["outcome"] == "completed"
+    assert c.get(f"{RUNS}/{stranded}").json() == snap  # marked once, on that startup
+
+
+def test_a_run_the_server_died_in_after_recording_its_results_shows_those_steps_done(advisor, settings):
+    run_and_wait(advisor)
+    stranded = strand_a_run(settings, completed=True)
+
+    c = restart(settings)
+    snap = c.get(f"{RUNS}/{stranded}").json()
+    assert snap["outcome"] == "interrupted"
+    assert outcomes(snap) == ["done", "done", "done", "skipped", "skipped"]
+    assert c.get("/api/queue").json()["run_id"] == stranded  # its results were recorded, so it is current

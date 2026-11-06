@@ -12,6 +12,9 @@ const POLL_MS = 1000;
 const STREAM_RETRY_MS = 5000; // while polling, how often a successful poll may try the stream again
 const SUCCESS = new Set<RunSnapshot["outcome"]>(["completed", "completed_with_warnings"]);
 
+/** The scoring transaction committed: this run's results are current, whatever happened after. */
+const recorded = (snap: RunSnapshot) => snap.steps.find((s) => s.key === "record_run")?.outcome === "done";
+
 /** Server timestamps carry microseconds; Date wants milliseconds at most. */
 const ms = (ts: string) => Date.parse(ts.replace(/(\.\d{3})\d+/, "$1"));
 
@@ -135,6 +138,14 @@ function failedMessage(snap: RunSnapshot): string {
   return `${step?.label ?? "The run"} failed. The Queue still shows the previous run. Reference: run #${snap.run_id}`;
 }
 
+/** What an Interrupted run (the server restarted mid-run) tells the user. Its scoring either never committed, so nothing
+ * changed, or committed before the restart, so its results stand without some narratives. */
+function interruptedMessage(snap: RunSnapshot): string {
+  return recorded(snap)
+    ? "Run interrupted after its results were recorded. The Queue now shows this run; some narratives may be missing."
+    : "Run interrupted. The Queue still shows the previous run";
+}
+
 /**
  * Follows one Analysis Run's Run Steps (ADR-0005). An accessible dialog: focus moves in on open and back to the trigger on
  * close, Tab stays inside, Escape hides it. Closing never stops the run. On a successful outcome the Queue and
@@ -152,11 +163,13 @@ export function RunAnalysisModal({ initial, onClose, trigger }: { initial: RunSn
     return () => trigger.current?.focus(); // the trigger, not whatever had focus: it was disabled while the run started
   }, [trigger]);
 
+  const resultsChanged = SUCCESS.has(snap.outcome) || (snap.outcome === "interrupted" && recorded(snap)); // an Interrupted
+  // run refreshes nothing, unless its results were recorded before the restart
   useEffect(() => {
-    if (!SUCCESS.has(snap.outcome)) return;
+    if (!resultsChanged) return;
     qc.invalidateQueries({ queryKey: ["queue"] });
     qc.invalidateQueries({ queryKey: ["portfolio"] }); // each Portfolio view carries its Recommendation
-  }, [snap.outcome, qc]);
+  }, [resultsChanged, qc]);
 
   useEffect(() => { // Escape hides it wherever focus is, like the Drawer
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -199,6 +212,7 @@ export function RunAnalysisModal({ initial, onClose, trigger }: { initial: RunSn
             {snap.outcome ? HEADLINE[snap.outcome] : "Running… You can close this; the run carries on."}
           </p>
           {snap.outcome === "failed" && <p className="text-neg">{failedMessage(snap)}</p>}
+          {snap.outcome === "interrupted" && <p className="text-neg">{interruptedMessage(snap)}</p>}
           {!finished && STREAM_NOTE[stream] && (
             <p className="text-ink-3">{pollFailed ? "Could not load the run's progress. Retrying…" : STREAM_NOTE[stream]}</p>
           )}

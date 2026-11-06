@@ -31,6 +31,7 @@ RUN_STEPS: tuple[RunStep, ...] = (
 RUN_STEP_KEYS: tuple[RunStepKey, ...] = tuple(s.key for s in RUN_STEPS)
 assert RUN_STEP_KEYS == get_args(RunStepKey)
 AI_STEP_KEYS: tuple[RunStepKey, ...] = ("priority_narratives", "recommendation_narratives")
+SCORING_STEP_KEYS: tuple[RunStepKey, ...] = tuple(k for k in RUN_STEP_KEYS if k not in AI_STEP_KEYS)  # one transaction
 
 
 def step(key: RunStepKey) -> RunStep:
