@@ -4,7 +4,7 @@
 
 **Blocked by:** 01, 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Claims whose figures match Screen Context figures, and whose Report citations quote a real page verbatim, come back grounded
 - [x] Claims citing figures absent from the Screen Context, or with mismatched numbers, come back flagged ungrounded and stay in the Answer
