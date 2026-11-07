@@ -13,6 +13,7 @@ type ClaimResult = components["schemas"]["ClaimResult"];
 
 /** Cached under this key, so logout (which drops every query but "me") clears the Conversation from the page too. */
 const CONVERSATION_KEY = ["assistant-conversation"];
+const FAILED_MESSAGE = "The Assistant couldn't answer, try again.";
 
 /** How the drawer names a turn's context: the server's label, or for a turn whose screen the user couldn't read
  * (the server names nothing) the identity the browser itself sent. */
@@ -100,7 +101,29 @@ function ContextDivider({ turn }: { turn: Turn }) {
   );
 }
 
-function TurnView({ turn, onFollowUp }: { turn: Turn; onFollowUp: (q: string) => void }) {
+/** The safe failure message with a retry button. Retry asks again as a new turn; the failed one stays in the record. */
+function FailedCallout({ message, onRetry, busy }: { message: string; onRetry: () => void; busy: boolean }) {
+  return (
+    <div className="callout callout-neg flex items-center gap-2">
+      <p className="flex-1">{message}</p>
+      <button type="button" className="btn btn-sm" onClick={onRetry} disabled={busy}>
+        Retry
+      </button>
+    </div>
+  );
+}
+
+function TurnView({
+  turn,
+  onFollowUp,
+  onRetry,
+  busy,
+}: {
+  turn: Turn;
+  onFollowUp: (q: string) => void;
+  onRetry: (turn: Turn) => void;
+  busy: boolean;
+}) {
   return (
     <li className="space-y-1.5">
       <p className="ml-auto w-fit max-w-[90%] rounded-2xl bg-brand/10 px-3 py-1.5">{turn.question}</p>
@@ -128,7 +151,9 @@ function TurnView({ turn, onFollowUp }: { turn: Turn; onFollowUp: (q: string) =>
         </div>
       )}
       {turn.outcome === "refused" && turn.answer && <p className="callout callout-warn">{turn.answer.markdown}</p>}
-      {turn.outcome === "failed" && <p className="callout callout-neg">{turn.message}</p>}
+      {turn.outcome === "failed" && (
+        <FailedCallout message={turn.message ?? FAILED_MESSAGE} onRetry={() => onRetry(turn)} busy={busy} />
+      )}
     </li>
   );
 }
@@ -152,7 +177,7 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
   const ask = useMutation({
     mutationFn: async ({ question, screen }: { question: string; screen: Screen }) => {
       const { data, error } = await api.POST("/api/assistant/questions", { body: { question, screen } });
-      if (error || !data) throw new Error("The Assistant couldn't answer, try again.");
+      if (error || !data) throw new Error(FAILED_MESSAGE);
       return data;
     },
     onSuccess: async (turn) => {
@@ -160,7 +185,6 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
       if (known) qc.setQueryData<Conversation>(CONVERSATION_KEY, { ...known, turns: [...known.turns, turn] });
       // The first turn created the Conversation; awaiting the refetch keeps "Thinking…" up until it shows.
       else await qc.invalidateQueries({ queryKey: CONVERSATION_KEY });
-      setQuestion("");
     },
   });
   useEffect(() => {
@@ -172,7 +196,12 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
   const send = () => {
     const q = question.trim();
     if (!q || !current || ask.isPending) return;
-    ask.mutate({ question: q, screen: current.screen });
+    // Clearing only here keeps whatever is being typed when a retry lands.
+    ask.mutate({ question: q, screen: current.screen }, { onSuccess: () => setQuestion("") });
+  };
+  // The same Question and screen identity as the failed turn, even after moving to another screen.
+  const retry = (turn: Turn) => {
+    if (!ask.isPending) ask.mutate({ question: turn.question, screen: turn.screen });
   };
   return (
     <aside id="assistant-drawer" className="assistant panel" aria-label="Assistant" hidden={!open}>
@@ -200,13 +229,18 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
           {turns.map((t, i) => (
             <Fragment key={t.seq}>
               {i > 0 && !sameScreen(turns[i - 1].screen, t.screen) && <ContextDivider turn={t} />}
-              <TurnView turn={t} onFollowUp={setQuestion} />
+              <TurnView turn={t} onFollowUp={setQuestion} onRetry={retry} busy={ask.isPending} />
             </Fragment>
           ))}
         </ol>
         <div aria-live="polite">
           {ask.isPending && <p className="mt-3 text-ink-3">Thinking…</p>}
-          {ask.isError && <p className="callout callout-neg mt-3">{ask.error.message}</p>}
+          {ask.isError && (
+            <div className="mt-3">
+              {/* The request never became a turn (network or server error): retry sends the same Question again. */}
+              <FailedCallout message={ask.error.message} onRetry={() => ask.mutate(ask.variables)} busy={false} />
+            </div>
+          )}
         </div>
       </div>
       <form

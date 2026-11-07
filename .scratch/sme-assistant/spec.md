@@ -123,11 +123,11 @@ The Conversation lasts for the login session. It survives reloads and screen cha
 
 ### Checks after the reply
 
-These run in order, and the user sees nothing until they finish:
+These run in order, and the user sees nothing until they finish. PII runs before grounding, so a rejected Answer is never grounding-checked:
 
 1. **Scope.** If `in_scope` is false, the user gets the fixed Out-of-Scope Refusal and the model's text is discarded.
-2. **Grounding.** Claims are validated with the existing grounding logic, against the engine figures in the Screen Context and the Report passages it cites. The current entry point requires a single Client. It needs to accept a figure set that isn't tied to one Client (the Queue) and to link its check to an Assistant turn instead of a Recommendation. Ungrounded Claims stay in the Answer with a flag.
-3. **PII.** If the Answer contains a Client name or email, it is rejected and treated as a failure. This should be impossible given the context, but the check runs anyway.
+2. **PII.** If the Answer contains a Client name or email, it is rejected and treated as a failure. This should be impossible given the context, but the check runs anyway.
+3. **Grounding.** Claims are validated with the existing grounding logic, against the engine figures in the Screen Context and the Report passages it cites. The current entry point requires a single Client. It needs to accept a figure set that isn't tied to one Client (the Queue) and to link its check to an Assistant turn instead of a Recommendation. Ungrounded Claims stay in the Answer with a flag.
 
 ### Conversation and persistence (ADR-0006)
 
@@ -137,7 +137,7 @@ These run in order, and the user sees nothing until they finish:
   - the screen identity and the Screen Context hash,
   - the outcome: answered, refused or failed,
   - the Answer JSON, the grounding check id and the Exchange reference.
-- **Audit Events:** each turn writes `assistant.answered`, `assistant.refused` or `assistant.failed`, carrying the Exchange reference so chain verification covers it. The Exchange is written first, as today.
+- **Audit Events:** each turn writes `assistant.answered`, `assistant.refused` or `assistant.failed`, carrying the Exchange reference so chain verification covers it. `assistant.failed` also carries a `reason`: `llm_error` (the call or its capture failed), `unreadable_reply` or `pii`. The Exchange is written first, as today.
 
 ### API contract
 

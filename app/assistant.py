@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import audit, grounding, prompts, screen_context
-from app.db import AssistantTurnRow, ConversationRow, SessionRow, User
+from app.db import AssistantTurnRow, ClientRow, ConversationRow, SessionRow, User
 from app.grounding import CheckSubject, Claim, ClaimResult
 from app.llm import LlmClient, LlmError, LlmRequest, LlmResponse, exchange_ref
 from app.market_data import MarketData
@@ -29,6 +29,8 @@ OUT_OF_SCOPE_REFUSAL = (
 FAILED_MESSAGE = "The Assistant couldn't answer, try again."
 
 Outcome = Literal["answered", "refused", "failed"]
+# Why a turn failed, on its `assistant.failed` Audit Event. The user sees only FAILED_MESSAGE whatever the reason.
+FailureReason = Literal["llm_error", "unreadable_reply", "pii"]
 
 
 class AssistantReply(BaseModel):
@@ -122,6 +124,28 @@ def _history(db: Session, session: SessionRow, pairs: int) -> list[tuple[str, st
     return [(r.question, Answer.model_validate_json(r.answer_json or "").markdown) for r in reversed(rows)]
 
 
+def _strings(value: object) -> list[str]:
+    """Every string in a dumped model, at any depth."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        value = list(value.values())
+    return [s for v in value for s in _strings(v)] if isinstance(value, list) else []
+
+
+def _contains_pii(db: Session, reply: AssistantReply) -> bool:
+    """Whether any text of the reply (Markdown, Claims and their citations, follow-ups) holds a Client's full name or
+    email, in any case. Every Client is checked, not only the one on screen. A backstop: the Screen Context carries
+    neither, so this should never fire, but it runs anyway (spec: PII check)."""
+    text = "\n".join(_strings(reply.model_dump())).casefold()
+    return any(
+        value.casefold() in text
+        for name, email in db.execute(select(ClientRow.name, ClientRow.email))
+        for value in (name, email)
+        if value
+    )
+
+
 def _prompt(context: screen_context.ScreenContext, history: list[tuple[str, str]], question: str) -> LlmRequest:
     """The four labelled blocks. History is text only: earlier Screen Contexts are never resent."""
     blocks = [
@@ -156,6 +180,7 @@ def ask(
     model: str | None = None
     called: LlmResponse | LlmError | None = None
     reply: AssistantReply | None = None
+    reason: FailureReason | None = None
     if context is None:  # nothing readable: refuse without calling the model or saying whether the entity exists
         outcome = "refused"
     else:
@@ -164,12 +189,17 @@ def ask(
             called = llm.complete(request)
             model = called.model
             reply = AssistantReply.model_validate(called.content)
-        except LlmError as e:
-            called, outcome = e, "failed"
+        except LlmError as e:  # includes a call capture could not record: it fails closed, no Answer reaches the user
+            called, outcome, reason = e, "failed", "llm_error"
         except ValidationError:
-            outcome = "failed"
+            outcome, reason = "failed", "unreadable_reply"
         else:
-            outcome = "answered" if reply.in_scope else "refused"
+            if not reply.in_scope:
+                outcome = "refused"  # the model's text is discarded, so there is nothing to check
+            elif _contains_pii(db, reply):  # before grounding: a rejected Answer is never checked, stored or shown
+                outcome, reason = "failed", "pii"
+            else:
+                outcome = "answered"
 
     conv = _conversation(db, user, session)
     seq = (
@@ -223,6 +253,7 @@ def ask(
             "screen_kind": screen.kind,
             "screen_context_hash": context_hash,
             **({"check_id": check_id} if check_id else {}),  # how the Exchange screen finds this turn's grounding
+            **({"reason": reason} if reason else {}),  # why a failed turn failed; the user only saw FAILED_MESSAGE
             **ref,
         },
         portfolio_id=portfolio_id,

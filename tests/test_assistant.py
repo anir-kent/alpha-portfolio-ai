@@ -6,11 +6,12 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
 
 from app.db import AssistantTurnRow, AuditEventRow, ClientRow, ConversationRow, SessionRow
 from app.exchanges import CapturingLlm
-from app.llm import LlmRequest, LlmResponse
+from app.llm import LlmError, LlmRequest, LlmResponse
 from app.seeder import PLANTED
 from tests.runs import run_and_wait
 from tests.test_portfolio import url
@@ -30,10 +31,13 @@ class PromptCapturingLlm:
 
     def __init__(self, reply: dict):
         self.reply = reply
+        self.error: str | None = None  # when set, every call raises an LlmError with this text
         self.requests: list[LlmRequest] = []
 
     def complete(self, request):
         self.requests.append(request)
+        if self.error is not None:
+            raise LlmError(self.error)
         return LlmResponse(self.reply, "fake-model-1", request.prompt_version)
 
 
@@ -488,3 +492,96 @@ def test_a_refused_turn_is_not_grounding_checked_even_if_the_model_sent_claims(a
     turn = ask(login("advisor"), "Should I buy NVDA?", portfolio_screen("C001")).json()
     assert turn["outcome"] == "refused" and turn["answer"]["claims"] == [] and turn["grounding_check_id"] is None
     assert events(app, "grounding_checked") == []
+
+
+# --- failure, retry and the PII guard (ticket 05) ----------------------------------------------------------------
+
+FAILED = "The Assistant couldn't answer, try again."
+SECRET = "upstream 503 from gw-internal.example: key sk-live-123"
+
+
+def test_a_raising_llm_gives_a_failed_turn_an_audit_event_with_the_error_exchange_and_a_safe_message(app, login, model):
+    model.error = SECRET
+    r = ask(login("advisor"), "Why?", portfolio_screen("C001"))
+    assert r.status_code == 200
+    turn = r.json()
+    assert turn["outcome"] == "failed" and turn["answer"] is None and turn["message"] == FAILED
+    assert "503" not in r.text and "sk-live" not in r.text
+    (event,) = events(app, "assistant.failed")
+    assert isinstance(turn["exchange_id"], int)
+    assert (event["exchange_id"], event["exchange_hash"]) == (turn["exchange_id"], turn["exchange_hash"])
+    assert event["reason"] == "llm_error" and "503" not in json.dumps(event)
+    auditor = login("auditor")
+    ex = auditor.get(f"/api/llm/exchanges/{turn['exchange_id']}").json()
+    assert ex["outcome"] == "error" and SECRET in ex["error"]  # the detail lives in the Exchange, for an auditor
+    assert auditor.get("/api/audit/verify").json()["valid"]
+
+
+def test_retry_resubmits_the_same_question_and_screen_as_a_new_turn(login, model):
+    advisor = login("advisor")
+    model.error = "timeout"
+    failed = ask(advisor, "Why is it flagged?", portfolio_screen("C001")).json()
+    model.error = None
+    retried = ask(advisor, failed["question"], failed["screen"]).json()
+    assert (failed["seq"], retried["seq"]) == (1, 2)
+    assert retried["outcome"] == "answered" and retried["question"] == "Why is it flagged?"
+    assert retried["exchange_id"] != failed["exchange_id"]
+    turns = advisor.get(CONVERSATION).json()["turns"]
+    assert [t["outcome"] for t in turns] == ["failed", "answered"]  # the failed turn stays: the record has no gaps
+    assert turns[0]["message"] == FAILED
+
+
+def clients(app):
+    with app.state.session_factory() as db:
+        return db.scalars(select(ClientRow).order_by(ClientRow.id)).all()
+
+
+@pytest.mark.parametrize(
+    "leak",
+    [
+        lambda c: answer(f"This Portfolio belongs to {c.name}."),
+        lambda c: answer(f"Write to {c.email.upper()} about it."),  # case does not hide it
+        lambda c: claims_reply({"text": f"{c.name} holds XOM.", "citations": []}),
+        lambda c: answer(follow_ups=[f"What else does {c.name} hold?"]),
+    ],
+    ids=["markdown", "email", "claim", "follow-up"],
+)
+def test_an_answer_containing_a_client_name_or_email_is_rejected_as_a_failure(app, login, model, leak):
+    other = clients(app)[7]  # any Client, not only the one on screen
+    model.reply = leak(other)
+    advisor = login("advisor")
+    r = ask(advisor, "Who is this?", portfolio_screen("C001"))
+    turn = r.json()
+    assert turn["outcome"] == "failed" and turn["answer"] is None and turn["message"] == FAILED
+    assert other.name not in r.text and other.email.lower() not in r.text.lower()
+    (event,) = events(app, "assistant.failed")
+    assert event["exchange_id"] == turn["exchange_id"] and event["reason"] == "pii"
+    assert events(app, "grounding_checked") == []  # a rejected Answer is never checked or kept
+    (read_back,) = advisor.get(CONVERSATION).json()["turns"]
+    assert read_back["answer"] is None and other.name not in json.dumps(read_back)
+
+
+def test_an_answer_naming_only_client_ids_and_pseudonyms_passes_the_pii_check(login, model):
+    model.reply = answer("C001 and C008 both drift in equity.")
+    assert ask(login("advisor"), "Why?", portfolio_screen("C001")).json()["outcome"] == "answered"
+
+
+# Capture writes through its own session; this one's database cannot be opened, so every Exchange write fails.
+unwritable_store = sessionmaker(create_engine("sqlite:////nonexistent-dir/exchanges.db"))
+
+
+def test_an_exchange_that_cannot_be_captured_fails_closed_and_no_answer_reaches_the_user(app, login, model):
+    model.reply = answer("A perfectly good Answer.")
+    app.state.llm = CapturingLlm(model, unwritable_store, mode="recorded")
+    advisor = login("advisor")
+    r = ask(advisor, "Why?", portfolio_screen("C001"))
+    turn = r.json()
+    assert len(model.requests) == 1  # the model did answer; capture failed afterwards
+    assert turn["outcome"] == "failed" and turn["answer"] is None and turn["message"] == FAILED
+    assert "perfectly good" not in r.text and "nonexistent" not in r.text and "sqlite" not in r.text.lower()
+    assert turn["exchange_id"] is None  # nothing was stored, so there is nothing to point at
+    (event,) = events(app, "assistant.failed")
+    assert event["reason"] == "llm_error" and "exchange_id" not in event
+    (read_back,) = advisor.get(CONVERSATION).json()["turns"]
+    assert read_back["outcome"] == "failed" and read_back["answer"] is None
+    assert login("auditor").get("/api/audit/verify").json()["valid"]
