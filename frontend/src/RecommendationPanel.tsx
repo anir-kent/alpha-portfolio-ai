@@ -3,7 +3,7 @@ import { useId, useState } from "react";
 import { api } from "./api/client";
 import type { components } from "./api/schema";
 import { ExchangeDrawer } from "./ExchangeDrawer";
-import { Citations, DeltaBar, Drawer, Empty, Icon, Pill, RULE_TONE, money, pp, type Tone } from "./ui";
+import { Citations, DeltaBar, Drawer, Empty, Icon, Pill, RULE_TONE, minuteUtc, money, pp, type Tone } from "./ui";
 
 type Detail = components["schemas"]["PortfolioDetail"];
 type Rec = components["schemas"]["RecommendationOut"];
@@ -598,7 +598,7 @@ export function RecommendationPanel({ p, canDecide }: { p: Detail; canDecide: bo
                 <span className="mono font-semibold">v{v.version}</span>{" "}
                 <Pill tone={STATUS_TONE[v.status]}>{STATUS_LABEL[v.status]}</Pill>{" "}
                 <span className="text-ink-2">
-                  {v.created_at.slice(0, 16).replace("T", " ")} · by {v.created_by}
+                  {minuteUtc(v.created_at)} · by {v.created_by}
                 </span>
                 {v.parent_id && <span className="text-ink-3"> · modified from #{v.parent_id}</span>}{" "}
                 <Pill tone={RULE_TONE[v.suitability_status]}>{v.suitability_status}</Pill>

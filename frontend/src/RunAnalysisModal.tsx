@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import { createPortal } from "react-dom";
 import { api } from "./api/client";
 import type { components } from "./api/schema";
-import { Icon } from "./ui";
+import { Icon, trapTab } from "./ui";
 
 export type RunSnapshot = components["schemas"]["RunSnapshot"];
 type Step = RunSnapshot["steps"][number];
@@ -239,25 +239,7 @@ export function RunAnalysisModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const onKeyDown = (e: ReactKeyboardEvent) => {
-    // Tab stays inside
-    if (e.key !== "Tab" || !dialog.current) return;
-    const focusable = [
-      ...dialog.current.querySelectorAll<HTMLElement>(
-        "button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
-      ),
-    ];
-    if (focusable.length === 0) return e.preventDefault();
-    const first = focusable[0],
-      last = focusable[focusable.length - 1];
-    if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  };
+  const onKeyDown = (e: ReactKeyboardEvent) => trapTab(e, dialog.current); // Tab stays inside
 
   const total = duration(snap.started_at, snap.finished_at ?? now);
   return createPortal(
