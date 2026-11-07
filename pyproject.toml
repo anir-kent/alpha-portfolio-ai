@@ -17,6 +17,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "jsonschema>=4.26.0",
+    "markdown-it-py>=4.2.0",
     "mypy>=2.4.1",
     "pre-commit>=4.7.0",
     "pytest>=9.2.0",

@@ -1,12 +1,14 @@
 """Seam: the architecture document build command (`scripts/architecture_doc.py`), driven from the outside through its
-`check` and `regenerate` modes. Assertions are on the exit status and the reported problems only. Edits are made on
+`check`, `regenerate` and `build` modes. Assertions are on the exit status, the reported problems and, for `build`, the text of the PDF. Edits are made on
 `tmp_path` copies of the document, so the real document is never touched."""
 
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
+from pypdf import PdfReader
 
 from scripts.architecture_doc import main
 
@@ -26,7 +28,7 @@ def doc(tmp_path: Path) -> Path:
     mirror = tmp_path / "repo"
     (mirror / "docs").mkdir(parents=True)
     for entry in REPO.iterdir():
-        if entry.name != "docs":
+        if entry.name not in ("docs", ".git"):  # never let a test touch the real repository
             (mirror / entry.name).symlink_to(entry)
     for entry in (REPO / "docs").iterdir():
         if entry.name != "architecture":
@@ -158,3 +160,67 @@ def test_regenerate_fixes_a_stale_region_in_a_file_saved_with_windows_line_endin
     code, out = run(capsys, "check", "--doc-dir", str(doc), "--no-mermaid")
     assert code == 0, out
     assert b"## 8.9 PII stance\r\n" in section.read_bytes()
+
+
+def git(repo: Path, *args: str) -> str:
+    command = ["git", "-C", str(repo), "-c", "user.name=Test", "-c", "user.email=test@example.com", *args]
+    return subprocess.run(command, check=True, capture_output=True, text=True).stdout.strip()
+
+
+@pytest.fixture
+def committed_doc(doc: Path) -> Path:
+    """The `doc` copy, committed as the only commit of a fresh repository, so its working tree is clean."""
+    repo = doc.parents[1]
+    git(repo, "init", "--quiet")
+    git(repo, "add", "--all")
+    git(repo, "commit", "--quiet", "-m", "baseline")
+    return doc
+
+
+def test_build_refuses_a_dirty_working_tree_so_the_stamped_sha_matches_the_content(committed_doc, tmp_path, capsys):
+    section = committed_doc / "04-solution-strategy.md"
+    section.write_text(section.read_text() + "\nAn uncommitted edit.\n")
+
+    code, out = run(capsys, "build", "--doc-dir", str(committed_doc), "--out", str(tmp_path / "out"))
+
+    assert code == 1
+    assert "working tree is dirty" in out
+    assert "docs/architecture/04-solution-strategy.md" in out
+    assert not (tmp_path / "out").exists()
+
+
+def test_build_refuses_a_cover_status_that_the_version_history_row_contradicts(committed_doc, tmp_path, capsys):
+    edit(committed_doc / "index.md", "| Status | Draft |", "| Status | Under ARB Review |")
+    git(committed_doc.parents[1], "commit", "--quiet", "--all", "-m", "status changed, history row not")
+
+    code, out = run(capsys, "build", "--doc-dir", str(committed_doc), "--out", str(tmp_path / "out"))
+
+    assert code == 1
+    assert "Document control says Status 'Under ARB Review' but the Version history row" in out
+    assert not (tmp_path / "out").exists()
+
+
+@needs_npx
+def test_build_prints_a_pdf_with_the_stamped_cover_and_the_diagrams_as_vector_text(committed_doc, tmp_path, capsys):
+    repo = committed_doc.parents[1]
+    diagram = "\n```mermaid\nflowchart LR\n  owner -->|signs the stamped baseline| board\n```\n"
+    (committed_doc / "04-solution-strategy.md").write_text(
+        (committed_doc / "04-solution-strategy.md").read_text() + diagram
+    )
+    git(repo, "commit", "--quiet", "--all", "-m", "a diagram")
+    sha = git(repo, "rev-parse", "HEAD")
+
+    code, out = run(capsys, "build", "--doc-dir", str(committed_doc), "--out", str(tmp_path / "out"))
+
+    assert code == 0, out
+    [pdf] = (tmp_path / "out").glob("*.pdf")
+    reader = PdfReader(pdf)
+    cover = " ".join(reader.pages[0].extract_text().split())  # pypdf breaks lines where Chromium wrapped them
+    assert "Portfolio Rebalancing: Architecture Document" in cover
+    assert sha in cover
+    assert "Version 0.0" in cover
+    assert "Status Draft" in cover
+    text = "\n".join(page.extract_text() for page in reader.pages)
+    assert "Document control" in text
+    assert "signs the stamped baseline" in text  # a Mermaid edge label as extractable text: vector, not raster
+    assert "flowchart LR" not in text  # no diagram left as source

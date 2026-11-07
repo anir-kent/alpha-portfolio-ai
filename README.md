@@ -121,6 +121,7 @@ uv run ruff check && uv run ruff format --check && uv run mypy
 cd frontend && npm run lint && npm run format:check && npm run typecheck
 uv run python -m scripts.architecture_doc check       # the architecture document; --no-mermaid without Node
 uv run python -m scripts.architecture_doc regenerate  # rewrite its code-derived tables (e.g. the RBAC matrix)
+uv run python -m scripts.architecture_doc build       # per release, on a clean tree: the stamped PDF in build/architecture/
 ```
 
 The architecture document lives in `docs/architecture/` (arc42, one file per section, Mermaid inline). Its tables between `BEGIN GENERATED` / `END GENERATED` markers are generated from the code, and CI's `check` fails when one is stale, a section or required heading is missing, a relative link or anchor is broken, or a Mermaid block does not render.

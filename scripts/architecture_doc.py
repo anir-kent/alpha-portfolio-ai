@@ -2,6 +2,7 @@
 
     uv run python -m scripts.architecture_doc check        # CI: fail on any problem, one line per problem
     uv run python -m scripts.architecture_doc regenerate   # rewrite the code-derived regions in place
+    uv run python -m scripts.architecture_doc build        # per release: the stamped PDF in build/architecture/
 
 `check` fails on a missing section file or required heading, an index that does not link every section in order, a
 broken relative link or anchor, a Mermaid block that does not render (mermaid-cli via `npx`), and a code-derived
@@ -9,10 +10,19 @@ region whose content differs from what its generator renders now. `--no-mermaid`
 
 A code-derived region is delimited by `<!-- BEGIN GENERATED: <name> -->` and `<!-- END GENERATED: <name> -->`.
 Generators import the live application modules; they never parse source text. Content outside markers is never
-touched by `regenerate`. Spec: `.scratch/architecture-document/spec.md` (no ADR governs the document tooling).
+touched by `regenerate`.
+
+`build` refuses a dirty working tree (so the stamped commit SHA is the content) and a document that fails `check`. It
+prints a PDF whose cover is stamped with the version (last Version history row of the index), status, commit SHA and
+commit date, followed by the document-control block and every section in index order. Mermaid is pre-rendered to SVG
+and the page is printed by the headless Chromium bundled with mermaid-cli; no pandoc or WeasyPrint. Not run in CI.
+
+Spec: `.scratch/architecture-document/spec.md` (no ADR governs the document tooling).
 """
 
 import argparse
+import base64
+import html
 import json
 import re
 import shutil
@@ -20,16 +30,22 @@ import subprocess
 import sys
 import tempfile
 import unicodedata
+import urllib.parse
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
+
+from markdown_it import MarkdownIt
+from markdown_it.token import Token
 
 from app import rbac
 
 DOC_DIR = Path(__file__).resolve().parents[1] / "docs" / "architecture"
 MERMAID_CLI = "@mermaid-js/mermaid-cli@12.2.0"
 MERMAID_TIMEOUT_SECONDS = 300  # the first run downloads mermaid-cli and its headless Chromium
+PUPPETEER_ARGS = ["--no-sandbox"]  # CI runners forbid Chromium's user-namespace sandbox; we only load our own HTML
+PRINT_SCRIPT = Path(__file__).resolve().with_name("architecture_doc_print.mjs")
 
 
 @dataclass(frozen=True)
@@ -187,6 +203,7 @@ HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 INLINE_LINK = re.compile(r"!?\[(?:[^\]\\]|\\.)*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
 REFERENCE_DEF = re.compile(r"^\s{0,3}\[[^\]]+\]:\s*<?(\S+?)>?(?:\s+.*)?$")
 HTML_ID = re.compile(r"""\b(?:id|name)=["']([^"']+)["']""")
+HTML_ANCHOR = re.compile(r"""\b(id|name)=["']([^"']+)["']""")
 INLINE_CODE = re.compile(r"`+[^`]*`+")
 
 
@@ -255,15 +272,17 @@ def slugify(heading: str) -> str:
     return kept.replace(" ", "-")
 
 
+def heading_anchor(heading: str, seen: dict[str, int]) -> str:
+    """The anchor of `heading`, counting it in `seen`: GitHub suffixes a repeated slug with -1, -2, ..."""
+    slug = slugify(heading)
+    count = seen.get(slug, 0)
+    seen[slug] = count + 1
+    return slug if count == 0 else f"{slug}-{count}"
+
+
 def anchors(md: Markdown) -> set[str]:
     seen: dict[str, int] = {}
-    result = set(md.html_ids)
-    for heading in md.headings:
-        slug = slugify(heading.text)
-        count = seen.get(slug, 0)
-        seen[slug] = count + 1
-        result.add(slug if count == 0 else f"{slug}-{count}")
-    return result
+    return set(md.html_ids) | {heading_anchor(heading.text, seen) for heading in md.headings}
 
 
 # ---- checks ----
@@ -406,29 +425,36 @@ def _unclosed(path: Path, line: int, name: str) -> Problem:
 
 def check_mermaid(blocks: list[Mermaid]) -> list[Problem]:
     """One problem per Mermaid block that mermaid-cli cannot render; none when every block renders."""
+    with tempfile.TemporaryDirectory(prefix="architecture-doc-") as tmp:
+        return render_mermaid(blocks, Path(tmp))[1]
+
+
+def render_mermaid(blocks: list[Mermaid], work: Path) -> tuple[list[str], list[Problem]]:
+    """The SVG of every block, in order, and no problems; or no SVGs and one problem per block that does not render.
+    `work` is a scratch folder."""
     if not blocks:
-        return []
+        return [], []
     npx = shutil.which("npx")
     if npx is None:
-        return [Problem(blocks[0].file, blocks[0].line, "npx not found: cannot render Mermaid (use --no-mermaid)")]
-    with tempfile.TemporaryDirectory(prefix="architecture-doc-") as tmp:
-        work = Path(tmp)
-        config = work / "puppeteer.json"
-        config.write_text(json.dumps({"args": ["--no-sandbox"]}))  # CI runners forbid Chromium's user-ns sandbox
-        combined = work / "all.md"
-        combined.write_text("".join(f"```mermaid\n{block.source}```\n\n" for block in blocks))
-        batch_error = _render(npx, config, combined, work / "all-out.md")  # one Chromium start in the common case
-        if batch_error is None:
-            return []
-        problems = []
-        for number, block in enumerate(blocks):
-            source = work / f"block-{number}.mmd"
-            source.write_text(block.source)
-            if (error := _render(npx, config, source, work / f"block-{number}.svg")) is not None:
-                problems.append(Problem(block.file, block.line, f"Mermaid block does not render: {error}"))
-        if not problems:  # the batch failed but every block renders alone: report the batch failure itself
-            problems.append(Problem(blocks[0].file, blocks[0].line, f"Mermaid rendering failed: {batch_error}"))
-        return problems
+        return [], [
+            Problem(blocks[0].file, blocks[0].line, "npx not found: cannot render Mermaid (check: --no-mermaid)")
+        ]
+    config = work / "puppeteer.json"
+    config.write_text(json.dumps({"args": PUPPETEER_ARGS}))
+    combined = work / "all.md"
+    combined.write_text("".join(f"```mermaid\n{block.source}```\n\n" for block in blocks))
+    batch_error = _render(npx, config, combined, work / "all-out.md")  # one Chromium start in the common case
+    if batch_error is None:  # mermaid-cli numbers the diagrams of `all-out.md` as all-out-1.svg, all-out-2.svg, ...
+        return [(work / f"all-out-{number}.svg").read_text() for number in range(1, len(blocks) + 1)], []
+    problems = []
+    for number, block in enumerate(blocks):
+        source = work / f"block-{number}.mmd"
+        source.write_text(block.source)
+        if (error := _render(npx, config, source, work / f"block-{number}.svg")) is not None:
+            problems.append(Problem(block.file, block.line, f"Mermaid block does not render: {error}"))
+    if not problems:  # the batch failed but every block renders alone: report the batch failure itself
+        problems.append(Problem(blocks[0].file, blocks[0].line, f"Mermaid rendering failed: {batch_error}"))
+    return [], problems
 
 
 def _render(npx: str, config: Path, source: Path, output: Path) -> str | None:
@@ -447,6 +473,310 @@ def _render(npx: str, config: Path, source: Path, output: Path) -> str | None:
     error = lines[first].replace(" on line ", " on diagram line ")
     context = lines[first + 1] if first + 1 < len(lines) else ""
     return f"{error} {context}" if context.startswith("...") else error  # mermaid quotes the offending source
+
+
+# ---- build: the frozen, stamped PDF ----
+#
+# Mermaid is pre-rendered to SVG with mermaid-cli, the sections are assembled into one HTML file in reading order with
+# an embedded stylesheet behind a stamped cover, and the HTML is printed to PDF by the headless Chromium that
+# mermaid-cli's Puppeteer already downloads (`architecture_doc_print.mjs`). No pandoc, no WeasyPrint.
+
+PRINT_TIMEOUT_SECONDS = 300
+
+
+class BuildError(Exception):
+    """The build cannot produce a truthful PDF. The message says why; `problems` lists the document problems found."""
+
+    def __init__(self, message: str, problems: list[Problem] | None = None) -> None:
+        super().__init__(message)
+        self.problems = problems or []
+
+
+@dataclass(frozen=True)
+class Stamp:
+    """What the cover certifies: which version of the document, at which commit, in which status."""
+
+    title: str
+    version: str
+    status: str
+    owner: str
+    sha: str
+    date: str  # the commit date, so rebuilding the same commit stamps the same date
+
+
+def _git(repo: Path, *args: str) -> str:
+    try:
+        result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=True)
+    except FileNotFoundError:
+        raise BuildError("git not found: build stamps the commit SHA and needs git") from None
+    except subprocess.CalledProcessError as e:
+        raise BuildError(f"git {args[0]} failed: {e.stderr.strip()}") from None
+    return result.stdout.rstrip()  # keep leading spaces: `status --porcelain` starts lines with them
+
+
+def _clean_repository(doc_dir: Path) -> Path:
+    """The top level of the repository holding `doc_dir`, whose working tree has no change against HEAD."""
+    top = Path(_git(doc_dir, "rev-parse", "--show-toplevel")).resolve()
+    changes = _git(top, "status", "--porcelain", "--untracked-files=all").splitlines()
+    if changes:
+        listed = "\n".join(f"  {change}" for change in changes[:20])
+        more = f"\n  ... and {len(changes) - 20} more" if len(changes) > 20 else ""
+        raise BuildError(
+            f"working tree is dirty ({len(changes)} change(s)): commit or stash them first, so the commit SHA stamped "
+            f"on the cover is the content of the PDF\n{listed}{more}"
+        )
+    return top
+
+
+def _table_under(text: str, heading: str) -> list[list[str]]:
+    """The body rows of the first table after heading `heading`, each a list of stripped cells."""
+    lines = text.splitlines()
+    start = next((n for n, line in enumerate(lines) if (m := HEADING.match(line)) and m.group(2) == heading), None)
+    if start is None:
+        return []
+    rows: list[list[str]] = []
+    for line in lines[start + 1 :]:
+        if HEADING.match(line) or (rows and not line.startswith("|")):
+            break
+        if line.startswith("|"):
+            rows.append([cell.strip() for cell in line.strip().strip("|").split("|")])
+    return [row for row in rows[1:] if not all(re.fullmatch(r":?-+:?", cell) for cell in row)]
+
+
+def _stamp(doc_dir: Path, top: Path) -> Stamp:
+    """The stamp for HEAD: version from the last Version history row, status and owner from Document control."""
+    index = doc_dir / SECTIONS[0].file
+    text = index.read_text()
+    control = {row[0]: row[1] for row in _table_under(text, "Document control") if len(row) >= 2}
+    history = _table_under(text, "Version history")
+    missing = [field for field in ("Status", "Owner") if not control.get(field)]
+    if missing or not history or not history[-1][0]:
+        what = [f"no '{field}' row in the Document control table" for field in missing]
+        what += [] if history and history[-1][0] else ["no version in the last row of the Version history table"]
+        raise BuildError(f"{_relative_to_cwd(index)}: cannot stamp the cover: {'; '.join(what)}")
+    exported = history[-1][3] if len(history[-1]) > 3 else ""
+    if exported != control["Status"]:
+        raise BuildError(
+            f"{_relative_to_cwd(index)}: cannot stamp the cover: Document control says Status '{control['Status']}' "
+            f"but the Version history row for {history[-1][0]} says '{exported}'"
+        )
+    return Stamp(
+        title=SECTIONS[0].title,
+        version=history[-1][0],
+        status=control["Status"],
+        owner=control["Owner"],
+        sha=_git(top, "rev-parse", "HEAD"),
+        date=_git(top, "show", "--no-patch", "--format=%cs", "HEAD"),
+    )
+
+
+def _github_url(top: Path) -> str | None:
+    """`https://github.com/<owner>/<repo>` when `origin` is on GitHub, so links out of the document can be pinned."""
+    try:
+        origin = _git(top, "remote", "get-url", "origin")
+    except BuildError:
+        return None
+    match = re.match(
+        r"^(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/]+/[^/]+?)(?:\.git)?/?$", origin
+    )
+    return f"https://github.com/{match.group(1)}" if match else None
+
+
+@dataclass
+class _Assembly:
+    """Where every link of the assembled document points: in-document anchors, or GitHub at the stamped commit."""
+
+    top: Path
+    sha: str
+    github: str | None
+    anchors: dict[Path, str]  # section file -> its anchor prefix in the assembled HTML
+
+    def href(self, target: str, source: Path) -> str | None:
+        """The href `target` (written in `source`) gets in the PDF; None when it can point nowhere outside the repo."""
+        if _external(target):
+            return target
+        file_part, _, anchor = urllib.parse.unquote(target).partition("#")
+        resolved = (source.parent / file_part).resolve() if file_part else source
+        if resolved in self.anchors:
+            return f"#{self.anchors[resolved]}--{anchor}" if anchor else f"#{self.anchors[resolved]}"
+        if self.github is None or not resolved.is_relative_to(self.top):
+            return None
+        kind = "tree" if resolved.is_dir() else "blob"
+        path = urllib.parse.quote(resolved.relative_to(self.top).as_posix())
+        return f"{self.github}/{kind}/{self.sha}/{path}" + (f"#{anchor}" if anchor else "")
+
+
+def _markdown() -> MarkdownIt:
+    return MarkdownIt("commonmark", {"html": True}).enable(["table", "strikethrough"])
+
+
+def _diagram(svg: str, number: int) -> str:
+    """An inline SVG figure. mermaid-cli names every SVG `my-svg` and scopes its styles to that id, so each is renamed."""
+    svg = re.sub(r"^\s*<\?xml[^>]*\?>\s*", "", svg).replace("my-svg", f"mermaid-{number}")
+    return f'<figure class="diagram">{svg}</figure>\n'
+
+
+IMAGE_TYPES = {".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+
+
+def _is_mermaid(token: Token) -> bool:
+    return token.type == "fence" and token.info.strip().split(" ")[0].lower() == "mermaid"
+
+
+def _rewrite(tokens: list[Token], source: Path, prefix: str, assembly: _Assembly) -> None:
+    """Headings and HTML anchors get ids prefixed with the section's, so they are unique in the assembled document;
+    links point inside the PDF or at GitHub; local images are embedded. Raises BuildError for an image the PDF
+    cannot embed."""
+    seen: dict[str, int] = {}
+    prefixed = lambda m: f'{m.group(1)}="{prefix}--{m.group(2)}"'  # noqa: E731  (one-line substitution)
+    for position, token in enumerate(tokens):
+        if token.type == "heading_open":
+            token.attrSet("id", f"{prefix}--{heading_anchor(tokens[position + 1].content, seen)}")
+        elif token.type == "html_block":
+            token.content = HTML_ANCHOR.sub(prefixed, token.content)
+        for child in token.children or []:
+            if child.type == "html_inline":
+                child.content = HTML_ANCHOR.sub(prefixed, child.content)
+            elif child.type == "link_open":
+                href = assembly.href(str(child.attrGet("href") or ""), source)
+                if href is None:
+                    child.attrs.pop("href", None)
+                else:
+                    child.attrSet("href", href)
+            elif child.type == "image" and not _external(src := str(child.attrGet("src") or "")):
+                image = (source.parent / urllib.parse.unquote(src)).resolve()
+                mime = IMAGE_TYPES.get(image.suffix.lower())
+                if mime is None or not image.is_file():
+                    raise BuildError(
+                        f"{_relative_to_cwd(source)}: image '{src}' is missing or not one of {', '.join(IMAGE_TYPES)}"
+                    )
+                child.attrSet("src", f"data:{mime};base64,{base64.b64encode(image.read_bytes()).decode()}")
+
+
+def _assemble(doc_dir: Path, stamp: Stamp, assembly: _Assembly, work: Path) -> str:
+    """The whole document as one self-contained HTML page: the cover, then every section in reading order."""
+    md = _markdown()
+    parsed: list[tuple[Path, list[Token]]] = []
+    blocks: list[Mermaid] = []
+    for section in SECTIONS:
+        path = (doc_dir / section.file).resolve()
+        tokens = md.parse(path.read_text())
+        _rewrite(tokens, path, assembly.anchors[path], assembly)
+        for token in tokens:
+            if _is_mermaid(token):
+                blocks.append(Mermaid(path, (token.map or [0])[0] + 1, token.content))
+        parsed.append((path, tokens))
+
+    svgs, problems = render_mermaid(blocks, work)
+    if problems:
+        raise BuildError("a Mermaid block does not render", problems)
+    diagrams = iter(enumerate(svgs, start=1))
+    body = [_cover(stamp)]
+    for number, (path, tokens) in enumerate(parsed):
+        for token in tokens:
+            if _is_mermaid(token):
+                diagram_number, svg = next(diagrams)
+                token.type, token.content = "html_block", _diagram(svg, diagram_number)
+        css_class = "index" if number == 0 else "section"
+        rendered = md.renderer.render(tokens, md.options, {})
+        body.append(f'<section id="{assembly.anchors[path]}" class="{css_class}">\n{rendered}</section>')
+    return (
+        f'<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+        f"<title>{html.escape(stamp.title)} v{html.escape(stamp.version)}</title>\n<style>\n{STYLESHEET}</style>\n"
+        f"</head>\n<body>\n" + "\n".join(body) + "\n</body>\n</html>\n"
+    )
+
+
+def _cover(stamp: Stamp) -> str:
+    rows = [
+        ("Version", html.escape(stamp.version)),
+        ("Status", html.escape(stamp.status)),
+        ("Commit", f"<code>{html.escape(stamp.sha)}</code>"),
+        ("Date", html.escape(stamp.date)),
+        ("Owner", html.escape(stamp.owner)),
+    ]
+    cells = "\n".join(f"<tr><th>{label}</th><td>{value}</td></tr>" for label, value in rows)
+    return (
+        f'<section class="cover">\n<h1>{html.escape(stamp.title)}</h1>\n'
+        f'<p class="subtitle">arc42 + C4 architecture baseline</p>\n'
+        f'<table class="stamp">\n{cells}\n</table>\n'
+        f'<p class="frozen">A frozen export of commit <code>{html.escape(stamp.sha[:12])}</code>. Its source is '
+        f"<code>docs/architecture/</code> at that commit; the PDF is never edited by hand.</p>\n</section>"
+    )
+
+
+STYLESHEET = """\
+@page { size: A4; margin: 18mm 18mm 20mm; }
+html { font: 9.5pt/1.45 -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; }
+body { margin: 0; }
+section.section, section.index { break-before: page; }
+section.index > h1:first-child { display: none; }  /* the cover carries the title */
+h1 { font-size: 20pt; margin: 0 0 6mm; padding-bottom: 2mm; border-bottom: 1.5pt solid #1f3a5f; color: #1f3a5f; }
+h2 { font-size: 13.5pt; margin: 7mm 0 2mm; color: #1f3a5f; }
+h3 { font-size: 11pt; margin: 5mm 0 1.5mm; }
+h1, h2, h3, h4 { break-after: avoid; }
+p, li { orphans: 3; widows: 3; }
+a { color: #1f5fa8; text-decoration: none; }
+code { font: 8.5pt "SF Mono", Menlo, Consolas, monospace; background: #f2f4f7; padding: 0 1.5pt; border-radius: 2pt; }
+pre { background: #f2f4f7; padding: 3mm; border-radius: 2pt; white-space: pre-wrap; break-inside: avoid; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; margin: 3mm 0; font-size: 8.5pt; }
+th, td { border: 0.5pt solid #c5ccd6; padding: 1.2mm 2mm; text-align: left; vertical-align: top; }
+thead th { background: #e8edf3; }
+tr { break-inside: avoid; }
+blockquote { margin: 3mm 0; padding: 1mm 4mm; border-left: 2pt solid #c5ccd6; color: #444; }
+figure.diagram { margin: 4mm 0; text-align: center; break-inside: avoid; }
+figure.diagram svg { max-width: 100%; height: auto; max-height: 230mm; }
+img { max-width: 100%; }
+section.cover { height: 245mm; display: flex; flex-direction: column; justify-content: center; }
+section.cover h1 { font-size: 28pt; border: none; line-height: 1.2; }
+section.cover .subtitle { font-size: 13pt; color: #555; margin: 0 0 12mm; }
+table.stamp { width: auto; font-size: 11pt; }
+table.stamp th { background: #e8edf3; width: 30mm; }
+table.stamp td { min-width: 90mm; }
+table.stamp code { font-size: 10pt; }
+section.cover .frozen { margin-top: 12mm; color: #555; font-size: 9pt; }
+"""
+
+
+def build(doc_dir: Path, out_dir: Path | None = None) -> Path:
+    """The PDF of the document at HEAD, with a cover stamped with its version, commit SHA, date and status, exists
+    in `out_dir` (default `build/architecture/` at the repository top, which git ignores). The date is the commit's,
+    so rebuilding a commit stamps the same cover. Raises BuildError when the working tree is dirty, the document fails
+    `check`, the stamp is missing or inconsistent, or `out_dir` lies in the repository but is not git-ignored."""
+    doc_dir = doc_dir.resolve()
+    top = _clean_repository(doc_dir)
+    problems = check(doc_dir, mermaid=False)  # Mermaid is rendered below, once, for the PDF itself
+    if problems:
+        raise BuildError("the document fails check", problems)
+    stamp = _stamp(doc_dir, top)
+    anchors = {(doc_dir / section.file).resolve(): Path(section.file).stem for section in SECTIONS}
+    assembly = _Assembly(top=top, sha=stamp.sha, github=_github_url(top), anchors=anchors)
+    out = (out_dir or top / "build" / "architecture").resolve()
+    name = "architecture-document-v" + re.sub(r"[^\w.-]+", "-", stamp.version) + f"-{stamp.sha[:7]}"
+    pdf = out / f"{name}.pdf"
+    if pdf.is_relative_to(top) and subprocess.run(["git", "-C", str(top), "check-ignore", "-q", str(pdf)]).returncode:
+        raise BuildError(f"{_relative_to_cwd(pdf)} would not be git-ignored: the PDF is never committed")
+    npx = shutil.which("npx")
+    if npx is None:
+        raise BuildError("npx not found: build renders Mermaid and prints the PDF with mermaid-cli's Chromium")
+    with tempfile.TemporaryDirectory(prefix="architecture-doc-") as tmp:
+        work = Path(tmp)
+        html_file = work / f"{name}.html"
+        html_file.write_text(_assemble(doc_dir, stamp, assembly, work))
+        out.mkdir(parents=True, exist_ok=True)
+        job = work / "print.json"
+        footer = f"{stamp.title} · v{stamp.version} · {stamp.status} · {stamp.sha[:12]}"
+        job.write_text(json.dumps({"html": str(html_file), "pdf": str(pdf), "footer": footer, "args": PUPPETEER_ARGS}))
+        command = [npx, "--yes", "-p", MERMAID_CLI, "node", str(PRINT_SCRIPT), str(job)]
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=PRINT_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            raise BuildError(f"printing the PDF timed out after {PRINT_TIMEOUT_SECONDS}s") from None
+        if result.returncode != 0 or not pdf.is_file():
+            detail = (result.stderr or result.stdout).strip().splitlines()
+            raise BuildError(f"printing the PDF failed: {detail[-1] if detail else f'exit {result.returncode}'}")
+    return pdf
 
 
 # ---- modes ----
@@ -485,9 +815,12 @@ def regenerate(doc_dir: Path) -> tuple[list[Path], list[Problem]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="architecture_doc", description=__doc__.split("\n\n")[0])
-    parser.add_argument("mode", choices=["check", "regenerate"])
+    parser.add_argument("mode", choices=["check", "regenerate", "build"])
     parser.add_argument("--doc-dir", type=Path, default=DOC_DIR, help="the architecture folder (default: %(default)s)")
     parser.add_argument("--no-mermaid", action="store_true", help="check: skip rendering Mermaid blocks")
+    parser.add_argument(
+        "--out", type=Path, help="build: output folder (default: build/architecture/ in the repository)"
+    )
     args = parser.parse_args(argv)
     if not args.doc_dir.is_dir():
         print(f"{args.doc_dir}: not a directory")
@@ -498,6 +831,16 @@ def main(argv: list[str] | None = None) -> int:
             print(problem)
         print(f"architecture document: {len(problems)} problem(s)" if problems else "architecture document: OK")
         return 1 if problems else 0
+    if args.mode == "build":
+        try:
+            pdf = build(args.doc_dir, args.out)
+        except BuildError as error:
+            for problem in error.problems:
+                print(problem)
+            print(f"build refused: {error}")
+            return 1
+        print(f"built {_relative_to_cwd(pdf)}")
+        return 0
     changed, problems = regenerate(args.doc_dir)
     for problem in problems:
         print(problem)
