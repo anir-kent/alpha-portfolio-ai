@@ -1,0 +1,88 @@
+{
+  "content": {
+    "answer_markdown": "This Recommendation proposes these Trade Lines to rebalance the Portfolio back to its Target Allocation by Asset Class. Currently, the Portfolio has a significant drift: bonds are underweight at 40.01% actual versus 65.0% target (a negative drift of 24.99 percentage points), and cash is overweight at 40.01% actual versus 15.0% target (a positive drift of 25.01 percentage points). Equity is close to target at 19.99% actual versus 20.0% target.\n\nTo correct this, the Recommendation includes:\n- Selling SGOV (iShares 0-3 Month Treasury Bond ETF), which is 25.01% of the Portfolio, to reduce the overweight cash exposure.\n- Buying AGG (iShares Core US Aggregate Bond ETF), 15.62% of the Portfolio, to increase bond exposure towards the target.\n- Buying SHY (iShares 1-3 Year Treasury Bond ETF), 9.37% of the Portfolio, also to increase bond exposure.\n\nThis results in a turnover of 25.0% of the Portfolio, which is above the 15% threshold, indicating a significant rebalance. After these trades, the post-trade drift for bonds, cash, and equity is within tolerance, effectively bringing the Portfolio back to its target allocation. The Recommendation is rule-based and band-based, with no research tilt applied.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.bond.drift_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.drift_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.target_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "The Portfolio has a bond allocation drift of -24.99 percentage points from its 65.0% target, and a cash allocation drift of +25.01 percentage points from its 15.0% target, necessitating rebalancing trades."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "trade_line.SGOV.pct_of_portfolio",
+            "kind": "engine"
+          },
+          {
+            "figure": "trade_line.AGG.pct_of_portfolio",
+            "kind": "engine"
+          },
+          {
+            "figure": "trade_line.SHY.pct_of_portfolio",
+            "kind": "engine"
+          }
+        ],
+        "text": "The Recommendation includes selling SGOV at 25.01% of the Portfolio and buying AGG and SHY at 15.62% and 9.37% respectively, to realign the Portfolio with its target allocation."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "turnover_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "approval.thresholds.turnover_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "The total turnover of 25.0% exceeds the 15% threshold, indicating a significant rebalance to correct the drift."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "post_trade_drift.bond.drift_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.cash.drift_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.equity.drift_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Post-trade drift figures show the Portfolio will be realigned within tolerance for bonds, cash, and equity after executing these Trade Lines."
+      }
+    ],
+    "follow_up_questions": [
+      "What is the priority score of this Recommendation and what does it indicate?",
+      "Are there any Suitability Rule breaches or warnings after the proposed trades?",
+      "Why is no research tilt applied to this Recommendation?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

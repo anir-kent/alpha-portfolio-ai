@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine, inspect, text
+from sqlalchemy import DateTime, Engine, ForeignKey, String, Text, UniqueConstraint, create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -262,7 +262,11 @@ class GroundingResultRow(Base):
     run_id: Mapped[int | None] = mapped_column(
         ForeignKey("analysis_runs.id"), index=True, nullable=True
     )  # a priority narrative's claims
-    client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), index=True)
+    client_id: Mapped[str | None] = mapped_column(
+        ForeignKey("clients.id"), index=True, nullable=True
+    )  # None when the figure set spans Clients (the Queue)
+    subject_kind: Mapped[str | None] = mapped_column(String, nullable=True)  # any other subject, e.g. assistant_turn
+    subject_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     claim_index: Mapped[int] = mapped_column()
     text: Mapped[str] = mapped_column(Text)
     asset: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -328,6 +332,38 @@ class PriorityNarrativeRow(Base):
     created_at: Mapped[str] = mapped_column(String)
 
 
+class ConversationRow(Base):
+    """One user's Assistant Conversation within one login session (ADR-0006). It ends at logout or session expiry and
+    is never resumed; `session_token_hash` names the server-side session row it belongs to."""
+
+    __tablename__ = "conversations"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    session_token_hash: Mapped[str] = mapped_column(String, index=True)
+    started_at: Mapped[str] = mapped_column(String)
+    ended_at: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class AssistantTurnRow(Base):
+    """One Question and its outcome (ADR-0006). Append-only: written once, never updated or deleted."""
+
+    __tablename__ = "assistant_turns"
+    __table_args__ = (UniqueConstraint("conversation_id", "seq"),)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    seq: Mapped[int] = mapped_column()  # 1-based within the Conversation
+    created_at: Mapped[str] = mapped_column(String)
+    question: Mapped[str] = mapped_column(Text)
+    screen_json: Mapped[str] = mapped_column(Text)  # the screen identity the browser sent
+    screen_context_hash: Mapped[str | None] = mapped_column(String, nullable=True)  # None when nothing was readable
+    outcome: Mapped[str] = mapped_column(String, index=True)  # answered | refused | failed
+    answer_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    grounding_check_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    exchange_id: Mapped[int | None] = mapped_column(nullable=True)
+    exchange_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(String, nullable=True)  # a failed turn's reason, else None
+
+
 def make_session_factory(url: str) -> sessionmaker:
     kwargs: dict[str, Any] = {}
     if url.startswith("sqlite"):
@@ -342,6 +378,8 @@ def make_session_factory(url: str) -> sessionmaker:
     engine = create_engine(url, **kwargs)
     Base.metadata.create_all(engine)
     _add_run_outcome_columns(engine)
+    _generalise_grounding_results(engine)
+    _add_turn_failure_reason(engine)
     return sessionmaker(engine, expire_on_commit=False)
 
 
@@ -355,3 +393,28 @@ def _add_run_outcome_columns(engine) -> None:
             if name not in existing:
                 conn.execute(text(f"ALTER TABLE analysis_runs ADD COLUMN {name} {kind}"))
         conn.execute(text("UPDATE analysis_runs SET outcome = 'completed' WHERE completed"))
+
+
+def _add_turn_failure_reason(engine: Engine) -> None:
+    """An existing database predates stored failure reasons: afterwards the column exists, empty for older turns (which
+    then show the ordinary failure message)."""
+    with engine.begin() as conn:
+        if "failure_reason" not in {c["name"] for c in inspect(conn).get_columns("assistant_turns")}:
+            conn.execute(text("ALTER TABLE assistant_turns ADD COLUMN failure_reason VARCHAR"))
+
+
+def _generalise_grounding_results(engine: Engine) -> None:
+    """An existing database predates checks tied to no Client: afterwards `client_id` is optional and the subject
+    columns exist, with every stored grounding result kept."""
+    existing = [c["name"] for c in inspect(engine).get_columns("grounding_results")]
+    if "subject_kind" in existing:
+        return
+    table = Base.metadata.tables["grounding_results"]
+    with engine.begin() as conn:  # SQLite cannot drop NOT NULL in place: rebuild the table and copy the rows across
+        conn.execute(text("ALTER TABLE grounding_results RENAME TO grounding_results_old"))
+        for index in inspect(conn).get_indexes("grounding_results_old"):  # names would clash with the new table's
+            conn.execute(text(f'DROP INDEX "{index["name"]}"'))
+        table.create(conn)
+        columns = ", ".join(existing)
+        conn.execute(text(f"INSERT INTO grounding_results ({columns}) SELECT {columns} FROM grounding_results_old"))
+        conn.execute(text("DROP TABLE grounding_results_old"))

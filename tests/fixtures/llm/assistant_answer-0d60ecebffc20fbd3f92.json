@@ -1,0 +1,92 @@
+{
+  "content": {
+    "answer_markdown": "This Recommendation proposes these Trade Lines to rebalance the Portfolio back to its Target Allocation by Asset Class. Currently, the Portfolio has a significant drift from target: equity is overweight at 60.0% versus a 45.0% target (+15.0 percentage points, breach), bonds are underweight at 35.0% versus a 45.0% target (-10.0 percentage points, breach), and cash is underweight at 5.0% versus a 10.0% target (-5.0 percentage points, warning). The Trade Lines include selling equity-related holdings (e.g., JNJ, PG, SPY, XLE, XOM) and buying bond-related holdings (e.g., AGG, LQD, SGOV, SHY) to bring the Portfolio's asset class weights closer to the targets. The post-trade drift figures show that after these trades, the Portfolio's asset class allocations will be very close to target with minimal drift (around 0.01 percentage points). The turnover of these trades is 14.99% of the Portfolio, which is just below the 15.0% threshold requiring compliance approval. The Recommendation is rule-based and band-based, aiming to correct the breaches and warnings in asset class drift while respecting suitability rules and restrictions.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.equity.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.equity.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.equity.drift_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.drift_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.drift_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "The Portfolio has equity at 60.0% versus a 45.0% target (+15.0 pp, breach), bonds at 35.0% versus 45.0% target (-10.0 pp, breach), and cash at 5.0% versus 10.0% target (-5.0 pp, warning)."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "trade_lines",
+            "kind": "engine"
+          }
+        ],
+        "text": "Trade Lines include selling equity holdings (JNJ, PG, SPY, XLE, XOM) and buying bond holdings (AGG, LQD, SGOV, SHY) to rebalance the Portfolio."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "post_trade_drift",
+            "kind": "engine"
+          }
+        ],
+        "text": "Post-trade drift shows allocations close to target with minimal drift (around 0.01 pp), indicating the trades will rebalance the Portfolio effectively."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "turnover_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "approval.thresholds.turnover_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "The turnover of these trades is 14.99% of the Portfolio, just below the 15.0% threshold requiring compliance approval."
+      }
+    ],
+    "follow_up_questions": [
+      "What are the suitability rule results after the proposed trades?",
+      "Are there any client restrictions affecting these Trade Lines?",
+      "What is the priority score of this Recommendation and what does it indicate?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

@@ -262,9 +262,18 @@ def stream_exchanges(request: Request, last_event_id: str | None = Header(None),
     dependencies=[Depends(require("llm:read"))],
 )
 def get_exchange(exchange_id: int, db: Session = Depends(get_db)):
+    detail = exchange_detail(db, exchange_id)
+    if detail is None:
+        raise HTTPException(404, "LLM exchange not found")
+    return detail
+
+
+def exchange_detail(db: Session, exchange_id: int) -> ExchangeDetail | None:
+    """One Exchange with the Audit Events that used it and their grounding verdicts. Shared with the Assistant's
+    Exchanges Screen Context."""
     row = db.get(LlmExchangeRow, exchange_id)
     if row is None:
-        raise HTTPException(404, "LLM exchange not found")
+        return None
     events = referencing_events(db, [row.id]).get(row.id, [])
     verdicts = []
     for check_id in dict.fromkeys(c for e in events if (c := json.loads(e.payload_json).get("check_id"))):

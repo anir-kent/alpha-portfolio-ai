@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "An Analysis Run computes the following for each Portfolio:\n- The valuation of every Portfolio at a fixed market-data snapshot.\n- The drift of each Asset Class from its Target Allocation, measured in percentage points.\n- The overall Portfolio Drift.\n- The Suitability Rule results, which can be pass, warning, or breach.\n- A priority score that orders the Queue based on the above computations.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "PLATFORM BRIEF",
+            "kind": "engine"
+          }
+        ],
+        "text": "An Analysis Run values every Portfolio at a fixed market-data snapshot and computes each Asset Class's drift from its Target Allocation, the Portfolio Drift, the Suitability Rule results, and a priority score that orders the Queue."
+      }
+    ],
+    "follow_up_questions": [
+      "How is the priority score used in managing the Queue?",
+      "What happens if a Portfolio is outside the tolerance band after an Analysis Run?",
+      "Can the Analysis Run incorporate approved research Insights in its computations?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

@@ -417,6 +417,146 @@
         }
       }
     },
+    "/api/assistant/questions": {
+      "post": {
+        "tags": [
+          "assistant"
+        ],
+        "summary": "Ask",
+        "operationId": "askAssistant",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Turn"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The Question is longer than the configured limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LimitDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "A per-Conversation or per-user-per-hour limit is hit. Retry-After is set for the hourly one",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LimitDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/assistant/conversation": {
+      "get": {
+        "tags": [
+          "assistant"
+        ],
+        "summary": "Conversation",
+        "description": "The current login session's Conversation, turns in order, for rendering after a reload.",
+        "operationId": "getAssistantConversation",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Question asked yet in this login session"
+          }
+        }
+      }
+    },
+    "/api/assistant/suggested-questions": {
+      "get": {
+        "tags": [
+          "assistant"
+        ],
+        "summary": "Suggested Questions",
+        "description": "The screen kind's three Suggested Questions. In recorded mode only these replay (from committed recordings).",
+        "operationId": "getSuggestedQuestions",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "queue",
+                "portfolio",
+                "recommendation",
+                "approvals",
+                "audit",
+                "exchanges",
+                "governance",
+                "config",
+                "health"
+              ],
+              "type": "string",
+              "title": "Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestedQuestions"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/audit/events": {
       "get": {
         "tags": [
@@ -453,7 +593,10 @@
                     "decision_recorded",
                     "exception_approved",
                     "exception_blocked",
-                    "access_denied"
+                    "access_denied",
+                    "assistant.answered",
+                    "assistant.refused",
+                    "assistant.failed"
                   ],
                   "type": "string"
                 },
@@ -1858,6 +2001,35 @@
         "title": "AiStepOut",
         "description": "How far to rely on one AI step. No prompt or reply text; the Exchange id only for roles holding `llm:read`."
       },
+      "Answer": {
+        "properties": {
+          "markdown": {
+            "type": "string",
+            "title": "Markdown"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimResult"
+            },
+            "type": "array",
+            "title": "Claims"
+          },
+          "follow_up_questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Follow Up Questions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "markdown",
+          "claims",
+          "follow_up_questions"
+        ],
+        "title": "Answer"
+      },
       "ApprovalItem": {
         "properties": {
           "step": {
@@ -2012,6 +2184,160 @@
           "items"
         ],
         "title": "ApprovalsOut"
+      },
+      "AssistantCard": {
+        "properties": {
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "scope_policy": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scope Policy"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/AssistantLimits"
+          },
+          "latest_eval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssistantEvalSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt_version",
+          "scope_policy",
+          "limits",
+          "latest_eval"
+        ],
+        "title": "AssistantCard"
+      },
+      "AssistantEvalSummary": {
+        "properties": {
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "ran_at": {
+            "type": "string",
+            "title": "Ran At"
+          },
+          "cases": {
+            "type": "integer",
+            "title": "Cases"
+          },
+          "passed": {
+            "type": "integer",
+            "title": "Passed"
+          },
+          "refusal_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal Rate"
+          },
+          "false_refusal_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "False Refusal Rate"
+          },
+          "claims_total": {
+            "type": "integer",
+            "title": "Claims Total"
+          },
+          "ungrounded_claim_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ungrounded Claim Rate"
+          },
+          "failed_turns": {
+            "type": "integer",
+            "title": "Failed Turns"
+          },
+          "injection_leaks": {
+            "type": "integer",
+            "title": "Injection Leaks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt_version",
+          "model",
+          "ran_at",
+          "cases",
+          "passed",
+          "refusal_rate",
+          "false_refusal_rate",
+          "claims_total",
+          "ungrounded_claim_rate",
+          "failed_turns",
+          "injection_leaks"
+        ],
+        "title": "AssistantEvalSummary",
+        "description": "The headline figures of one run of the guardrail eval set; the model card shows these."
+      },
+      "AssistantLimits": {
+        "properties": {
+          "question_max_chars": {
+            "type": "integer",
+            "title": "Question Max Chars"
+          },
+          "questions_per_conversation": {
+            "type": "integer",
+            "title": "Questions Per Conversation"
+          },
+          "questions_per_hour": {
+            "type": "integer",
+            "title": "Questions Per Hour"
+          },
+          "history_pairs": {
+            "type": "integer",
+            "title": "History Pairs"
+          },
+          "context_rows": {
+            "type": "integer",
+            "title": "Context Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_max_chars",
+          "questions_per_conversation",
+          "questions_per_hour",
+          "history_pairs",
+          "context_rows"
+        ],
+        "title": "AssistantLimits"
       },
       "AuditEvent": {
         "properties": {
@@ -2733,6 +3059,32 @@
         "type": "object",
         "title": "ConfigUpdate",
         "description": "Partial update: only supplied top-level keys change."
+      },
+      "Conversation": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/Turn"
+            },
+            "type": "array",
+            "title": "Turns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "started_at",
+          "turns"
+        ],
+        "title": "Conversation"
       },
       "DatabaseHealth": {
         "properties": {
@@ -3962,6 +4314,19 @@
         ],
         "title": "IssueCount"
       },
+      "LimitDetail": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "LimitDetail"
+      },
       "Lineage": {
         "properties": {
           "recommendation_id": {
@@ -4189,6 +4554,9 @@
             },
             "type": "array",
             "title": "Controls"
+          },
+          "assistant": {
+            "$ref": "#/components/schemas/AssistantCard"
           }
         },
         "type": "object",
@@ -4199,7 +4567,8 @@
           "temperature",
           "tilt_bound_pp",
           "current_prompt_versions",
-          "controls"
+          "controls",
+          "assistant"
         ],
         "title": "ModelCard"
       },
@@ -4528,6 +4897,24 @@
           "ungrounded_by_issue"
         ],
         "title": "Quality"
+      },
+      "QuestionIn": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Question"
+          },
+          "screen": {
+            "$ref": "#/components/schemas/ScreenIdentity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question",
+          "screen"
+        ],
+        "title": "QuestionIn"
       },
       "Queue": {
         "properties": {
@@ -5242,6 +5629,50 @@
         ],
         "title": "RunStepOut"
       },
+      "ScreenIdentity": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "queue",
+              "portfolio",
+              "recommendation",
+              "approvals",
+              "audit",
+              "exchanges",
+              "governance",
+              "config",
+              "health"
+            ],
+            "title": "Kind"
+          },
+          "entity_ids": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Entity Ids"
+          },
+          "selected_item": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Item"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "entity_ids"
+        ],
+        "title": "ScreenIdentity",
+        "description": "Which screen the Question was asked on: its kind, the entity ids it shows and an optional selected item."
+      },
       "SectorExposureOut": {
         "properties": {
           "sector": {
@@ -5320,6 +5751,38 @@
           "recommendation"
         ],
         "title": "StepResult"
+      },
+      "SuggestedQuestions": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "queue",
+              "portfolio",
+              "recommendation",
+              "approvals",
+              "audit",
+              "exchanges",
+              "governance",
+              "config",
+              "health"
+            ],
+            "title": "Kind"
+          },
+          "questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Questions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "questions"
+        ],
+        "title": "SuggestedQuestions"
       },
       "SuitabilityLimits": {
         "properties": {
@@ -5779,6 +6242,109 @@
           "pct_of_portfolio"
         ],
         "title": "TradeLineOut"
+      },
+      "Turn": {
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "answered",
+              "refused",
+              "failed"
+            ],
+            "title": "Outcome"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Answer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "screen": {
+            "$ref": "#/components/schemas/ScreenIdentity"
+          },
+          "context_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Label"
+          },
+          "exchange_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exchange Id"
+          },
+          "exchange_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exchange Hash"
+          },
+          "grounding_check_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grounding Check Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "seq",
+          "question",
+          "outcome",
+          "answer",
+          "message",
+          "screen",
+          "context_label",
+          "exchange_id",
+          "exchange_hash",
+          "grounding_check_id"
+        ],
+        "title": "Turn"
       },
       "ValidationError": {
         "properties": {

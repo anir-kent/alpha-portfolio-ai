@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "The LLM Exchanges screen shows the records of interactions with language models related to the platform's analysis and recommendations. Each selected Exchange includes the system text, prompt, and reply, which together form a complete record of a model call. These exchanges document how language models explain engine figures and cite report passages, providing transparency and traceability for the advisory process.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "No LLM Exchange is selected, so none is included. Open one to ask about it.",
+            "kind": "engine"
+          }
+        ],
+        "text": "The LLM Exchanges screen displays the system text, prompt, and reply of each model call as a record of the interaction."
+      }
+    ],
+    "follow_up_questions": [
+      "How can I select and view a specific LLM Exchange?",
+      "Can I export or share the LLM Exchange records?",
+      "What types of questions can I ask within an LLM Exchange?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

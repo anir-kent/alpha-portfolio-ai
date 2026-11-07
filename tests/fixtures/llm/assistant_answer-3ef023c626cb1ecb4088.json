@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "The post-trade Suitability outcome for the portfolio is a pass. All suitability rules have passed, including maximum equity share, single-position limit, sector concentration, minimum cash reserve, client restrictions, horizon check, and taxable-gain warning. There are no breaches or warnings after the proposed trades.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "post_trade_suitability",
+            "kind": "engine"
+          }
+        ],
+        "text": "The post-trade Suitability status is pass with all rules passing, including equity at 19.99% against a 30% cap, no single-name positions held, Health Care sector at 5.95% against a 30% limit, cash at 15.0% against a 5% floor and 13.2% liquidity needs, no restriction violations, horizon of 7 years not short, and unrealised gains at 8.32% against a 15% warning line."
+      }
+    ],
+    "follow_up_questions": [
+      "What are the key reasons for the high priority score of 93.33?",
+      "Can you explain the turnover percentage and its impact on approval steps?",
+      "What are the details of the trade lines involved in this recommendation?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

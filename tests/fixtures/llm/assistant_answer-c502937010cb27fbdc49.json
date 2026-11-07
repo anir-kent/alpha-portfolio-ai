@@ -1,0 +1,36 @@
+{
+  "content": {
+    "answer_markdown": "The post-trade Suitability outcome for the portfolio is a breach due to the single-position limit rule. Specifically, the position in Exxon Mobil Corp (XOM) is 11.25% of the portfolio, which exceeds the 10% single-position limit. All other suitability rules pass, including maximum equity share, sector concentration, minimum cash reserve, client restrictions, horizon check, and taxable-gain warning.",
+    "claims": [
+      {
+        "asset": "XOM",
+        "citations": [
+          {
+            "figure": "post_trade_suitability",
+            "kind": "engine"
+          }
+        ],
+        "text": "The post-trade Suitability status is a breach because XOM is 11.25% against a 10% single-position limit."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "post_trade_suitability",
+            "kind": "engine"
+          }
+        ],
+        "text": "Other suitability rules such as maximum equity share at 45.01% against a 55% cap, sector concentration at 22.84% against a 30% limit, minimum cash reserve at 10.0%, client restrictions, horizon check, and taxable-gain warning all pass."
+      }
+    ],
+    "follow_up_questions": [
+      "What are the details of the trade lines in this recommendation?",
+      "What is the portfolio drift before and after the trade?",
+      "What compliance steps are required for this recommendation?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

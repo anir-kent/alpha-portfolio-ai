@@ -1,0 +1,38 @@
+{
+  "content": {
+    "answer_markdown": "The top portfolio (C003) is ranked above the second portfolio (C002) because it has a higher overall score of 93.33 compared to 90.0 for C002. This score is a weighted sum of several components: drift, risk, opportunity, and urgency.\n\n- Portfolio C003 has the maximum drift points (40.0), risk points (30.0), and a high urgency score (10.0), although its opportunity points are lower (13.33).\n- Portfolio C002 also has maximum drift points (40.0), risk points (30.0), and maximum opportunity points (20.0), but zero urgency points.\n\nThe higher urgency points for C003 (10.0 vs 0.0) contribute to its higher total score, which leads to its higher rank.\n\nAdditionally, C003 has a higher days past due (30 days) compared to C002 (-5 days), which aligns with the urgency component being higher for C003.\n\nHence, the combination of maximum drift and risk points, plus higher urgency points, results in C003 being ranked above C002.",
+    "claims": [
+      {
+        "asset": "C003, C002",
+        "citations": [
+          {
+            "figure": "queue.C003.score",
+            "kind": "engine"
+          },
+          {
+            "figure": "queue.C002.score",
+            "kind": "engine"
+          },
+          {
+            "figure": "queue.C003.urgency.points",
+            "kind": "engine"
+          },
+          {
+            "figure": "queue.C002.urgency.points",
+            "kind": "engine"
+          }
+        ],
+        "text": "Portfolio C003 has a score of 93.33 and portfolio C002 has a score of 90.0, with C003 having higher urgency points (10.0 vs 0.0) which contributes to its higher rank."
+      }
+    ],
+    "follow_up_questions": [
+      "What are the main factors contributing to the urgency score?",
+      "How is the overall score calculated from the component points?",
+      "Can I see the detailed drift and risk status for these portfolios?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

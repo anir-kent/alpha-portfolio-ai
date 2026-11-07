@@ -3,7 +3,10 @@ stored audit and grounding data; the page is for the Auditor and Platform Owner 
 
 import pytest
 
+from app.exchanges import CapturingLlm
 from tests.conftest import ROLES
+from tests.fixtures.assistant_eval import EVAL_SET, ScriptedEvalModel, run_eval
+from tests.fixtures.suggested_questions import lift_question_limits, seed_demo
 from tests.test_grounding import check, ctx, report_cite  # noqa: F401  (ctx is a fixture)
 from tests.test_queue import seeded  # noqa: F401  (fixture ctx needs)
 
@@ -78,6 +81,54 @@ def test_model_card_reports_configured_model_and_current_prompt_versions(login, 
     assert {"insight_extraction@v1", "research_tilt@v1", "recommendation_narrative@v1", "priority_narrative@v1"} <= set(
         card["current_prompt_versions"]
     )
+
+
+def test_the_model_card_lists_the_assistant_with_its_prompt_scope_and_limits(login, settings):
+    assistant = governance(login)["model_card"]["assistant"]
+    assert assistant["prompt_version"] in governance(login)["model_card"]["current_prompt_versions"]
+    assert assistant["prompt_version"].startswith("assistant_answer@")
+    scope = " ".join(assistant["scope_policy"]).lower()
+    assert "investment advice" in scope and "read-only" in scope and "out-of-scope refusal" in scope
+    assert assistant["limits"] == {
+        "question_max_chars": 2000,
+        "questions_per_conversation": 50,
+        "questions_per_hour": 20,
+        "history_pairs": 6,
+        "context_rows": 25,
+    }
+
+
+def test_the_model_card_has_no_assistant_eval_results_until_the_live_eval_has_run(login, settings, tmp_path):
+    settings.assistant_eval_path = str(tmp_path / "missing.json")
+    assert governance(login)["model_card"]["assistant"]["latest_eval"] is None
+
+
+def test_an_unreadable_eval_results_file_leaves_the_model_card_without_eval_results(login, settings, tmp_path):
+    (tmp_path / "old.json").write_text('{"prompt_version": "assistant_answer@v1"}')
+    settings.assistant_eval_path = str(tmp_path / "old.json")
+    assert governance(login)["model_card"]["assistant"]["latest_eval"] is None
+
+
+def test_the_model_card_shows_the_latest_live_eval_results(app, login, settings, tmp_path):
+    lift_question_limits(settings)
+    seed_demo(app)
+    app.state.llm = CapturingLlm(ScriptedEvalModel(EVAL_SET), app.state.session_factory, mode="recorded")
+    report = run_eval(app, EVAL_SET, model="scripted-eval-model")
+    settings.assistant_eval_path = str(tmp_path / "assistant_eval.json")
+    (tmp_path / "assistant_eval.json").write_text(report.model_dump_json())
+    latest = governance(login)["model_card"]["assistant"]["latest_eval"]
+    assert latest["model"] == "scripted-eval-model" and latest["cases"] == len(EVAL_SET)
+    assert latest["refusal_rate"] == 1.0 and latest["ungrounded_claim_rate"] == report.ungrounded_claim_rate
+    assert latest["prompt_version"] == governance(login)["model_card"]["assistant"]["prompt_version"]
+    assert "results" not in latest  # the card carries the summary; the per-case results stay in the file
+
+
+def test_the_committed_live_eval_results_are_for_the_current_prompt_version(login):
+    # The default settings read the committed results file; a prompt version bump fails this until the live eval
+    # (`uv run python -m tests.fixtures.assistant_eval`) is re-run and its results committed.
+    assistant = governance(login)["model_card"]["assistant"]
+    assert assistant["latest_eval"] is not None, "run the live eval and commit data/assistant_eval.json"
+    assert assistant["latest_eval"]["prompt_version"] == assistant["prompt_version"], "re-run the live eval"
 
 
 # --- adversarial fixtures: latest run ---------------------------------------------------------------------------------

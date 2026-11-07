@@ -1,0 +1,84 @@
+"""Assistant API (sme-assistant spec, API contract). Every endpoint requires `assistant:use`."""
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from app import assistant, screen_context
+from app.assistant import Conversation, Turn
+from app.db import SessionRow, User
+from app.deps import find_session, get_db, get_llm, get_market, require
+from app.llm import LlmClient
+from app.market_data import MarketData
+from app.screen_context import ScreenIdentity, ScreenKind
+
+router = APIRouter(prefix="/api/assistant", tags=["assistant"])
+
+
+def _session(db: Session, request: Request) -> SessionRow:
+    session = find_session(db, request)
+    if session is None:  # expired between authentication and here
+        raise HTTPException(401, "Not authenticated")
+    return session
+
+
+class LimitDetail(BaseModel):
+    detail: str  # the plain message the drawer shows as is
+
+
+class QuestionIn(BaseModel):
+    question: str = Field(min_length=1)
+    screen: ScreenIdentity
+
+
+@router.post(
+    "/questions",
+    response_model=Turn,
+    responses={
+        400: {"model": LimitDetail, "description": "The Question is longer than the configured limit"},
+        429: {
+            "model": LimitDetail,
+            "description": "A per-Conversation or per-user-per-hour limit is hit. Retry-After is set for the hourly one",
+        },
+    },
+    operation_id="askAssistant",
+)
+def ask(
+    body: QuestionIn,
+    request: Request,
+    user: User = Depends(require("assistant:use")),
+    db: Session = Depends(get_db),
+    llm: LlmClient = Depends(get_llm),
+    market: MarketData = Depends(get_market),
+):
+    session = _session(db, request)
+    try:
+        return assistant.ask(
+            db, llm, market, user, session, body.question.strip(), body.screen, request.app.state.settings
+        )
+    except assistant.LimitExceeded as e:
+        headers = {"Retry-After": str(e.retry_after)} if e.retry_after is not None else None
+        raise HTTPException(e.status, e.message, headers=headers) from e
+
+
+@router.get(
+    "/conversation",
+    response_model=Conversation,
+    responses={204: {"description": "No Question asked yet in this login session"}},
+    operation_id="getAssistantConversation",
+)
+def conversation(request: Request, _: User = Depends(require("assistant:use")), db: Session = Depends(get_db)):
+    """The current login session's Conversation, turns in order, for rendering after a reload."""
+    conv = assistant.current_conversation(db, _session(db, request))
+    return conv if conv is not None else Response(status_code=204)
+
+
+class SuggestedQuestions(BaseModel):
+    kind: ScreenKind
+    questions: list[str]  # three, in the order the drawer shows them
+
+
+@router.get("/suggested-questions", response_model=SuggestedQuestions, operation_id="getSuggestedQuestions")
+def suggested_questions(kind: ScreenKind, _: User = Depends(require("assistant:use"))):
+    """The screen kind's three Suggested Questions. In recorded mode only these replay (from committed recordings)."""
+    return SuggestedQuestions(kind=kind, questions=list(screen_context.SUGGESTED_QUESTIONS[kind]))

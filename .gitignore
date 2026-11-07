@@ -14,6 +14,7 @@ scratch_pad.md
 data/*
 !data/market_snapshot.json
 !data/fund_lookthrough.json
+!data/assistant_eval.json
 !data/seed/
 !data/seed/**
 node_modules/

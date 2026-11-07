@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "There are no Restrictions applied to this Portfolio as indicated by the empty Restrictions list in the screen context.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "restrictions",
+            "kind": "engine"
+          }
+        ],
+        "text": "The Portfolio has no Restrictions applied, as shown by the empty Restrictions list."
+      }
+    ],
+    "follow_up_questions": [
+      "What are the implications of having no Restrictions for this Portfolio?",
+      "Can you show the details of the Suitability Rules breaches for this Portfolio?",
+      "What is the current drift status of the Portfolio's Asset Classes?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

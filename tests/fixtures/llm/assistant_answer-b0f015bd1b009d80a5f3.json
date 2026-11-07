@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "A grounding verdict on an Exchange indicates whether the language model's response is properly supported by the platform's deterministic engine data or cited report passages. It validates that the claims made in the Exchange are factually accurate and grounded in the available evidence, ensuring reliability and trustworthiness of the explanation provided by the model.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "LLM Exchange grounding validation",
+            "kind": "engine"
+          }
+        ],
+        "text": "A grounding verdict confirms that the language model's claims in an Exchange are supported by the platform's engine data or report citations, ensuring factual accuracy."
+      }
+    ],
+    "follow_up_questions": [
+      "How can I view the grounding verdict for a specific Exchange?",
+      "What happens if an Exchange fails the grounding verdict?",
+      "Can I request a re-evaluation of an Exchange's grounding verdict?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

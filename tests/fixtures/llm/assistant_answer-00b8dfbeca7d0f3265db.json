@@ -1,0 +1,46 @@
+{
+  "content": {
+    "answer_markdown": "The Portfolio's drift is driven by the bond asset class, which has a drift of +0.03 percentage points from its target allocation. The equity asset class also shows a drift of +0.03 percentage points but in the opposite direction (negative signed drift), while cash has no drift. Overall, the portfolio drift is +0.03 percentage points, primarily influenced by the bond allocation.",
+    "claims": [
+      {
+        "asset": "bond",
+        "citations": [
+          {
+            "figure": "drift.bond.drift_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "The bond asset class has a drift of +0.03 percentage points from its target allocation, contributing to the portfolio's overall drift."
+      },
+      {
+        "asset": "equity",
+        "citations": [
+          {
+            "figure": "drift.equity.drift_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "The equity asset class has a drift of +0.03 percentage points but with a negative signed drift, indicating a slight underweight relative to its target."
+      },
+      {
+        "asset": "cash",
+        "citations": [
+          {
+            "figure": "drift.cash.drift_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "The cash asset class has no drift, with actual allocation matching the target at 10%."
+      }
+    ],
+    "follow_up_questions": [
+      "What are the specific holdings contributing most to the bond asset class drift?",
+      "Are there any draft recommendations to address this drift?",
+      "How does the portfolio drift compare to the tolerance band thresholds?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

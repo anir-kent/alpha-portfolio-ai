@@ -45,6 +45,10 @@ class LlmError(Exception):
         self.latency_ms = latency_ms
 
 
+class RecordingMissing(LlmError):
+    """Replay found no recording for the request: in recorded mode only recorded calls can be answered."""
+
+
 @dataclass(frozen=True)
 class LlmRequest:
     task: str
@@ -126,7 +130,7 @@ class RecordedLlm:
     def complete(self, request: LlmRequest) -> LlmResponse:
         path = _recording_path(self.directory, request)
         if not path.exists():
-            raise LlmError(f"No recorded response for {request.task} ({request.prompt_version}): {path.name}")
+            raise RecordingMissing(f"No recorded response for {request.task} ({request.prompt_version}): {path.name}")
         data = json.loads(path.read_text())
         return LlmResponse(content=data["content"], model=data["model"], prompt_version=request.prompt_version)
 

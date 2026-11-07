@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "./api/client";
 import type { components } from "./api/schema";
+import { AskButton, usePublishScreen } from "./assistantScreen";
 import { Empty, ErrorLine, PageHeader, Pill, RULE_TONE, money } from "./ui";
 
 type Item = components["schemas"]["ApprovalItem"];
@@ -104,15 +105,20 @@ function ItemCard({
   item,
   canCompliance,
   canCommittee,
+  selected,
+  onSelect,
 }: {
   item: Item;
   canCompliance: boolean;
   canCommittee: boolean;
+  selected: boolean;
+  onSelect: () => void;
 }) {
   const r = item.recommendation;
   return (
     <li className="panel space-y-3 p-3">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <AskButton pressed={selected} onToggle={onSelect} what={`Recommendation ${r.id}`} />
         <Link className="mono font-semibold text-brand hover:underline" to={`/portfolios/${item.portfolio_id}`}>
           {item.portfolio_id}
         </Link>
@@ -241,6 +247,13 @@ export function ApprovalsPage({ permissions }: { permissions: string[] }) {
     s === "compliance" ? canCompliance : canCommittee,
   );
   const [picked, setPicked] = useState<Step | null>(null);
+  // The selected item points the Assistant at one Recommendation; the server lists what this role's panel lists.
+  const [selected, setSelected] = useState<number | null>(null);
+  const liveSelection = q.data?.items.some((i) => i.recommendation.id === selected) ? selected : null;
+  usePublishScreen(
+    { kind: "approvals", entity_ids: {}, selected_item: liveSelection === null ? null : String(liveSelection) },
+    liveSelection === null ? "Approvals" : `Approvals, Recommendation ${liveSelection}`,
+  );
   if (q.isError) return <ErrorLine>{q.error.message}</ErrorLine>;
   const items = q.data?.items ?? [];
   const active: Step | undefined = picked && steps.includes(picked) ? picked : steps[0];
@@ -277,6 +290,8 @@ export function ApprovalsPage({ permissions }: { permissions: string[] }) {
                   item={i}
                   canCompliance={canCompliance}
                   canCommittee={canCommittee}
+                  selected={liveSelection === i.recommendation.id}
+                  onSelect={() => setSelected(liveSelection === i.recommendation.id ? null : i.recommendation.id)}
                 />
               ))}
             </ul>

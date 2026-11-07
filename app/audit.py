@@ -40,6 +40,9 @@ EVENT_TYPES = (
     "exception_approved",
     "exception_blocked",
     "access_denied",
+    "assistant.answered",
+    "assistant.refused",
+    "assistant.failed",
 )
 
 GENESIS_HASH = "0" * 64
@@ -218,11 +221,15 @@ def search(
     report_id: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    event_id: int | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[AuditEventRow], int]:
-    """Newest-first matching events and the total match count."""
+    """Newest-first matching events and the total match count. `event_id` narrows the search to one event, to check
+    whether it is among the matches."""
     q = select(AuditEventRow)
+    if event_id is not None:
+        q = q.where(AuditEventRow.id == event_id)
     for column, value in (
         (AuditEventRow.type, type),
         (AuditEventRow.actor_name, actor),

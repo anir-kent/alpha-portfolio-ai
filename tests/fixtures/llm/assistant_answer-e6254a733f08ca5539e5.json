@@ -1,0 +1,106 @@
+{
+  "content": {
+    "answer_markdown": "This Recommendation proposes these Trade Lines to rebalance the Portfolio back to its Target Allocation by Asset Class. Currently, the bond allocation is significantly below target at 40.01% versus a 65.0% target, representing a breach with a negative drift of 24.99 percentage points. Conversely, the cash allocation is substantially above target at 40.01% versus a 15.0% target, also a breach with a positive drift of 25.01 percentage points. The equity allocation is close to target and within tolerance.\n\nTo correct these breaches, the Recommendation includes:\n- Selling SGOV (iShares 0-3 Month Treasury Bond ETF), which is 25.01% of the Portfolio, to reduce the excessive cash allocation.\n- Buying AGG (iShares Core US Aggregate Bond ETF), 15.62% of the Portfolio, to increase the bond allocation towards the target.\n- Buying SHY (iShares 1-3 Year Treasury Bond ETF), 9.37% of the Portfolio, also to increase bond exposure.\n\nThis results in a turnover of 25.0% of the Portfolio, which is above the 15% threshold, and the trade lines for SGOV and AGG exceed the 10% single Trade Line threshold, triggering the need for advisor and committee approval. The post-trade drift figures show the Portfolio will be very close to target allocations after these trades, with all asset classes within tolerance and suitability rules passing.",
+    "claims": [
+      {
+        "asset": "bond",
+        "citations": [
+          {
+            "figure": "drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.signed_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "The bond allocation is 40.01% actual versus 65.0% target, with a drift of -24.99 percentage points, indicating a breach."
+      },
+      {
+        "asset": "cash",
+        "citations": [
+          {
+            "figure": "drift.cash.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.signed_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "The cash allocation is 40.01% actual versus 15.0% target, with a drift of +25.01 percentage points, indicating a breach."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "trade_line.SGOV.pct_of_portfolio",
+            "kind": "engine"
+          },
+          {
+            "figure": "trade_line.AGG.pct_of_portfolio",
+            "kind": "engine"
+          },
+          {
+            "figure": "trade_line.SHY.pct_of_portfolio",
+            "kind": "engine"
+          }
+        ],
+        "text": "The Recommendation includes selling SGOV (25.01% of Portfolio) and buying AGG (15.62%) and SHY (9.37%) to rebalance the Portfolio."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "turnover_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "approval.thresholds.trade_line_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "The turnover is 25.0% of the Portfolio, exceeding the 15% threshold, and the trade lines for SGOV and AGG exceed the 10% single Trade Line threshold, requiring advisor and committee approval."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "post_trade_drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.cash.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.equity.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_suitability",
+            "kind": "engine"
+          }
+        ],
+        "text": "Post-trade drift shows the Portfolio will be close to target allocations with all asset classes within tolerance and suitability rules passing."
+      }
+    ],
+    "follow_up_questions": [
+      "What are the specific suitability rules applied to this Portfolio?",
+      "Can I see the detailed Audit Events for this Recommendation?",
+      "What is the priority score and how does it affect the Queue position?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

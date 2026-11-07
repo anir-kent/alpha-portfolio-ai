@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "./api/client";
+import { usePublishScreen } from "./assistantScreen";
 import { ExchangeDrawer } from "./ExchangeDrawer";
 import type { components } from "./api/schema";
 import { Empty, ErrorLine, Icon, PageHeader, Panel, Pill } from "./ui";
@@ -156,6 +157,11 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
   const [tail, setTail] = useState(false);
   const [live, setLive] = useState<Exchange[]>([]);
   const [openId, setOpenId] = useState<number | null>(null);
+  // The open Exchange is the one the Assistant is asked about; the server includes it only for llm:read.
+  usePublishScreen(
+    { kind: "exchanges", entity_ids: {}, selected_item: openId === null ? null : String(openId) },
+    openId === null ? "LLM Exchanges" : `LLM Exchange ${openId}`,
+  );
 
   const listKey = ["llm-exchanges", applied, limit] as const;
   const list = useQuery({
