@@ -31,9 +31,9 @@ jobs:
       - run: uv run pytest -q
 
   frontend:
-    name: Frontend (eslint, prettier, tsc, build)
+    name: Frontend (eslint, prettier, tsc, build) and architecture document
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20  # the first mermaid-cli run downloads headless Chromium
     defaults:
       run:
         working-directory: frontend
@@ -55,6 +55,9 @@ jobs:
       - run: npm run format:check
       - run: npm run typecheck
       - run: npx vite build
+      - name: Architecture document check (sections, links, Mermaid, generated regions)
+        run: uv run python -m scripts.architecture_doc check  # Node is here for mermaid-cli
+        working-directory: .
 
   pre-commit:
     name: Repo hygiene (pre-commit-hooks)

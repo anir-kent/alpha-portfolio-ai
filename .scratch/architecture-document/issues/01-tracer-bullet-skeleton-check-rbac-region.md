@@ -8,11 +8,30 @@ Precondition: work on `docs/architecture-document`, cut from `development` after
 
 **Status:** ready-for-agent
 
-- [ ] Index file orders all sections and holds the document-control block (owner, status, TBD reviewers, version history)
-- [ ] Stub files exist for §1–§12, Executive Summary, Roadmap and Appendices with their required arc42 headings
-- [ ] Document build command (Python, run via `uv`) has `check` and `regenerate` modes with one-line-per-problem reporting and non-zero exit on failure
+- [x] Index file orders all sections and holds the document-control block (owner, status, TBD reviewers, version history)
+- [x] Stub files exist for §1–§12, Executive Summary, Roadmap and Appendices with their required arc42 headings
+- [x] Document build command (Python, run via `uv`) has `check` and `regenerate` modes with one-line-per-problem reporting and non-zero exit on failure
 - [ ] `check` detects: missing section/heading, broken relative link or anchor, Mermaid render failure, stale marked region
-- [ ] RBAC matrix region generated from the live role-permission matrix; content outside markers is byte-identical after `regenerate`
+- [x] RBAC matrix region generated from the live role-permission matrix; content outside markers is byte-identical after `regenerate`
 - [ ] At least one Mermaid placeholder diagram in the skeleton renders under `check`
 - [ ] Pytest at the seam: passes on real document; reports stale region, broken link, missing section (on `tmp_path` copies); `regenerate` fixes staleness; Node-dependent tests skip with a reason when `npx` is unavailable
-- [ ] CI runs `check` in the job that has Node; ruff, mypy and existing checks stay green
+- [x] CI runs `check` in the job that has Node; ruff, mypy and existing checks stay green
+
+## Comments
+
+**2026-11-07, implementation (Claude).**
+- Skeleton: `docs/architecture/`. The index has the document-control block and the Contents list, and there are 15 stub files.
+- Build command: `scripts/architecture_doc.py`, run as `uv run python -m scripts.architecture_doc check|regenerate`. The required sections and headings are the `SECTIONS` manifest in that file. The generators are `GENERATORS`; the first is `rbac-matrix`, which imports `app.rbac`.
+- Tests: `tests/test_architecture_doc.py`, at the seam.
+- CI: `check` is a step in the frontend job. That job has Node, and its timeout is now 20 minutes.
+- Beyond the listed checks, `check` also reports an index that skips a section or puts sections out of order, a missing title heading, and malformed or unpaired region markers.
+
+**Not yet verified: Mermaid rendering.** Running `npx @mermaid-js/mermaid-cli@12.2.0` was blocked by the local permission classifier. The two `@needs_npx` tests and the real `check` (without `--no-mermaid`) have not run yet; they must pass locally or in CI before the two Mermaid boxes are ticked. Note: `ubuntu-latest` ships npx, so the backend job's pytest also runs those two tests.
+
+**For ticket 08 (glossary links).** Anchors come from headings and `id`/`name` attributes only. `GLOSSARY.md` terms are bold paragraphs, not headings, so link a term to its category heading (e.g. `GLOSSARY.md#clients-and-holdings`), or add explicit anchors to `GLOSSARY.md`.
+
+**Verified:**
+- `pytest -k "not mermaid"`: 625 passed, 1 skipped.
+- `check --no-mermaid`: OK.
+- ruff, ruff format, mypy and pre-commit: all clean.
+- Each seam test was shown to fail against a sabotaged version of the behaviour it covers.
