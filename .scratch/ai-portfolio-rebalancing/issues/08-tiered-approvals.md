@@ -4,7 +4,7 @@
 
 **Blocked by:** 07
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] No Recommendation can reach Approved without a human Decision at every required step (invariant test via the API, including attempts to skip steps)
 - [x] Compliance cannot act before the Advisor has decided
