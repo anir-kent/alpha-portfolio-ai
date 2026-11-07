@@ -1,0 +1,29 @@
+{
+  "content": {
+    "answer_markdown": "No items are waiting on the Approvals panel: the total is **0**, and 0 are shown. The list is empty, and no rows were cut, so nothing is hidden.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "approvals.shown_items",
+            "kind": "engine"
+          },
+          {
+            "figure": "approvals.total_items",
+            "kind": "engine"
+          }
+        ],
+        "text": "The Approvals screen shows 0 items out of a total of 0."
+      }
+    ],
+    "follow_up_questions": [
+      "How does a Recommendation reach the Approvals panel?",
+      "What decisions does a Recommendation go through?"
+    ],
+    "in_scope": true
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer"
+}

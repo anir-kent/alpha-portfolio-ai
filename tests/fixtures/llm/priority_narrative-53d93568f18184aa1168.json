@@ -1,0 +1,67 @@
+{
+  "content": {
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "priority_score",
+            "kind": "engine"
+          }
+        ],
+        "text": "Priority score is 48.98, built from drift, risk, opportunity and urgency components."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.equity.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.equity.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.equity.drift_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Equity is 22.93% against a 20.0% target, so the portfolio is 2.93 points over, which is the largest drift."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "component.risk.points",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.urgency.points",
+            "kind": "engine"
+          }
+        ],
+        "text": "The risk component contributes 21.98 points, the largest share of the score, while urgency contributes 0.0 points."
+      },
+      {
+        "asset": "Health Care",
+        "citations": [
+          {
+            "figure": "exposure.sector.Health Care",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "Our Investment Committee is overweight Health Care.",
+            "report_id": "RPT-HV-NORTHWIND-Q4-2026"
+          }
+        ],
+        "text": "Health Care is 7.55% of the portfolio, and the Investment Committee is overweight the sector, which supports the opportunity component."
+      }
+    ]
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative"
+}

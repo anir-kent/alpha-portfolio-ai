@@ -1,0 +1,165 @@
+{
+  "content": {
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "portfolio_drift_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.target_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "Portfolio drift is 9.09 pp, driven by bonds at 54.09% against a 45.0% target."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.equity.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.equity.target_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "Equity is underweight at 37.35% against a 45.0% target."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "post_trade_drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.equity.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.cash.actual_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "After the proposed trades, bonds move to 44.03%, equity to 45.49% and cash to 10.49%, all close to target."
+      },
+      {
+        "asset": "bond",
+        "citations": [
+          {
+            "figure": "tilt.bond.proposed_pp",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 2,
+            "quote": "We are cautious on bonds.",
+            "report_id": "RPT-HV-HARBOR-Q4-2026"
+          }
+        ],
+        "text": "The bond tilt of -1.0 pp is consistent with a cautious house view on bonds."
+      },
+      {
+        "asset": "equity",
+        "citations": [
+          {
+            "figure": "tilt.equity.proposed_pp",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 7,
+            "quote": "equities were the best-performing asset class in all 21 Yearbook countries with continuous investment histories",
+            "report_id": "RPT-UBS-GIRY-2026"
+          }
+        ],
+        "text": "The equity tilt of 0.5 pp is supported by long-run research on equity returns."
+      },
+      {
+        "asset": "Industrials",
+        "citations": [
+          {
+            "figure": "tilt.Industrials.proposed_pp",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "We favour Industrials. Order backlogs are at multi-year highs",
+            "report_id": "RPT-HV-HARBOR-Q4-2026"
+          }
+        ],
+        "text": "Industrials receives a tilt of 1.25 pp, supported by a favourable house view."
+      },
+      {
+        "asset": "Health Care",
+        "citations": [
+          {
+            "figure": "tilt.Health Care.proposed_pp",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "Our Investment Committee is overweight Health Care.",
+            "report_id": "RPT-HV-NORTHWIND-Q4-2026"
+          }
+        ],
+        "text": "Health Care receives a tilt of 0.5 pp, in line with the Investment Committee's overweight stance."
+      },
+      {
+        "asset": "Consumer Discretionary",
+        "citations": [
+          {
+            "figure": "tilt.Consumer Discretionary.proposed_pp",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 3,
+            "quote": "Forward valuation measures show positive risk-reward.",
+            "report_id": "RPT-FID-Q2-2026"
+          }
+        ],
+        "text": "Consumer Discretionary receives a small tilt of 0.25 pp, supported by valuation research."
+      },
+      {
+        "asset": "Materials",
+        "citations": [
+          {
+            "figure": "tilt.Materials.proposed_pp",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 3,
+            "quote": "Higher capital expenditures may weigh on the sector.",
+            "report_id": "RPT-FID-Q2-2026"
+          }
+        ],
+        "text": "Materials is trimmed by -0.25 pp, as research flags capital expenditure pressure on the sector."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "turnover_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "The proposed trades imply portfolio turnover of 10.06%."
+      }
+    ]
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "recommendation_narrative@v1",
+  "task": "recommendation_narrative"
+}

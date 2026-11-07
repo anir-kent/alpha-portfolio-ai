@@ -1,0 +1,87 @@
+{
+  "content": {
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "priority_score",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.drift.points",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.drift.weight",
+            "kind": "engine"
+          }
+        ],
+        "text": "Priority score is 93.33, driven mostly by drift, which contributes 40.0 points at a weight of 0.4."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "portfolio_drift_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Bonds are at 40.01% against a 65.0% target, while cash is at 40.01% against a 15.0% target, so the portfolio is off allocation by 25.01 pp."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "days_past_due",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.risk.raw",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.urgency.raw",
+            "kind": "engine"
+          }
+        ],
+        "text": "The review is 30.0 days past due, and risk and urgency each score their maximum raw value of 100.0."
+      },
+      {
+        "asset": "Health Care",
+        "citations": [
+          {
+            "figure": "exposure.sector.Health Care",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "Our Investment Committee is overweight Health Care.",
+            "report_id": "RPT-HV-NORTHWIND-Q4-2026"
+          }
+        ],
+        "text": "Health Care is the largest equity sector exposure at 5.95%, and the Investment Committee is overweight the sector."
+      }
+    ]
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative"
+}

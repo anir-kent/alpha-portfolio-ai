@@ -79,8 +79,31 @@ def test_an_advisor_asks_on_the_portfolio_screen_and_gets_a_markdown_answer(logi
     assert turn["answer"]["follow_up_questions"] == ["Which Restriction applies?"]
     assert isinstance(turn["exchange_id"], int) and len(turn["exchange_hash"]) == 64
     (request,) = model.requests
-    assert request.prompt_version == "assistant_answer@v2"
+    assert request.prompt_version == "assistant_answer@v3"
     assert "Which asset class drives the drift?" in request.user
+
+
+def test_the_reply_schema_the_model_is_given_admits_only_citations_the_platform_can_read(login, model):
+    """A model held to the schema exactly (as Anthropic's structured outputs are) must not be able to send a citation
+    the platform then rejects: an undeclared citation object came back as `{}` and every such turn failed."""
+    import jsonschema
+
+    model.reply = answer("Equity drives the drift.")
+    ask(login("advisor"), "Which asset class drives the drift?", portfolio_screen(PLANTED["restricted_breach"]))
+    (request,) = model.requests
+    validator = jsonschema.Draft202012Validator(request.schema)
+
+    def reply(citation: dict) -> dict:
+        claim = {"text": "Equity is 60.0%.", "asset": None, "citations": [citation]}
+        return {"in_scope": True, "answer_markdown": "x", "claims": [claim], "follow_up_questions": []}
+
+    for readable in (
+        {"kind": "engine", "figure": "drift.equity.actual_pct"},
+        {"kind": "report", "report_id": "RPT-1", "page": 2, "quote": "Equities remain attractive."},
+    ):
+        assert validator.is_valid(reply(readable)), readable
+    for unreadable in ({}, {"kind": "engine"}, {"kind": "web", "url": "https://example.com"}):
+        assert not validator.is_valid(reply(unreadable)), unreadable
 
 
 def test_the_prompt_holds_the_portfolio_screen_context_from_the_portfolio_screen(login, model):
@@ -174,7 +197,7 @@ def test_an_answered_turn_writes_an_audit_event_anchoring_its_exchange_and_the_c
     assert event["seq"] == 1 and len(event["screen_context_hash"]) == 64
     auditor = login("auditor")
     ex = auditor.get(f"/api/llm/exchanges/{turn['exchange_id']}").json()
-    assert ex["task"] == "assistant_answer" and ex["prompt_version"] == "assistant_answer@v2"
+    assert ex["task"] == "assistant_answer" and ex["prompt_version"] == "assistant_answer@v3"
     verdict = auditor.get("/api/audit/verify").json()
     assert verdict["valid"] and verdict["exchanges_checked"] >= 1
 

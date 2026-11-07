@@ -1,0 +1,89 @@
+{
+  "content": {
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "priority_score",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.drift.points",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.drift.weight",
+            "kind": "engine"
+          }
+        ],
+        "text": "Priority score is 79.57, driven mainly by drift, which contributes 29.57 points at a weight of 0.4."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.drift_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.equity.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.equity.target_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "Bonds are at 17.39% against a 10.0% target, a drift of 7.39 pp, while equity sits at 79.18% against an 85.0% target."
+      },
+      {
+        "asset": "Real Estate",
+        "citations": [
+          {
+            "figure": "exposure.sector.Real Estate",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "We are underweight Real Estate. Higher financing costs continue to pressure valuations.",
+            "report_id": "RPT-HV-NORTHWIND-Q4-2026"
+          }
+        ],
+        "text": "Real Estate is the largest sector exposure at 32.73%, and research is mixed: one report is underweight on financing-cost pressure on valuations."
+      },
+      {
+        "asset": "Information Technology",
+        "citations": [
+          {
+            "figure": "exposure.sector.Information Technology",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.opportunity.points",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 3,
+            "quote": "Solid fundamentals and compelling valuations after a sell-off.",
+            "report_id": "RPT-FID-Q2-2026"
+          }
+        ],
+        "text": "Information Technology is 23.39% of the portfolio, and research cites solid fundamentals and compelling valuations after a sell-off, which supports the opportunity component at 20.0 points."
+      }
+    ]
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative"
+}

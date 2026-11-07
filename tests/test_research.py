@@ -269,6 +269,67 @@ def test_openai_compatible_llm_parses_replies_and_can_record_them(tmp_path):
     assert RecordedLlm(tmp_path).complete(REQ).content == {"insights": []}  # the recording replays
 
 
+def test_through_openrouter_a_call_only_reaches_providers_that_honour_the_reply_schema():
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append({"body": json.loads(request.content), "title": request.headers.get("x-openrouter-title")})
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"insights": []}'}}]})
+
+    for base_url in ("https://openrouter.ai/api/v1/", "https://gw.example/v1"):
+        OpenAICompatibleLlm(base_url=base_url, api_key="k", model="m", transport=httpx.MockTransport(handler)).complete(
+            REQ
+        )
+    openrouter, other = seen
+    assert openrouter["body"]["provider"] == {"require_parameters": True}
+    assert openrouter["body"]["response_format"]["type"] == "json_schema"
+    assert openrouter["title"] == "Portfolio Rebalancing"
+    assert "provider" not in other["body"] and other["title"] is None  # other gateways get the plain protocol
+
+
+def test_reply_schemas_reach_the_provider_without_oneof_which_anthropic_rejects():
+    """A Pydantic discriminated union renders as `oneOf` + `discriminator`; Anthropic's structured outputs refuse both.
+    The wire schema says `anyOf` instead (equivalent here: `kind` already tells the shapes apart)."""
+    sent: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content)["response_format"]["json_schema"]["schema"])
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"insights": []}'}}]})
+
+    union = {
+        "oneOf": [{"$ref": "#/$defs/A"}, {"$ref": "#/$defs/B"}],
+        "discriminator": {"propertyName": "kind", "mapping": {"a": "#/$defs/A", "b": "#/$defs/B"}},
+    }
+    schema = {"type": "object", "properties": {"items": {"type": "array", "items": union}}}
+    request = LlmRequest(task="t", prompt_version="t@v1", system="s", user="u", schema=schema)
+    OpenAICompatibleLlm(
+        base_url="https://gw.example/v1", api_key="k", model="m", transport=httpx.MockTransport(handler)
+    ).complete(request)
+    items = sent[0]["properties"]["items"]["items"]
+    assert items == {"anyOf": [{"$ref": "#/$defs/A"}, {"$ref": "#/$defs/B"}]}
+    assert "oneOf" in request.schema["properties"]["items"]["items"]  # the request (and its recording key) is unchanged
+
+
+def test_temperature_is_sent_only_when_configured():
+    """Some models accept no temperature at all (and OpenRouter then finds no endpoint), so unset means omitted."""
+    bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"insights": []}'}}]})
+
+    for temperature in (None, 0.0):
+        OpenAICompatibleLlm(
+            base_url="https://gw.example/v1",
+            api_key="k",
+            model="m",
+            temperature=temperature,
+            transport=httpx.MockTransport(handler),
+        ).complete(REQ)
+    unset, zero = bodies
+    assert "temperature" not in unset and zero["temperature"] == 0.0
+
+
 def test_openai_compatible_llm_surfaces_provider_errors():
     llm = OpenAICompatibleLlm(
         base_url="https://gw.example/v1",

@@ -182,7 +182,7 @@ function ItemCard({
               <ul className="space-y-1">
                 {item.rules.map((rule) => (
                   <li key={rule.rule_id} className="rounded-xl border border-line px-2 py-1">
-                    <span className="mono text-ink-3">{rule.rule_id}</span>{" "}
+                    <span className="mono whitespace-nowrap text-ink-3">{rule.rule_id}</span>{" "}
                     <span className="font-medium">{rule.name}</span>{" "}
                     <Pill tone={RULE_TONE[rule.status as keyof typeof RULE_TONE] ?? "mute"}>{rule.status}</Pill>
                     <p className="text-ink-2">{rule.message}</p>

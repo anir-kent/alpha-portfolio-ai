@@ -583,7 +583,9 @@ def _governance(db: Session, user: User, screen: ScreenIdentity, settings: Setti
     if not _can(user, "governance:read") or screen.selected_item is not None:
         return None
     card = governance.model_card(db, settings)
-    figures = {"model_card.temperature": card.temperature, "model_card.tilt_bound_pp": card.tilt_bound_pp}
+    figures = {"model_card.tilt_bound_pp": card.tilt_bound_pp}
+    if card.temperature is not None:
+        figures["model_card.temperature"] = card.temperature
     for key, value in card.assistant.limits.model_dump().items():
         figures[f"model_card.assistant.limits.{key}"] = float(value)
     # The latest eval results are left out: every live eval run rewrites them, and the governance prompt must stay

@@ -1,9 +1,9 @@
-"""The single LLM interface (spec: OpenAI-compatible, gateway-ready, Anthropic first).
+"""The single LLM interface (spec: OpenAI-compatible, gateway-ready; OpenRouter in front of an Anthropic model).
 
 Callers only ever see `LlmClient.complete`. Two implementations sit behind it:
 - `RecordedLlm` replays committed responses (tests, demos; no network). A miss is an error, never a guess.
-- `OpenAICompatibleLlm` speaks the OpenAI chat-completions protocol, so pointing `llm_base_url` at Anthropic's
-  compatibility endpoint or at a LiteLLM/AI gateway is a config change. With `record_dir` set, live responses are saved
+- `OpenAICompatibleLlm` speaks the OpenAI chat-completions protocol, so pointing `llm_base_url` at OpenRouter (the
+  default), Anthropic's compatibility endpoint or a LiteLLM/AI gateway is a config change. With `record_dir` set, live responses are saved
   in the format `RecordedLlm` replays.
 Every response carries the model and prompt version so the caller can log both to the audit chain.
 """
@@ -18,7 +18,7 @@ from typing import Protocol
 
 import httpx
 
-TEMPERATURE = 0.0  # reported on the governance model card
+OPENROUTER_TITLE = "Portfolio Rebalancing"  # how OpenRouter attributes the calls
 
 
 class LlmError(Exception):
@@ -148,6 +148,17 @@ def parse_json_reply(text: str) -> dict:
     return value
 
 
+def wire_schema(schema: object) -> object:
+    """The reply schema as sent to the provider: `oneOf` becomes `anyOf` and `discriminator` is dropped, because
+    Anthropic's structured outputs reject both. Equivalent for this codebase's unions, whose members are told apart by
+    a literal `kind`, and every reply is still validated against its Pydantic model on return."""
+    if isinstance(schema, dict):
+        return {("anyOf" if k == "oneOf" else k): wire_schema(v) for k, v in schema.items() if k != "discriminator"}
+    if isinstance(schema, list):
+        return [wire_schema(v) for v in schema]
+    return schema
+
+
 class OpenAICompatibleLlm:
     def __init__(
         self,
@@ -158,15 +169,20 @@ class OpenAICompatibleLlm:
         record_dir: str | Path | None = None,
         transport: httpx.BaseTransport | None = None,
         timeout: float = 120.0,
+        temperature: float | None = None,
     ):
         self.model = model
+        self.temperature = temperature  # None: omitted, the provider's default (some models accept none)
         self.record_dir = record_dir
         self._api_key = api_key
+        # OpenRouter routes a model to any of several providers, and one may ignore `response_format`; asking it to
+        # require every parameter keeps the reply schema enforced. Other gateways get the plain protocol.
+        self._openrouter = httpx.URL(base_url).host == "openrouter.ai"
+        headers = {"Authorization": f"Bearer {api_key}"}
+        if self._openrouter:
+            headers["X-OpenRouter-Title"] = OPENROUTER_TITLE
         self._http = httpx.Client(
-            base_url=base_url.rstrip("/") + "/",
-            timeout=timeout,
-            transport=transport,
-            headers={"Authorization": f"Bearer {api_key}"},
+            base_url=base_url.rstrip("/") + "/", timeout=timeout, transport=transport, headers=headers
         )
 
     def complete(self, request: LlmRequest) -> LlmResponse:
@@ -177,12 +193,18 @@ class OpenAICompatibleLlm:
             },
             {"role": "user", "content": request.user},
         ]
-        body = {
+        body: dict = {
             "model": self.model,
-            "temperature": TEMPERATURE,
             "messages": messages,
-            "response_format": {"type": "json_schema", "json_schema": {"name": request.task, "schema": request.schema}},
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": request.task, "schema": wire_schema(request.schema)},
+            },
         }
+        if self.temperature is not None:
+            body["temperature"] = self.temperature
+        if self._openrouter:
+            body["provider"] = {"require_parameters": True}
         started = time.perf_counter()
 
         def elapsed_ms() -> int:
@@ -242,5 +264,6 @@ def build_llm(settings, transport: httpx.BaseTransport | None = None) -> LlmClie
             model=settings.llm_model,
             record_dir=settings.llm_recordings_dir if settings.llm_record else None,
             transport=transport,
+            temperature=settings.llm_temperature,
         )
     raise RuntimeError(f"Unknown APP_LLM_MODE: {settings.llm_mode}")

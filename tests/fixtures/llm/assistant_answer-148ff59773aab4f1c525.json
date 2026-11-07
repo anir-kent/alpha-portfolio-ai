@@ -1,0 +1,138 @@
+{
+  "content": {
+    "answer_markdown": "**Why these Trade Lines**\n\n- **Drift drives the rebalance.** Portfolio C003 has drifted 25.01 pp from target. Cash is 40.01% against a 15.0% target, and bonds are 40.01% against a 65.0% target. Equity is on target. The engine therefore drafted Trade Lines that bring the Portfolio back toward target.\n- **The largest lines address the cash and bond gap.** Line 1 sells SGOV (24.5% of the Portfolio). Lines 4 and 5 buy AGG (14.68%) and SHY (8.81%).\n- **Post-trade mix.** After the proposed trades, bonds would be 63.52%, cash 15.51% and equity 20.97%, all within tolerance per the engine.\n- **Research tilt.** The smaller equity and sector ETF lines (SPY, XLF, XLI, XLK, XLV, XLY, XLP) reflect the engine-bounded Research Tilt (bound 2.0 pp), with no entry clipped. Examples: bond -1.5 pp and equity +1.0 pp, supported by the cited Report passages.\n- **Approval.** Turnover is 25.85% of the Portfolio, and the SGOV and AGG lines are each over the single Trade Line threshold. The Recommendation is therefore high impact and needs Advisor and Committee steps.\n\nI can't say whether to approve it. That is done on the Approvals screen.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "portfolio_drift_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.target_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "Portfolio drift is 25.01 percentage points, with cash at 40.01% against a 15.0% target."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.target_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "Bonds are at 40.01% against a 65.0% target before trading."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "trade_line.SGOV.pct_of_portfolio",
+            "kind": "engine"
+          },
+          {
+            "figure": "trade_line.AGG.pct_of_portfolio",
+            "kind": "engine"
+          }
+        ],
+        "text": "The SGOV sell is 24.5% of the Portfolio and the AGG buy is 14.68%."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "post_trade_drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.cash.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.equity.actual_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "After the proposed trades, bonds would be 63.52%, cash 15.51% and equity 20.97%."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "turnover_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "The rebalance carries turnover of 25.85% of the Portfolio."
+      },
+      {
+        "asset": "bond",
+        "citations": [
+          {
+            "figure": "tilt.bond.proposed_pp",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 2,
+            "quote": "We are cautious on bonds.",
+            "report_id": "RPT-HV-HARBOR-Q4-2026"
+          }
+        ],
+        "text": "Bonds carry a research tilt of -1.5 percentage points, consistent with a cautious view on bonds."
+      },
+      {
+        "asset": "equity",
+        "citations": [
+          {
+            "figure": "tilt.equity.proposed_pp",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 7,
+            "quote": "equities were the best-performing asset class in all 21 Yearbook countries with continuous investment histories",
+            "report_id": "RPT-UBS-GIRY-2026"
+          }
+        ],
+        "text": "Equity carries a research tilt of 1.0 percentage points, supported by long-run return evidence."
+      },
+      {
+        "asset": "Health Care",
+        "citations": [
+          {
+            "figure": "tilt.Health Care.proposed_pp",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "Our Investment Committee is overweight Health Care.",
+            "report_id": "RPT-HV-NORTHWIND-Q4-2026"
+          }
+        ],
+        "text": "Health Care is tilted up by 0.5 percentage points, consistent with the Investment Committee's overweight stance."
+      }
+    ],
+    "follow_up_questions": [
+      "Why is this Recommendation high impact?",
+      "How were the research tilts bounded?",
+      "Do the post-trade Suitability rules all pass?"
+    ],
+    "in_scope": true
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer"
+}

@@ -169,7 +169,7 @@ def test_roles_without_analysis_run_are_denied_every_run_endpoint_and_the_denial
 def run_events(app) -> list[tuple]:
     """The Audit Events from the first run's start on, comparable across databases: a parent is its position in that
     list, or for an earlier event (the seeded research) its type and payload. An Exchange hash covers the Exchange's own
-    timestamp, so it differs between any two runs and is left out."""
+    timestamp, and a grounding check id is random, so both differ between any two runs and are left out."""
     with app.state.session_factory() as db:
         events = list(db.scalars(select(AuditEventRow).order_by(AuditEventRow.id)))
     start = next(n for n, e in enumerate(events) if e.type == "analysis_run_started")
@@ -180,7 +180,7 @@ def run_events(app) -> list[tuple]:
             e.actor_kind,
             e.actor_name,
             e.actor_role,
-            {k: v for k, v in json.loads(e.payload_json).items() if k != "exchange_hash"},
+            {k: v for k, v in json.loads(e.payload_json).items() if k not in ("exchange_hash", "check_id")},
             e.portfolio_id,
             e.client_id,
             e.recommendation_id,

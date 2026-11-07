@@ -4534,7 +4534,14 @@
             "title": "Llm Endpoint"
           },
           "temperature": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Temperature"
           },
           "tilt_bound_pp": {

@@ -1,0 +1,73 @@
+{
+  "content": {
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "priority_score",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.drift.points",
+            "kind": "engine"
+          }
+        ],
+        "text": "The priority score is 75.24, and drift is the largest contributor at 28.51 points."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.drift_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Bonds are 17.13% of the portfolio against a 10.0% target, which is a drift of 7.13 percentage points."
+      },
+      {
+        "asset": "Utilities",
+        "citations": [
+          {
+            "figure": "exposure.sector.Utilities",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 3,
+            "quote": "Valuation levels are not attractive.",
+            "report_id": "RPT-FID-Q2-2026"
+          }
+        ],
+        "text": "Utilities are 18.46% of the portfolio, and research calls valuation levels not attractive."
+      },
+      {
+        "asset": "Financials",
+        "citations": [
+          {
+            "figure": "exposure.sector.Financials",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "We are positive on Financials.",
+            "report_id": "RPT-HV-MERIDIAN-Q4-2026"
+          }
+        ],
+        "text": "Financials are 23.85% of the portfolio, and research is positive on the sector."
+      }
+    ]
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative"
+}

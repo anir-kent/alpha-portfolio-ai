@@ -1,0 +1,36 @@
+{
+  "content": {
+    "answer_markdown": "Only **C003** is flagged as having breached its review SLA (`sla_breached` is true). It is the rank 1 Portfolio, conservative Risk Profile, with a review due 2026-10-04 and 30 days past due.\n\nOther Portfolios also show a positive days-past-due figure but are **not** flagged: C013 (29), C016 (22), C018 (17), C023 (17), C001 (10) and C021 (2). The screen does not show the SLA threshold, so I can't explain why those are not flagged. All 25 rows are visible, so this list is complete.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "queue.C003.days_past_due",
+            "kind": "engine"
+          }
+        ],
+        "text": "C003 is the only Portfolio flagged as SLA-breached, at 30.0 days past due."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "queue.C013.days_past_due",
+            "kind": "engine"
+          }
+        ],
+        "text": "C013 is 29.0 days past due but is not flagged as SLA-breached."
+      }
+    ],
+    "follow_up_questions": [
+      "Why is C003 ranked first in the Queue?",
+      "Which Portfolios are in breach of their drift tolerance?",
+      "How is the priority score calculated?"
+    ],
+    "in_scope": true
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer"
+}

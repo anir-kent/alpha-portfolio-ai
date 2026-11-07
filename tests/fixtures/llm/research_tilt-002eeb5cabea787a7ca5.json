@@ -1,0 +1,74 @@
+{
+  "content": {
+    "tilts": [
+      {
+        "impact": "tailwind",
+        "insight_id": 1,
+        "tilt_pp": 0.25
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 2,
+        "tilt_pp": 0.5
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 3,
+        "tilt_pp": 0.25
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 4,
+        "tilt_pp": 0.25
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 5,
+        "tilt_pp": 0.25
+      },
+      {
+        "impact": "headwind",
+        "insight_id": 6,
+        "tilt_pp": -0.5
+      },
+      {
+        "impact": "headwind",
+        "insight_id": 7,
+        "tilt_pp": -0.5
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 12,
+        "tilt_pp": 1.0
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 14,
+        "tilt_pp": 1.0
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 16,
+        "tilt_pp": 1.5
+      },
+      {
+        "impact": "headwind",
+        "insight_id": 17,
+        "tilt_pp": -1.0
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 18,
+        "tilt_pp": 1.0
+      },
+      {
+        "impact": "headwind",
+        "insight_id": 19,
+        "tilt_pp": -1.0
+      }
+    ]
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "research_tilt@v1",
+  "task": "research_tilt"
+}

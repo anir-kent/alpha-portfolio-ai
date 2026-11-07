@@ -1,0 +1,15 @@
+{
+  "content": {
+    "answer_markdown": "The Queue is ordered by a **priority score**. It is computed by the platform's deterministic engine during an Analysis Run, which values every Portfolio at a fixed market-data snapshot. The score is built from the same engine outputs: each Asset Class's drift from its Target Allocation (in percentage points), the Portfolio Drift, and the Suitability Rule results (pass, warning or breach). Drift is judged against the tolerance band of the Client's Risk Profile.\n\nThis screen (Health) does not include the Queue's data. I can't give the exact weighting of the score or any Portfolio's figures here. Open the Queue screen to see the ordered rows.",
+    "claims": [],
+    "follow_up_questions": [
+      "What does the Portfolio Drift measure?",
+      "What happens when a Portfolio is outside tolerance?",
+      "What are the Suitability Rule results?"
+    ],
+    "in_scope": true
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer"
+}

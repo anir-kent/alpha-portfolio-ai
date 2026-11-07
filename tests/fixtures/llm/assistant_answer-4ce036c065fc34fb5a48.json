@@ -1,0 +1,15 @@
+{
+  "content": {
+    "answer_markdown": "No Restrictions are listed for Client C001's Portfolio. The Restrictions list on this screen is empty. The latest Analysis Run's Client Restrictions rule (SR-05) also passes, with the message \"No Restriction is violated\". Restrictions are instruments or sectors a Client must not hold, so none apply here.\n\nThe Portfolio does breach other Suitability Rules, namely the single-position limit (SR-02) and sector concentration (SR-03). Those are not Restrictions.",
+    "claims": [],
+    "follow_up_questions": [
+      "Which Suitability Rules are in breach for this Portfolio?",
+      "What is the Portfolio Drift against the tolerance band?",
+      "Which Holdings exceed the single-position limit?"
+    ],
+    "in_scope": true
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer"
+}

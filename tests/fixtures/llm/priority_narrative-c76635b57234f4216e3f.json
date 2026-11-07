@@ -1,0 +1,81 @@
+{
+  "content": {
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "priority_score",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.drift.points",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.risk.points",
+            "kind": "engine"
+          }
+        ],
+        "text": "Priority score is 65.63, with drift contributing 15.63 points and risk the full 30.0 points."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.cash.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.drift_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Cash is 8.91% against a 5.0% target, a drift of 3.91 percentage points, the largest in the portfolio."
+      },
+      {
+        "asset": "Industrials",
+        "citations": [
+          {
+            "figure": "exposure.sector.Industrials",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.opportunity.points",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "We favour Industrials. Order backlogs are at multi-year highs",
+            "report_id": "RPT-HV-HARBOR-Q4-2026"
+          }
+        ],
+        "text": "Industrials, at 8.78% of the portfolio, is favoured by research, which supports the opportunity component scoring 20.0 points."
+      },
+      {
+        "asset": "Materials",
+        "citations": [
+          {
+            "figure": "exposure.sector.Materials",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 3,
+            "quote": "Higher capital expenditures may weigh on the sector.",
+            "report_id": "RPT-FID-Q2-2026"
+          }
+        ],
+        "text": "Materials makes up 18.62% of the portfolio, and research flags a headwind for the sector."
+      }
+    ]
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative"
+}

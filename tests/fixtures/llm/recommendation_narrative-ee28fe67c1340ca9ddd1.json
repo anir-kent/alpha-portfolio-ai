@@ -1,0 +1,205 @@
+{
+  "content": {
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "portfolio_drift_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.target_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "The portfolio's largest drift from target is 4.99 percentage points, in bonds, which sit at 69.99% against a 65.0% target."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.equity.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.equity.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.target_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "Equity is at 17.32% against a 20.0% target, and cash is at 12.69% against a 15.0% target."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "post_trade_drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.equity.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.cash.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.bond.drift_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "After the trades, bonds are at 64.03%, equity at 20.46% and cash at 15.51%, so every asset class ends within 0.97 percentage points of target."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "trade_line_count",
+            "kind": "engine"
+          },
+          {
+            "figure": "turnover_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "The rebalance comprises 10 trade lines with turnover of 5.97% of the portfolio."
+      },
+      {
+        "asset": "bond",
+        "citations": [
+          {
+            "kind": "report",
+            "page": 2,
+            "quote": "We are cautious on bonds.",
+            "report_id": "RPT-HV-HARBOR-Q4-2026"
+          },
+          {
+            "figure": "tilt.bond.allowed_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "The bond tilt of -1.0 percentage points is supported by a cautious view on bonds."
+      },
+      {
+        "asset": "equity",
+        "citations": [
+          {
+            "kind": "report",
+            "page": 7,
+            "quote": "equities were the best-performing asset class in all 21 Yearbook countries with continuous investment histories",
+            "report_id": "RPT-UBS-GIRY-2026"
+          },
+          {
+            "figure": "tilt.equity.allowed_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "The equity tilt of 0.5 percentage points reflects research that equities were the best-performing asset class over the long run."
+      },
+      {
+        "asset": "Industrials",
+        "citations": [
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "We favour Industrials. Order backlogs are at multi-year highs",
+            "report_id": "RPT-HV-HARBOR-Q4-2026"
+          },
+          {
+            "figure": "tilt.Industrials.allowed_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "tilt.Industrials.exposure_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "Industrials receive the largest sector tilt, 1.25 percentage points, from a current exposure of 0.0%."
+      },
+      {
+        "asset": "Financials",
+        "citations": [
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "We are positive on Financials.",
+            "report_id": "RPT-HV-MERIDIAN-Q4-2026"
+          },
+          {
+            "figure": "tilt.Financials.allowed_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Financials get a 0.75 percentage point tilt, backed by a positive view on the sector."
+      },
+      {
+        "asset": "Health Care",
+        "citations": [
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "Our Investment Committee is overweight Health Care.",
+            "report_id": "RPT-HV-NORTHWIND-Q4-2026"
+          },
+          {
+            "figure": "tilt.Health Care.allowed_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Health Care gets a 0.5 percentage point tilt, in line with the Investment Committee's overweight stance."
+      },
+      {
+        "asset": "Consumer Staples",
+        "citations": [
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "We are negative on Consumer Staples.",
+            "report_id": "RPT-HV-MERIDIAN-Q4-2026"
+          },
+          {
+            "figure": "tilt.Consumer Staples.allowed_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "tilt.Consumer Staples.exposure_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "Consumer Staples is reduced by 0.75 percentage points from a 5.81% exposure, reflecting a negative view on the sector."
+      },
+      {
+        "asset": "Energy",
+        "citations": [
+          {
+            "kind": "report",
+            "page": 3,
+            "quote": "Indicators suggest negative risk-reward.",
+            "report_id": "RPT-FID-Q2-2026"
+          },
+          {
+            "figure": "tilt.Energy.allowed_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Energy is reduced by 0.25 percentage points because indicators point to negative risk-reward."
+      }
+    ]
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "recommendation_narrative@v1",
+  "task": "recommendation_narrative"
+}

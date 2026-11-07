@@ -1,0 +1,137 @@
+{
+  "content": {
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.equity.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.equity.target_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "Equity is at 51.57% of the portfolio against a target of 45.0%, which is the largest drift and the reason for rebalancing."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "post_trade_drift.equity.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.cash.actual_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "After the proposed trades, equity would be 45.98%, bond 44.02% and cash 10.0%, bringing each asset class close to its target."
+      },
+      {
+        "asset": "bond",
+        "citations": [
+          {
+            "kind": "report",
+            "page": 2,
+            "quote": "We are cautious on bonds.",
+            "report_id": "RPT-HV-HARBOR-Q4-2026"
+          },
+          {
+            "kind": "report",
+            "page": 7,
+            "quote": "Long bonds and Treasury bills gave lower returns, although they beat inflation.",
+            "report_id": "RPT-UBS-GIRY-2026"
+          },
+          {
+            "figure": "tilt.bond.proposed_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Research is cautious on bonds, which supports a bond tilt of -1.0 pp."
+      },
+      {
+        "asset": "equity",
+        "citations": [
+          {
+            "kind": "report",
+            "page": 7,
+            "quote": "equities were the best-performing asset class in all 21 Yearbook countries with continuous investment histories",
+            "report_id": "RPT-UBS-GIRY-2026"
+          },
+          {
+            "figure": "tilt.equity.proposed_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Research on equities' long-run record supports an equity tilt of 1.0 pp."
+      },
+      {
+        "asset": "Health Care",
+        "citations": [
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "Our Investment Committee is overweight Health Care.",
+            "report_id": "RPT-HV-NORTHWIND-Q4-2026"
+          },
+          {
+            "figure": "tilt.Health Care.proposed_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Health Care receives a tilt of 1.0 pp, in line with an Investment Committee overweight view."
+      },
+      {
+        "asset": "Utilities",
+        "citations": [
+          {
+            "kind": "report",
+            "page": 3,
+            "quote": "Valuation levels are not attractive.",
+            "report_id": "RPT-FID-Q2-2026"
+          },
+          {
+            "figure": "tilt.Utilities.proposed_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Utilities are reduced by a tilt of -2.0 pp because research finds valuations unattractive."
+      },
+      {
+        "asset": "Communication Services",
+        "citations": [
+          {
+            "kind": "report",
+            "page": 3,
+            "quote": "Tech-like industries have positive risk-reward, defensive industries do not.",
+            "report_id": "RPT-FID-Q2-2026"
+          },
+          {
+            "figure": "tilt.Communication Services.proposed_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Communication Services is trimmed by a tilt of -0.5 pp, reflecting the research view that defensive industries lack positive risk-reward."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "turnover_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "The full set of trades implies turnover of 7.99% of the portfolio."
+      }
+    ]
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "recommendation_narrative@v1",
+  "task": "recommendation_narrative"
+}

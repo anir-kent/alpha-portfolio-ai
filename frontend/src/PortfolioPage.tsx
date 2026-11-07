@@ -58,7 +58,7 @@ function SuitabilityPanel({ suitability }: { suitability: Suitability }) {
         {suitability.rules.map((r) => (
           <li key={r.rule_id} className="px-3 py-1.5">
             <div className="flex items-center gap-2">
-              <span className="mono w-9 text-ink-3">{r.rule_id}</span>
+              <span className="mono w-12 shrink-0 whitespace-nowrap text-ink-3">{r.rule_id}</span>
               <span className="font-medium">{r.name}</span>
               <span className="ml-auto">
                 <Pill tone={RULE_TONE[r.status]}>{r.status}</Pill>

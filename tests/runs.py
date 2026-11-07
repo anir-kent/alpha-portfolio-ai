@@ -22,15 +22,16 @@ def wait_for_outcome(c: TestClient, run_id: int, timeout: float = 60) -> dict:
         time.sleep(0.02)
 
 
-def start_and_wait(c: TestClient) -> dict:
+def start_and_wait(c: TestClient, timeout: float = 60) -> dict:
     """Start an Analysis Run as `c` and return its final snapshot, whatever its outcome."""
     r = c.post(RUNS)
     assert r.status_code == 202, r.text
-    return wait_for_outcome(c, r.json()["run_id"])
+    return wait_for_outcome(c, r.json()["run_id"], timeout)
 
 
-def run_and_wait(c: TestClient) -> int:
-    """Start an Analysis Run as `c` and return its id once it has finished with its results recorded."""
-    snap = start_and_wait(c)
+def run_and_wait(c: TestClient, timeout: float = 60) -> int:
+    """Start an Analysis Run as `c` and return its id once it has finished with its results recorded. Live LLM steps
+    (when recording) need a far longer `timeout` than replay."""
+    snap = start_and_wait(c, timeout)
     assert snap["outcome"] in ("completed", "completed_with_warnings"), snap
     return snap["run_id"]

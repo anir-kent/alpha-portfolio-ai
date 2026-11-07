@@ -1,13 +1,17 @@
-"""The seeded data Suggested Questions are recorded against, and the script that records them (sme-assistant spec:
-Replay mode). Re-record with `uv run python -m tests.fixtures.suggested_questions` after any change to a Screen Context
-builder, the platform brief, the prompt or the seeded data; it needs `APP_LLM_API_KEY` (and the live endpoint and model
-settings) in the environment or `.env`.
+"""The seeded demo data, and the script that records every LLM reply the demo replays (sme-assistant spec: Replay
+mode; ai-portfolio-rebalancing ticket 15). Re-record with `uv run python -m tests.fixtures.suggested_questions` after any
+change to a prompt, a Screen Context builder, the platform brief, the seeded data or the walkthrough; it needs
+`APP_LLM_API_KEY` (and the live endpoint and model settings, which must match RECORDED_MODEL and RECORDED_BASE_URL) in
+the environment or `.env`.
 
-The script seeds a fresh database exactly as the replay tests do, runs one Analysis Run in recorded mode (so its AI
-steps behave as they will on replay), then asks every Suggested Question on every demo screen, as every role that can
-read it, live with recording on. Identical prompts are asked once. Recordings of `assistant_answer` that no prompt uses
-any more are removed. Audit screens are skipped: their context is never byte-identical (wall-clock timestamps, and each
-turn adds an event), so their Suggested Questions do not replay.
+The script seeds a fresh database exactly as the replay tests do and runs one Analysis Run, whose AI steps (priority
+narratives, Research Tilts, rationale and memo) replay what is recorded and go live, with recording on, for anything
+that is not. It then asks every Suggested Question on every demo screen, as every role that can read it, and finally
+plays the scripted walkthrough (`scripts/walkthrough.py`) on a second fresh database, which records the calls a
+modified Recommendation and the second Analysis Run make. Identical prompts are asked once. Recordings of these tasks
+that nothing uses any more are removed. Audit screens are skipped: their context is never byte-identical (wall-clock
+timestamps, and each turn adds an event), so their Suggested Questions do not replay. Insight extraction is never
+re-recorded here: its recordings are keyed to the demo house view, not to the seed.
 """
 
 import shutil
@@ -29,7 +33,7 @@ from app.llm import (
 )
 from app.main import create_app
 from app.market_data import MarketData
-from app.prompts import ASSISTANT_ANSWER
+from app.prompts import ASSISTANT_ANSWER, PRIORITY_NARRATIVE, RECOMMENDATION_NARRATIVE, RESEARCH_TILT
 from app.rbac import ROLES
 from app.research_seed import seed_research
 from app.screen_context import SUGGESTED_QUESTIONS
@@ -44,8 +48,10 @@ LOOKTHROUGH = ROOT / "data" / "fund_lookthrough.json"
 SEED_PASSWORD = "test-only-password"
 # The model and endpoint the committed recordings were made against. The Governance model card names both, so they
 # are part of the governance prompt and its recording keys: changing them means re-recording.
-RECORDED_MODEL = "gpt-4.1-mini"
-RECORDED_BASE_URL = "https://api.openai.com/v1/"
+RECORDED_MODEL = "anthropic/claude-sonnet-5.5"
+RECORDED_BASE_URL = "https://openrouter.ai/api/v1/"
+# The tasks this script records: the Analysis Run's AI steps and the Assistant.
+RECORDED_TASKS = {t.name for t in (PRIORITY_NARRATIVE, RESEARCH_TILT, RECOMMENDATION_NARRATIVE, ASSISTANT_ANSWER)}
 
 
 def replay_settings(directory: Path) -> Settings:
@@ -83,12 +89,15 @@ def login(app, role: str) -> TestClient:
     return c
 
 
-def seed_demo(app) -> None:
+RECORDING_RUN_TIMEOUT = 1800.0  # seconds: a live Analysis Run makes ~40 LLM calls in turn
+
+
+def seed_demo(app, run_timeout: float = 60) -> None:
     """The seeded data: the synthetic Clients, the research seeds and one completed Analysis Run by the advisor."""
     shutil.copy(SNAPSHOT, app.state.settings.market_data_snapshot_path)
     seed_clients(app.state.session_factory, MarketData.load(SNAPSHOT, LOOKTHROUGH))
     seed_research(app.state.session_factory, app.state.settings.seed_dir)
-    run_and_wait(login(app, "advisor"))
+    run_and_wait(login(app, "advisor"), run_timeout)
 
 
 def demo_screens(app) -> list[dict]:
@@ -108,8 +117,8 @@ def demo_screens(app) -> list[dict]:
 
 
 class ReplayOrLive:
-    """Replays whatever is recorded; an Assistant call with no recording goes live and is recorded. Every other task
-    only replays, so the Analysis Run's AI steps behave exactly as on replay."""
+    """Replays whatever is recorded; a call to a recorded task with no recording goes live and is recorded. Every
+    other task only replays."""
 
     def __init__(self, live: OpenAICompatibleLlm):
         self.recorded = RecordedLlm(RECORDINGS)
@@ -121,11 +130,11 @@ class ReplayOrLive:
         try:
             return self.recorded.complete(request)
         except RecordingMissing:
-            if request.task != ASSISTANT_ANSWER.name:
+            if request.task not in RECORDED_TASKS:
                 raise
             return self.live.complete(request)
         finally:
-            if request.task == ASSISTANT_ANSWER.name:
+            if request.task in RECORDED_TASKS:
                 self.used.add(recording_key(request))
 
 
@@ -148,7 +157,7 @@ def record() -> int:
         app = create_app(lift_question_limits(replay_settings(Path(tmp))))
         inner: LlmClient = client
         app.state.llm = CapturingLlm(inner, app.state.session_factory, mode="recorded")
-        seed_demo(app)
+        seed_demo(app, RECORDING_RUN_TIMEOUT)
         failures = []
         for screen in demo_screens(app):
             for role in ROLES:
@@ -158,11 +167,24 @@ def record() -> int:
                     print(f"{turn['outcome']:9} {role:22} {screen['kind']:15} {question}")
                     if turn["outcome"] == "failed":
                         failures.append((role, screen, question))
-    stale = [p for p in RECORDINGS.glob(f"{ASSISTANT_ANSWER.name}-*.json") if p.stem.split("-")[-1] not in client.used]
+    from scripts.walkthrough import walk  # here, not at the top: the walkthrough imports this module
+
+    broken = [check for check in walk(client, run_timeout=RECORDING_RUN_TIMEOUT) if not check.ok]
+    for check in broken:
+        print(f"walkthrough FAIL {check.act}: {check.claim} [{check.evidence}]")
+    stale = [
+        p
+        for task in RECORDED_TASKS
+        for p in RECORDINGS.glob(f"{task}-*.json")
+        if p.stem.split("-")[-1] not in client.used
+    ]
     for path in stale:
         path.unlink()
-    print(f"{len(client.used)} recordings in use, {len(stale)} stale removed, {len(failures)} failed")
-    return 1 if failures else 0
+    print(
+        f"{len(client.used)} recordings in use, {len(stale)} stale removed, {len(failures)} failed Questions, "
+        f"{len(broken)} failed walkthrough claims"
+    )
+    return 1 if failures or broken else 0
 
 
 if __name__ == "__main__":

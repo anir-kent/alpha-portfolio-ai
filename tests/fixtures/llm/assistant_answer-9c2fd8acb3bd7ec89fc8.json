@@ -1,0 +1,34 @@
+{
+  "content": {
+    "answer_markdown": "**Post-trade Suitability status: breach.** One of the seven rules still fails after the proposed trades.\n\n- **SR-02 Single-position limit: breach.** XOM would be 11.63% of the Portfolio against a 10% limit.\n- **Pass:** SR-01 Maximum equity share (equity 46.5% against a 55% cap), SR-03 Sector concentration (Energy 22.08% including look-through against 30%), SR-04 Minimum cash reserve (cash 10.5% against a 3% floor and 4.6% liquidity needs), SR-05 Client Restrictions (none violated), SR-06 Horizon check, and SR-07 Taxable-gain warning (8.29% against a 15% warning line).\n\nThe post-trade asset-class drift is within tolerance, but the plan still leaves the XOM single-position breach. Reviewers at the Advisor, Compliance and Committee steps will see this. I can't approve or change anything, so decisions are made on the Approvals screen.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "post_trade_drift.equity.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "post_trade_drift.cash.actual_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "After the proposed trades, equity is 46.5%, bonds 43.0% and cash 10.5% of the Portfolio."
+      }
+    ],
+    "follow_up_questions": [
+      "Which Trade Lines involve XOM?",
+      "Why does this Recommendation need Compliance approval?",
+      "How does the post-trade drift compare with the current drift?"
+    ],
+    "in_scope": true
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer"
+}

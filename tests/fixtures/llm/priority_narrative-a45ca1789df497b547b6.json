@@ -1,0 +1,71 @@
+{
+  "content": {
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "priority_score",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.drift.points",
+            "kind": "engine"
+          }
+        ],
+        "text": "Priority score is 90.0, with portfolio drift contributing 40.0 points."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.drift_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Bonds sit at 35.1% against a 25.0% target, a drift of 10.1 pp."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.equity.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.equity.target_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "Equity is at 62.69% against a 70.0% target, which leaves it underweight."
+      },
+      {
+        "asset": "Consumer Staples",
+        "citations": [
+          {
+            "figure": "exposure.sector.Consumer Staples",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "We are negative on Consumer Staples.",
+            "report_id": "RPT-HV-MERIDIAN-Q4-2026"
+          }
+        ],
+        "text": "Consumer Staples is 9.17% of the portfolio, and Meridian's research is negative on the sector."
+      }
+    ]
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative"
+}

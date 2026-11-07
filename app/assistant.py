@@ -101,7 +101,7 @@ def _replay_miss(error: LlmError) -> bool:
 
 
 class AssistantReply(BaseModel):
-    """The reply schema of `assistant_answer@v2` (unchanged since v1)."""
+    """The reply schema of `assistant_answer@v3` (v3 declared the citation shapes; the fields are unchanged since v1)."""
 
     in_scope: bool
     answer_markdown: str = ""  # an out-of-scope reply may leave the rest out: the platform shows its own refusal

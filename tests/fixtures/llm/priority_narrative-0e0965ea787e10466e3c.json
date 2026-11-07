@@ -1,0 +1,75 @@
+{
+  "content": {
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "priority_score",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.risk.points",
+            "kind": "engine"
+          }
+        ],
+        "text": "The priority score is 60.08, with the largest contribution coming from risk at 30.0 points."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "portfolio_drift_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.target_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "Portfolio drift is 4.06 pp, driven by bonds at 60.94% against a 65.0% target."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.cash.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.drift_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "Cash is 18.27% against a 15.0% target, leaving 3.27 pp of excess that could be put to work."
+      },
+      {
+        "asset": "Consumer Staples",
+        "citations": [
+          {
+            "figure": "exposure.sector.Consumer Staples",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "We are negative on Consumer Staples.",
+            "report_id": "RPT-HV-MERIDIAN-Q4-2026"
+          }
+        ],
+        "text": "Consumer Staples is 6.53% of the portfolio, and Meridian is negative on the sector."
+      }
+    ]
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative"
+}

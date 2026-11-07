@@ -19,8 +19,5 @@ export const NAV: NavItem[] = [
 
 export const visibleNav = (permissions: string[]) => NAV.filter((n) => permissions.includes(n.requires));
 
-/** Where "/" lands. A role whose only screen is Research opens on it; every other role keeps the placeholder until it picks a section. */
-export const landingRoute = (permissions: string[]): string | null => {
-  const items = visibleNav(permissions);
-  return items.length === 1 && items[0].to === "/research" ? items[0].to : null;
-};
+/** Where "/" (and any URL the role cannot open) lands: the role's first screen in nav order. */
+export const landingRoute = (permissions: string[]): string | null => visibleNav(permissions)[0]?.to ?? null;

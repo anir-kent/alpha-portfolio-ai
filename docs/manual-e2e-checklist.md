@@ -5,11 +5,12 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 ## Setup
 
 - [x] `source .venv/bin/activate`
-- [ ] `uv run python -m app.seeder` and `uv run python -m app.research_seed`
-- [ ] `uv run uvicorn app.main:create_app --factory --port 8000`
+- [ ] `uv run python -m scripts.walkthrough` passes (the same story through the API, on a fresh throwaway seed)
+- [ ] `rm -f data/app.db`, then `uv run python -m app.seeder` and `uv run python -m app.research_seed`
+- [ ] `APP_LLM_MODE=recorded APP_LLM_RECORDINGS_DIR=tests/fixtures/llm uv run uvicorn app.main:create_app --factory --port 8000`
 - [x] `cd frontend && npm run dev` -> <http://localhost:5173>
 - [x] Log in with username = role name (`advisor`, `compliance_officer`, ...) and the `APP_SEED_USER_PASSWORD` password
-- [x] LLM mode known: live (AI steps work) or recorded (AI steps show "failed", rest still works)
+- [ ] LLM mode known: recorded replays the first Analysis Run's AI steps on a fresh seed (anything else shows "failed", the rest still works); live calls OpenRouter
 
 ## Advisor: queue (C001-C005 are the planted scenarios)
 
@@ -57,7 +58,7 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] On `/portfolios/C001` the drawer header reads "Portfolio C001"; on a screen that publishes no context (e.g. a Recommendation's Lineage page) it reads "No context on this screen" and the Question box is disabled
 - [ ] Ask "Which asset class drives the drift?" on C001: "Thinking…" shows, then the Answer renders as Markdown (bold, lists) with no raw HTML; follow-up questions fill the Question box when clicked
 - [ ] Ask "Should I buy NVDA?": the fixed refusal shows ("I can only help with questions about this platform…"), never the model's text
-- [ ] As auditor, the turn's LLM Exchange (task `assistant_answer`, `assistant_answer@v2`) is listed on LLM Exchanges with no Client name or email in its prompt, an `assistant.answered` or `assistant.refused` Audit Event references it, and Verify chain passes
+- [ ] As auditor, the turn's LLM Exchange (task `assistant_answer`, `assistant_answer@v3`) is listed on LLM Exchanges with no Client name or email in its prompt, an `assistant.answered` or `assistant.refused` Audit Event references it, and Verify chain passes
 - [ ] Ask two Questions on C001, then reload the page: reopening the drawer shows both turns in order
 - [ ] Ask on C001, open `/portfolios/C002` and ask again: a "Context changed · Portfolio C002" divider separates the turns; the earlier turn still reads as asked on C001; a follow-up ("and why?") gets an Answer that uses the earlier turn (its Exchange prompt has a CONVERSATION SO FAR block with text only, no earlier Screen Context)
 - [ ] Switch role (logout) and log back in: the drawer is empty, and the first Question is turn 1 of a new Conversation
@@ -83,7 +84,7 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] As auditor on `/llm-exchanges`, open an Exchange: the header reads "LLM Exchange N"; ask "What did the model see?": the new turn's Exchange prompt holds the opened Exchange's system text, prompt and reply fenced between `<<<LLM_EXCHANGE ...>>>` and `<<<END_LLM_EXCHANGE>>>`. Closing the Exchange returns the header to "LLM Exchanges", and the prompt then carries no Exchange body
 - [ ] As platform_owner on `/governance`, ask "Which model and prompt versions are in use?": the Answer matches the model card
 - [ ] As platform_owner on `/config` and `/health`, ask "How does an Analysis Run work?": the Answer explains it from the platform brief, and the turn's Exchange prompt holds no config values or health figures, and the Answer has no Claims
-- [ ] As auditor on `/governance`, the Assistant panel shows `assistant_answer@v2`, the scope policy, the five limits, and the latest live eval (refusal rate, false refusals, ungrounded-Claim rate, failed turns, injection leaks) with no "run against" warning
+- [ ] As auditor on `/governance`, the Assistant panel shows `assistant_answer@v3`, the scope policy, the five limits, and the latest live eval (refusal rate, false refusals, ungrounded-Claim rate, failed turns, injection leaks) with no "run against" warning
 
 ## Assistant (Suggested Questions and replay mode)
 
@@ -106,11 +107,11 @@ Setup: `APP_ASSISTANT_QUESTION_MAX_CHARS=40`, `APP_ASSISTANT_QUESTIONS_PER_CONVE
 
 ## Approvals
 
-- [ ] C002/C003 (no breach, not high-impact): Advisor accept -> Approved
-- [ ] Modify Trade Lines -> new linked version, suitability re-run, breach warning shown
-- [ ] C004: Advisor accept -> Pending Compliance
+- [ ] C017 (no breach, not high-impact): Advisor accept -> Approved
+- [ ] C003: modify Trade Lines (sell all SGOV, buy XLK) -> new linked version, suitability re-run, breach warning shown
+- [ ] C002: Advisor accept -> Pending Compliance (SR-02 still breached); C004 has no Recommendation (drift in band), its SR-05 XOM breach shows on the drill-down
 - [ ] Compliance sees rule ID, limit, actual, Trade Line, warnings, restrictions, grounding flags
-- [ ] Compliance approve without rationale is refused; with rationale works; block works
+- [ ] Compliance approve without rationale is refused; with rationale works; block works (C009)
 - [ ] Compliance cannot act before the Advisor has decided
 - [ ] High-impact (turnover >= 15% or line >= 10%) reaches Investment Committee with thresholds visible
 - [ ] Committee approve/reject needs a rationale
@@ -170,10 +171,10 @@ Guide: Act 11. Four uploads of the demo house view (`tests/fixtures/house_view_d
 
 ### Landing and access
 
-- [ ] Sign-in screen offers Research Analyst; logging in as `research_analyst` lands on the Research screen's To review tab (URL `/research`), not the "Select a section" placeholder, even when the tab was left on another role's page (e.g. `/queue`)
+- [ ] Sign-in screen offers Research Analyst; logging in as `research_analyst` lands on the Research screen's To review tab (URL `/research`), even when the tab was left on another role's page (e.g. `/queue`)
 - [ ] Nav shows a single Research item under RESEARCH; it opens on the To review tab (`/research`), with Reports as the second tab (`/research/reports`); the Research nav item stays active on both and on Report detail
 - [ ] `research_analyst` sees an Upload Report button in the Research header; nothing else shows it
-- [ ] `advisor` and `auditor`: no Research item in the nav, and opening `/research` or `/research/reports` shows the placeholder, not a Research tab
+- [ ] `advisor` and `auditor`: no Research item in the nav, and opening `/research` or `/research/reports` returns them to their own first screen (Queue, Audit), not a Research tab
 
 ### Before any upload: To review, the library and a seeded Report
 
@@ -252,5 +253,5 @@ Guide: Act 11. Four uploads of the demo house view (`tests/fixtures/house_view_d
 ## Notes
 
 - Live mode costs money and the first run is slower (one LLM call per portfolio narrative)
-- Config and Health nav items hit the placeholder page (no routes in `main.tsx`)
-- README says Anthropic is the default provider; confirm `.env` is intentional
+- Config and Health are read-only screens; changes go through `PATCH /api/config`
+- Live mode defaults to OpenRouter (`anthropic/claude-sonnet-5.5`); another model or endpoint stops the recordings replaying

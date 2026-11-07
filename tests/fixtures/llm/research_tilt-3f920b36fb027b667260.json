@@ -1,0 +1,104 @@
+{
+  "content": {
+    "tilts": [
+      {
+        "impact": "tailwind",
+        "insight_id": 1,
+        "tilt_pp": 0.2
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 2,
+        "tilt_pp": 0.1
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 3,
+        "tilt_pp": 0.2
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 4,
+        "tilt_pp": 0.3
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 5,
+        "tilt_pp": 0.2
+      },
+      {
+        "impact": "headwind",
+        "insight_id": 6,
+        "tilt_pp": -0.1
+      },
+      {
+        "impact": "headwind",
+        "insight_id": 7,
+        "tilt_pp": -0.5
+      },
+      {
+        "impact": "neutral",
+        "insight_id": 8,
+        "tilt_pp": 0.0
+      },
+      {
+        "impact": "headwind",
+        "insight_id": 9,
+        "tilt_pp": -1.5
+      },
+      {
+        "impact": "headwind",
+        "insight_id": 10,
+        "tilt_pp": -0.1
+      },
+      {
+        "impact": "headwind",
+        "insight_id": 11,
+        "tilt_pp": -0.1
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 12,
+        "tilt_pp": 1.5
+      },
+      {
+        "impact": "neutral",
+        "insight_id": 13,
+        "tilt_pp": 0.0
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 14,
+        "tilt_pp": 1.0
+      },
+      {
+        "impact": "headwind",
+        "insight_id": 15,
+        "tilt_pp": -0.1
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 16,
+        "tilt_pp": 0.3
+      },
+      {
+        "impact": "headwind",
+        "insight_id": 17,
+        "tilt_pp": -2.0
+      },
+      {
+        "impact": "tailwind",
+        "insight_id": 18,
+        "tilt_pp": 0.3
+      },
+      {
+        "impact": "headwind",
+        "insight_id": 19,
+        "tilt_pp": -0.8
+      }
+    ]
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "research_tilt@v1",
+  "task": "research_tilt"
+}

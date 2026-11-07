@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "./api/client";
 import { ExchangeDrawer } from "./ExchangeDrawer";
@@ -27,14 +27,34 @@ export function exchangeIdOf(n: Node): number | null {
   return typeof id === "number" ? id : null;
 }
 
+/** An Insight's extraction folds into the card of the Insight Review that decided it, so the Insight column shows one card per
+ * Insight instead of two. `folded`: extraction id -> its review; `extractionOf`: review id -> its extraction. */
+function foldExtractions(nodes: Node[]): { folded: Map<number, Node>; extractionOf: Map<number, Node> } {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const folded = new Map<number, Node>();
+  const extractionOf = new Map<number, Node>();
+  for (const n of nodes) {
+    if (n.type !== "insight_approved" && n.type !== "insight_rejected") continue;
+    for (const p of n.parent_ids) {
+      const parent = byId.get(p);
+      if (parent?.type !== "insight_extracted") continue;
+      folded.set(p, n);
+      extractionOf.set(n.id, parent);
+    }
+  }
+  return { folded, extractionOf };
+}
+
 function NodeCard({
   n,
   refCb,
   onView,
+  extraction,
 }: {
   n: Node;
   refCb: (el: HTMLLIElement | null) => void;
   onView?: (id: number) => void;
+  extraction?: Node;
 }) {
   const ai = n.actor.model != null;
   const exchangeId = exchangeIdOf(n);
@@ -87,6 +107,13 @@ function NodeCard({
         </blockquote>
       )}
       {typeof n.payload.rationale === "string" && <p className="mt-1">Rationale: {n.payload.rationale}</p>}
+      {extraction && (
+        <p className="mt-1 text-[0.7692rem] text-ink-3">
+          Extracted <span className="mono">#{extraction.id}</span> by {extraction.actor.name}
+          {extraction.actor.model && <span className="mono text-ai"> · {extraction.actor.model}</span>} at{" "}
+          <span className="mono">{extraction.timestamp}</span>
+        </p>
+      )}
       <p className="mt-1 text-[0.7692rem] text-ink-3">
         Derived from: {n.parent_ids.length ? n.parent_ids.map((p) => `#${p}`).join(", ") : "—"}
       </p>
@@ -101,15 +128,22 @@ function Dag({ nodes, onView }: { nodes: Node[]; onView?: (id: number) => void }
   const [edges, setEdges] = useState<{ d: string; key: string; override: boolean }[]>([]);
   const [size, setSize] = useState({ w: 0, h: 0 });
 
+  const { folded, extractionOf } = useMemo(() => foldExtractions(nodes), [nodes]);
+
   useLayoutEffect(() => {
+    // A link to or from a folded extraction is drawn to or from the review card it folded into.
+    const cardOf = (id: number) => folded.get(id)?.id ?? id;
     const measure = () => {
       const box = wrap.current?.getBoundingClientRect();
       if (!box) return;
       const next: typeof edges = [];
       for (const n of nodes) {
+        if (folded.has(n.id)) continue;
         const to = els.current.get(n.id)?.getBoundingClientRect();
         if (!to) continue;
-        for (const p of n.parent_ids) {
+        for (const parent of n.parent_ids) {
+          const p = cardOf(parent);
+          if (p === n.id) continue; // the folded extraction itself
           const from = els.current.get(p)?.getBoundingClientRect();
           if (!from) continue;
           const x1 = from.right - box.left,
@@ -130,7 +164,7 @@ function Dag({ nodes, onView }: { nodes: Node[]; onView?: (id: number) => void }
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, [nodes]);
+  }, [nodes, folded]);
 
   return (
     <div ref={wrap} className="relative overflow-x-auto">
@@ -141,7 +175,7 @@ function Dag({ nodes, onView }: { nodes: Node[]; onView?: (id: number) => void }
       </svg>
       <div className="grid min-w-[62rem] grid-cols-5 gap-x-8">
         {COLUMNS.map((stages, i) => {
-          const col = nodes.filter((n) => stages.includes(n.stage));
+          const col = nodes.filter((n) => stages.includes(n.stage) && !folded.has(n.id));
           return (
             <div key={COLUMN_TITLE[i]}>
               <p className="eyebrow mb-1.5">{COLUMN_TITLE[i]}</p>
@@ -151,6 +185,7 @@ function Dag({ nodes, onView }: { nodes: Node[]; onView?: (id: number) => void }
                     key={n.id}
                     n={n}
                     onView={onView}
+                    extraction={extractionOf.get(n.id)}
                     refCb={(el) => {
                       if (el) els.current.set(n.id, el);
                       else els.current.delete(n.id);

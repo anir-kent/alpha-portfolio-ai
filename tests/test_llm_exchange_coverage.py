@@ -115,3 +115,19 @@ def test_no_client_name_or_email_ever_appears_in_a_captured_prompt(app, login, c
         prompt = ex["system_text"] + "\n" + ex["user_prompt"]
         leaked = [f for f in forbidden if f.lower() in prompt.lower()]
         assert not leaked, (ex["task"], leaked)
+
+
+def test_a_run_started_from_the_cli_captures_every_ai_step_as_an_exchange_too(app, settings, seeded, login):
+    """`python -m app.analysis` must not be a way round capture: on the committed recordings its AI steps succeed, and
+    every one of them is an Exchange the Auditor can open, anchored in the chain."""
+    from app import analysis
+    from app.research_seed import seed_research
+
+    seed_research(app.state.session_factory, settings.seed_dir)
+    analysis.main(settings)
+    auditor = login("auditor")
+    events = step_events(app, *STEPS)
+    assert events, "the run made no AI step"
+    assert all(HEX64.match(payload.get("exchange_hash") or "") for _, payload in events), events[:1]
+    verified = auditor.get("/api/audit/verify").json()
+    assert verified["valid"] and verified["exchanges_checked"] == len(events)

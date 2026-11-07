@@ -17,7 +17,7 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import audit, config_service, grounding, llm, prompts
+from app import audit, config_service, grounding, prompts
 from app.db import (
     AuditEventRow,
     FixtureRunRow,
@@ -242,7 +242,7 @@ class ModelCard(BaseModel):
     model: str
     llm_mode: str
     llm_endpoint: str
-    temperature: float
+    temperature: float | None  # None: not sent, the provider's default
     tilt_bound_pp: float
     current_prompt_versions: list[str]
     controls: list[str]
@@ -254,7 +254,7 @@ def model_card(db: Session, settings: Settings) -> ModelCard:
         model=settings.llm_model,
         llm_mode=settings.llm_mode,
         llm_endpoint=urlsplit(settings.llm_base_url).hostname or "",
-        temperature=llm.TEMPERATURE,
+        temperature=settings.llm_temperature,
         tilt_bound_pp=config_service.get_config(db).tilt_bound_pp,
         current_prompt_versions=[p.label for p in prompts.ALL],
         controls=[

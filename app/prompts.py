@@ -100,7 +100,7 @@ Rules:
 
 ASSISTANT_ANSWER = Prompt(
     name="assistant_answer",
-    version="v2",
+    version="v3",  # v3: the reply schema declares both citation shapes (strict providers sent `{}` for an open object)
     system="""You are the Assistant of a wealth-management advisory platform. You answer one Question from a subject
 matter expert (an Advisor, Portfolio Manager, Compliance Officer, Research Analyst or Auditor) about the screen they are
 looking at.
@@ -148,6 +148,30 @@ you answer how the platform works from PLATFORM BRIEF alone, with no claims. A "
 most three short follow-up Questions.""",
 )
 
+# The two citation shapes, as `app.grounding.ReportCitation` and `EngineCitation` read them. Declared in full because a
+# provider that enforces the schema strictly can only send properties the schema names.
+CITATION_SCHEMA: dict = {
+    "anyOf": [
+        {
+            "type": "object",
+            "required": ["kind", "report_id", "page", "quote"],
+            "properties": {
+                "kind": {"const": "report"},
+                "report_id": {"type": "string"},
+                "page": {"type": "integer"},
+                "quote": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+        {
+            "type": "object",
+            "required": ["kind", "figure"],
+            "properties": {"kind": {"const": "engine"}, "figure": {"type": "string"}},
+            "additionalProperties": False,
+        },
+    ]
+}
+
 ASSISTANT_REPLY_SCHEMA: dict = {
     "type": "object",
     "required": ["in_scope", "answer_markdown", "claims", "follow_up_questions"],
@@ -162,7 +186,7 @@ ASSISTANT_REPLY_SCHEMA: dict = {
                 "properties": {
                     "text": {"type": "string"},
                     "asset": {"type": ["string", "null"]},
-                    "citations": {"type": "array", "items": {"type": "object"}},
+                    "citations": {"type": "array", "items": CITATION_SCHEMA},
                 },
             },
         },

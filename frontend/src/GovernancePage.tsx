@@ -69,7 +69,7 @@ export function GovernancePage({ canRunFixtures }: { canRunFixtures: boolean }) 
             <dt className="text-ink-3">Endpoint</dt>
             <dd className="mono">{card.llm_endpoint}</dd>
             <dt className="text-ink-3">Temperature</dt>
-            <dd className="mono">{card.temperature}</dd>
+            <dd className="mono">{card.temperature ?? "provider default (not sent)"}</dd>
             <dt className="text-ink-3">Research Tilt bound</dt>
             <dd className="mono">±{card.tilt_bound_pp} pp</dd>
             <dt className="text-ink-3">Current prompts</dt>

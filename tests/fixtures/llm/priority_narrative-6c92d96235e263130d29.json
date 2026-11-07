@@ -1,0 +1,87 @@
+{
+  "content": {
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "priority_score",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.opportunity.points",
+            "kind": "engine"
+          },
+          {
+            "figure": "component.risk.points",
+            "kind": "engine"
+          }
+        ],
+        "text": "The priority score is 26.06, with the opportunity component contributing 12.55 points and the risk component 8.81 points."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.equity.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.equity.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.target_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "Equity sits at 18.82% against a 20.0% target, while cash is 15.68% against a 15.0% target."
+      },
+      {
+        "asset": "Utilities",
+        "citations": [
+          {
+            "figure": "exposure.sector.Utilities",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 3,
+            "quote": "Valuation levels are not attractive.",
+            "report_id": "RPT-FID-Q2-2026"
+          }
+        ],
+        "text": "Utilities make up 1.47% of the portfolio, and the research view on the sector is negative with high confidence."
+      },
+      {
+        "asset": "Real Estate",
+        "citations": [
+          {
+            "figure": "exposure.sector.Real Estate",
+            "kind": "engine"
+          },
+          {
+            "kind": "report",
+            "page": 3,
+            "quote": "High valuation spreads suggest attractive risk-reward.",
+            "report_id": "RPT-FID-Q2-2026"
+          },
+          {
+            "kind": "report",
+            "page": 1,
+            "quote": "We are underweight Real Estate. Higher financing costs continue to pressure valuations.",
+            "report_id": "RPT-HV-NORTHWIND-Q4-2026"
+          }
+        ],
+        "text": "Real Estate is 3.43% of the portfolio, and the research views conflict: one report sees attractive risk-reward, another is underweight."
+      }
+    ]
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative"
+}

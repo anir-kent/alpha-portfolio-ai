@@ -1,0 +1,15 @@
+{
+  "content": {
+    "answer_markdown": "A draft Recommendation, created when a Portfolio falls outside the tolerance band of its Client's Risk Profile, passes through three decisions:\n\n1. **Advisor** decision\n2. **Compliance** decision\n3. **Investment Committee** decision\n\nEvery step is recorded as an Audit Event in a hash-chained log, and every model call is kept as an LLM Exchange. Nothing is executed from the platform, and this Assistant is read-only, so it cannot make or draft decisions. Decisions are made on the Approvals screen.",
+    "claims": [],
+    "follow_up_questions": [
+      "When does a Portfolio get a draft Recommendation?",
+      "What is recorded in an Audit Event?",
+      "How does the grounding validator check claims?"
+    ],
+    "in_scope": true
+  },
+  "model": "anthropic/claude-sonnet-5.5",
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer"
+}

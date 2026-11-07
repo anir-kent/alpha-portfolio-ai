@@ -105,8 +105,8 @@ function PostTradeRules({ rec }: { rec: Rec }) {
         <ul className="mt-1 space-y-1">
           {shown.map((r) => (
             <li key={r.rule_id} className="panel px-2 py-1">
-              <span className="mono text-ink-3">{r.rule_id}</span> <span className="font-medium">{r.name}</span>{" "}
-              <Pill tone={RULE_TONE[r.status]}>{r.status}</Pill>
+              <span className="mono whitespace-nowrap text-ink-3">{r.rule_id}</span>{" "}
+              <span className="font-medium">{r.name}</span> <Pill tone={RULE_TONE[r.status]}>{r.status}</Pill>
               <p className="text-ink-2">{r.message}</p>
             </li>
           ))}
@@ -565,7 +565,7 @@ export function RecommendationPanel({ p, canDecide }: { p: Detail; canDecide: bo
           <ul className="list-disc pl-5">
             {newBreaches.map((r) => (
               <li key={r.rule_id}>
-                <span className="mono">{r.rule_id}</span> {r.name}: {r.message}
+                <span className="mono whitespace-nowrap">{r.rule_id}</span> {r.name}: {r.message}
               </li>
             ))}
           </ul>
