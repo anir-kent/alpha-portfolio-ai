@@ -325,7 +325,12 @@ function Shell({ username, role, permissions }: { username: string; role: string
             {permissions.includes("report:read") && (
               <Route
                 path="/research/reports/:reportId"
-                element={<ReportDetailPage canUpload={permissions.includes("report:upload")} />}
+                element={
+                  <ReportDetailPage
+                    canUpload={permissions.includes("report:upload")}
+                    canReview={permissions.includes("insight:approve")}
+                  />
+                }
               />
             )}
             {permissions.includes("audit:read") && <Route path="/audit" element={<AuditPage />} />}

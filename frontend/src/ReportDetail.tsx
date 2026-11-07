@@ -1,8 +1,11 @@
 /** Report detail: a Report's metadata and every Insight in the review layout, each beside the full text of its cited
- * page with the passage highlighted. Read-only; the Insight Review actions land in the detail pane (ticket 04). A
- * failed extraction offers Upload again. Selection, status filter and the page being read all live in the URL, so a reload or a shared link restores them. */
-import { useEffect, useMemo, useRef } from "react";
+ * page with the passage highlighted. An Insight awaiting review offers Approve and Reject at the top of the detail pane;
+ * once the server confirms, the selection advances to the next Insight awaiting review in this Report. A failed
+ * extraction offers Upload again. Selection, status filter and the page being read all live in the URL, so a reload or a
+ * shared link restores them. */
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
+import { ReviewActions } from "./InsightReview";
 import { findPassage } from "./passage";
 import {
   CONFIDENCE,
@@ -162,15 +165,24 @@ function InsightList({
   );
 }
 
+/** The next Insight awaiting review after `current` in page order, wrapping to the start; null when none remain. */
+function nextAwaitingReview(ordered: Insight[], current: Insight): Insight | null {
+  const waiting = ordered.filter((i) => i.status === "pending" && i.id !== current.id);
+  return waiting.find((i) => pageOrder(i, current) > 0) ?? waiting[0] ?? null;
+}
+
+/** Shown in place of the actions to anyone who cannot review Insights. */
+function AwaitingReview() {
+  return (
+    <p className="callout callout-info">
+      <Icon name="approvals" size={14} />
+      Awaiting review. No Insight informs a Portfolio until a Research Analyst approves it.
+    </p>
+  );
+}
+
 /** The read-only record of an Insight Review: outcome, reviewer, time and note. */
 function ReviewRecord({ insight }: { insight: Insight }) {
-  if (insight.status === "pending")
-    return (
-      <p className="callout callout-info">
-        <Icon name="approvals" size={14} />
-        Awaiting review. No Insight informs a Portfolio until a Research Analyst approves it.
-      </p>
-    );
   const status = STATUS[insight.status];
   return (
     <section aria-label="Insight Review" className="panel">
@@ -197,10 +209,13 @@ function ReviewRecord({ insight }: { insight: Insight }) {
   );
 }
 
-function InsightDetail({ insight }: { insight: Insight }) {
+/** The selected Insight. `review` sits at the top: the actions while it awaits review, else its Insight Review record.
+ * The pane takes focus after an Insight Review, so keyboard and screen-reader users land on what is shown next. */
+function InsightDetail({ insight, review, ref }: { insight: Insight; review: ReactNode; ref: Ref<HTMLElement> }) {
   return (
-    <section className="panel" aria-label={`Insight ${insight.subject}`}>
+    <section ref={ref} tabIndex={-1} className="panel outline-none" aria-label={`Insight ${insight.subject}`}>
       <div className="panel-body space-y-3">
+        {review}
         <div>
           <p className="eyebrow">
             {SUBJECT_KIND[insight.subject_kind]} · Insight <span className="mono">#{insight.id}</span>
@@ -218,7 +233,6 @@ function InsightDetail({ insight }: { insight: Insight }) {
           <figcaption className="eyebrow">Cited passage</figcaption>
           <blockquote className="quote">{insight.passage}</blockquote>
         </figure>
-        <ReviewRecord insight={insight} />
       </div>
     </section>
   );
@@ -359,7 +373,9 @@ function PageReader({
   );
 }
 
-function ReportDetail({ report, canUpload }: { report: Report; canUpload: boolean }) {
+type Notice = { tone: "pos" | "info"; text: string };
+
+function ReportDetail({ report, canUpload, canReview }: { report: Report; canUpload: boolean; canReview: boolean }) {
   const [params, setParams] = useSearchParams();
   const rawFilter = params.get("status");
   const filter: Filter = FILTERS.some((f) => f.value === rawFilter) ? (rawFilter as Filter) : "all";
@@ -392,6 +408,62 @@ function ReportDetail({ report, canUpload }: { report: Report; canUpload: boolea
       { replace: true },
     );
 
+  // What the last Insight Review did, said in text; it stays until dismissed, the next review or another selection.
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const detailRef = useRef<HTMLElement>(null);
+  const [focusRequests, setFocusRequests] = useState(0);
+  useEffect(() => {
+    if (focusRequests > 0) detailRef.current?.focus({ preventScroll: true });
+  }, [focusRequests]);
+  // A save can finish after the Analyst picked another Insight, or after a refetch moved statuses; the review callbacks
+  // read what is on screen now, not what was there when Approve or Reject was pressed.
+  const latest = useRef({ ordered, selectedId: selected?.id ?? null });
+  useEffect(() => {
+    latest.current = { ordered, selectedId: selected?.id ?? null };
+  });
+
+  /** After an Insight Review, select the next Insight awaiting review, or keep this one (now read-only) if none remain.
+   * Returns false, and changes nothing, when the Analyst has already moved on to another Insight. */
+  const advance = (from: Insight): { moved: boolean; next: Insight | null } => {
+    if (latest.current.selectedId !== from.id) return { moved: false, next: null };
+    const next = nextAwaitingReview(latest.current.ordered, from);
+    update({ insight: String((next ?? from).id), page: null });
+    setFocusRequests((n) => n + 1);
+    return { moved: true, next };
+  };
+  const onReviewed = (reviewed: Insight) => {
+    const { moved, next } = advance(reviewed);
+    if (!moved) return;
+    const outcome = reviewed.status === "approved" ? "Approved" : "Rejected";
+    setNotice({
+      tone: "pos",
+      text: `${outcome} ${reviewed.subject} (Insight #${reviewed.id}).${next ? " Showing the next Insight awaiting review." : ""}`,
+    });
+  };
+  const onAlreadyReviewed = (current: Insight) => {
+    if (!advance(current).moved) return;
+    setNotice({
+      tone: "info",
+      text: `Already reviewed by someone else: your Insight Review of ${current.subject} (Insight #${current.id}) was not saved. Refreshing the Report to show theirs.`,
+    });
+  };
+
+  const counts = insightCounts(report);
+  const fullyReviewed = canReview && report.insights.length > 0 && counts.pending === 0;
+  const review =
+    selected === null ? null : selected.status !== "pending" ? (
+      <ReviewRecord insight={selected} />
+    ) : canReview ? (
+      <ReviewActions
+        key={selected.id}
+        insight={selected}
+        onReviewed={onReviewed}
+        onAlreadyReviewed={() => onAlreadyReviewed(selected)}
+      />
+    ) : (
+      <AwaitingReview />
+    );
+
   const failed = report.extraction_status === "failed";
   return (
     <div>
@@ -422,10 +494,36 @@ function ReportDetail({ report, canUpload }: { report: Report; canUpload: boolea
             selectedId={selected?.id ?? null}
             // A page read for the old selection would outlive it when the filter moves the default selection.
             onFilter={(f) => update({ status: f === "all" ? null : f, page: null })}
-            onSelect={(id) => update({ insight: String(id), page: null })}
+            onSelect={(id) => {
+              setNotice(null);
+              update({ insight: String(id), page: null });
+            }}
           />
         )}
         <div className="min-w-0 space-y-3">
+          <div aria-live="polite" className="empty:hidden">
+            {notice && (
+              <p className={`callout callout-${notice.tone} items-start`}>
+                <Icon name={notice.tone === "pos" ? "approvals" : "alert"} size={14} />
+                <span className="flex-1">{notice.text}</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm -my-1 !px-2"
+                  aria-label="Dismiss"
+                  onClick={() => setNotice(null)}
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              </p>
+            )}
+          </div>
+          {fullyReviewed && (
+            <p className="callout callout-pos">
+              <Icon name="approvals" size={14} />
+              This Report is fully reviewed: none of its <span className="mono">{report.insights.length}</span> Insights
+              are awaiting review.
+            </p>
+          )}
           {unknownInsight && (
             <Panel label="Insight not found">
               <Empty>
@@ -442,7 +540,7 @@ function ReportDetail({ report, canUpload }: { report: Report; canUpload: boolea
               )}
             </Panel>
           )}
-          {selected && <InsightDetail insight={selected} />}
+          {selected && <InsightDetail ref={detailRef} insight={selected} review={review} />}
           {report.page_count > 0 && (
             <PageReader
               report={report}
@@ -491,8 +589,9 @@ function DetailSkeleton() {
   );
 }
 
-/** Route element for /research/reports/:reportId. `canUpload`: a failed extraction offers Upload again. */
-export function ReportDetailPage({ canUpload }: { canUpload: boolean }) {
+/** Route element for /research/reports/:reportId. `canUpload`: a failed extraction offers Upload again. `canReview`:
+ * Insights awaiting review offer Approve and Reject. */
+export function ReportDetailPage({ canUpload, canReview }: { canUpload: boolean; canReview: boolean }) {
   const { reportId = "" } = useParams();
   const reports = useReports();
 
@@ -518,5 +617,5 @@ export function ReportDetailPage({ canUpload }: { canUpload: boolean }) {
         </Panel>
       </div>
     );
-  return <ReportDetail report={report} canUpload={canUpload} />;
+  return <ReportDetail report={report} canUpload={canUpload} canReview={canReview} />;
 }

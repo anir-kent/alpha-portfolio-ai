@@ -128,7 +128,7 @@ Log in as `auditor`.
 
 These have no UI, so use `curl`, or `/docs` at http://localhost:8000/docs.
 
-- `research_analyst`: Insight Reviews still go through `POST /api/insights/{id}/decision` until the review actions land. Uploading now has a UI: Research → **Upload Report** (see the Research Analyst section of the checklist). Start the API with `APP_LLM_RECORDINGS_DIR=tests/fixtures/llm` so the demo house view (`tests/fixtures/house_view_demo.txt`) replays its committed extraction and lands with 3 Insights **pending**; any other new text has no recording and shows the failed extraction with **Upload again**. Pending Insights do not affect any tilt until approved.
+- `research_analyst`: uploading and Insight Reviews now have a UI: Research → **Upload Report**, then on the Report's detail **Approve** (optional note) or **Reject…** (required note) at the top of each Insight awaiting review (see the Research Analyst section of the checklist). The 409 race needs two browser sessions on the same Insight. Start the API with `APP_LLM_RECORDINGS_DIR=tests/fixtures/llm` so the demo house view (`tests/fixtures/house_view_demo.txt`) replays its committed extraction and lands with 3 Insights **pending**; any other new text has no recording and shows the failed extraction with **Upload again**. Pending Insights do not affect any tilt until approved.
 - `platform_owner`: `GET /api/health` and `PATCH /api/config`. Lower the tilt bound or the high-impact threshold, rerun analysis, and see the effect.
 - `portfolio_manager`: read-only access to portfolios and config.
 
