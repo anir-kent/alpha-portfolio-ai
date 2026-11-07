@@ -29,6 +29,8 @@ jobs:
       - run: uv run ruff format --check
       - run: uv run mypy
       - run: uv run pytest -q
+        env:
+          SKIP_MERMAID_TESTS: "1"  # the frontend job renders Mermaid in its architecture document check
 
   frontend:
     name: Frontend (eslint, prettier, tsc, build) and architecture document

@@ -2,6 +2,7 @@
 `check` and `regenerate` modes. Assertions are on the exit status and the reported problems only. Edits are made on
 `tmp_path` copies of the document, so the real document is never touched."""
 
+import os
 import shutil
 from pathlib import Path
 
@@ -11,7 +12,12 @@ from scripts.architecture_doc import main
 
 REPO = Path(__file__).resolve().parents[1]
 DOC = REPO / "docs" / "architecture"
-needs_npx = pytest.mark.skipif(shutil.which("npx") is None, reason="npx is unavailable, so Mermaid cannot be rendered")
+# Mermaid rendering needs Node. CI renders it once, in the frontend job's `check` step, so the backend job sets
+# SKIP_MERMAID_TESTS=1 rather than rendering again here.
+needs_npx = pytest.mark.skipif(
+    shutil.which("npx") is None or os.environ.get("SKIP_MERMAID_TESTS") == "1",
+    reason="npx is unavailable or SKIP_MERMAID_TESTS=1, so Mermaid is not rendered here",
+)
 
 
 @pytest.fixture
