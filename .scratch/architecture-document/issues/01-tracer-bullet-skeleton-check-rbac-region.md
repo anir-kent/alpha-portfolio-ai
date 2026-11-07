@@ -6,15 +6,15 @@ Precondition: work on `docs/architecture-document`, cut from `development` after
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Index file orders all sections and holds the document-control block (owner, status, TBD reviewers, version history)
 - [x] Stub files exist for §1–§12, Executive Summary, Roadmap and Appendices with their required arc42 headings
 - [x] Document build command (Python, run via `uv`) has `check` and `regenerate` modes with one-line-per-problem reporting and non-zero exit on failure
-- [ ] `check` detects: missing section/heading, broken relative link or anchor, Mermaid render failure, stale marked region
+- [x] `check` detects: missing section/heading, broken relative link or anchor, Mermaid render failure, stale marked region
 - [x] RBAC matrix region generated from the live role-permission matrix; content outside markers is byte-identical after `regenerate`
-- [ ] At least one Mermaid placeholder diagram in the skeleton renders under `check`
-- [ ] Pytest at the seam: passes on real document; reports stale region, broken link, missing section (on `tmp_path` copies); `regenerate` fixes staleness; Node-dependent tests skip with a reason when `npx` is unavailable
+- [x] At least one Mermaid placeholder diagram in the skeleton renders under `check`
+- [x] Pytest at the seam: passes on real document; reports stale region, broken link, missing section (on `tmp_path` copies); `regenerate` fixes staleness; Node-dependent tests skip with a reason when `npx` is unavailable
 - [x] CI runs `check` in the job that has Node; ruff, mypy and existing checks stay green
 
 ## Comments
@@ -35,3 +35,8 @@ Precondition: work on `docs/architecture-document`, cut from `development` after
 - `check --no-mermaid`: OK.
 - ruff, ruff format, mypy and pre-commit: all clean.
 - Each seam test was shown to fail against a sabotaged version of the behaviour it covers.
+
+**2026-11-07, Mermaid verified (Claude).** With `npx @mermaid-js/mermaid-cli` now allowed:
+- Both `@needs_npx` tests pass. All 11 seam tests pass in about 47 s on a cold mermaid-cli cache and about 2 s warm.
+- The real `check` with Mermaid on reports OK.
+- A broken diagram is reported as `03-context-and-scope.md:7: Mermaid block does not render: Error: Parse error on diagram line 7: ...rm -->|unclosed llm ((`. The message now quotes mermaid's offending source line, and the test asserts on it.

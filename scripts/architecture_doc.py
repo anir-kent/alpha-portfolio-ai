@@ -441,8 +441,12 @@ def _render(npx: str, config: Path, source: Path, output: Path) -> str | None:
     if result.returncode == 0:
         return None
     lines = [line.strip() for line in (result.stderr + result.stdout).splitlines() if line.strip()]
-    errors = [line for line in lines if "error" in line.lower()]
-    return (errors or lines or [f"mermaid-cli exited {result.returncode}"])[0]
+    first = next((n for n, line in enumerate(lines) if "error" in line.lower()), None)
+    if first is None:
+        return lines[0] if lines else f"mermaid-cli exited {result.returncode}"
+    error = lines[first].replace(" on line ", " on diagram line ")
+    context = lines[first + 1] if first + 1 < len(lines) else ""
+    return f"{error} {context}" if context.startswith("...") else error  # mermaid quotes the offending source
 
 
 # ---- modes ----

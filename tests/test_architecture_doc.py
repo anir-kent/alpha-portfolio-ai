@@ -126,6 +126,7 @@ def test_check_reports_a_mermaid_block_that_does_not_render(doc, capsys):
 
     assert code == 1
     assert "03-context-and-scope.md:7: Mermaid block does not render" in out
+    assert "unclosed llm ((" in out  # names the offending diagram source, not just a line number
 
 
 def test_check_reports_a_mistyped_marker_instead_of_silently_ignoring_the_region(doc, capsys):
