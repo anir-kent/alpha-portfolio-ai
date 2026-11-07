@@ -1,6 +1,7 @@
-/** Data and vocabulary shared by the Research screens: the Report list query, Insight counts and the pills that label
- * Reports and Insights the same way everywhere. */
+/** Data and vocabulary shared by the Research screens: the Report list query, Insight counts, the To review grouping,
+ * the Research URLs and their search params, and the pills that label Reports and Insights the same way everywhere. */
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { api } from "./api/client";
 import type { components } from "./api/schema";
 import { Icon, Pill, type Tone } from "./ui";
@@ -71,11 +72,54 @@ export function insightCounts(report: Report): InsightCounts {
   return counts;
 }
 
+/** The To review tab, where Research opens. */
+export const toReviewPath = "/research";
+/** The Reports tab: the library of every Report. */
+export const reportsPath = "/research/reports";
 /** The detail URL for a Report; the library, the To review tab and the upload dialog all link to it. */
-export const reportPath = (id: string) => `/research/reports/${encodeURIComponent(id)}`;
+export const reportPath = (id: string) => `${reportsPath}/${encodeURIComponent(id)}`;
+
+/** The Insight has had no Insight Review yet. */
+export const isAwaitingReview = (insight: Insight) => insight.status === "pending";
 
 /** Page order, then ID: the order the document was written in, stable across refetches. */
 export const pageOrder = (a: Insight, b: Insight) => a.page - b.page || a.id - b.id;
+
+/** Newest upload first; ties broken by id so the order is stable across refetches. */
+export const newestFirst = (a: Report, b: Report) =>
+  b.uploaded_at.localeCompare(a.uploaded_at) || a.id.localeCompare(b.id);
+
+/** One Report on To review with the Insights it still has awaiting review. */
+export type ToReviewGroup = { report: Report; insights: Insight[] };
+
+/** To review, built from the Report list alone: every Report with an Insight awaiting review, newest upload first, its
+ * awaiting Insights in page order. A group's length is the Report's awaiting-review count, so the inbox, its badge and
+ * the library always agree. */
+export function toReviewGroups(reports: Report[]): ToReviewGroup[] {
+  return [...reports]
+    .sort(newestFirst)
+    .map((report) => ({ report, insights: report.insights.filter(isAwaitingReview).sort(pageOrder) }))
+    .filter((g) => g.insights.length > 0);
+}
+
+/** The search params, and an update that sets (or, with null, removes) several at once. It replaces rather than pushes
+ * history, so Back leaves the screen instead of stepping through every selection. */
+export function useUrlParams() {
+  const [params, setParams] = useSearchParams();
+  const update = (changes: Record<string, string | null>) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [k, v] of Object.entries(changes)) {
+          if (v === null) next.delete(k);
+          else next.set(k, v);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  return [params, update] as const;
+}
 
 export function Outcome({ report }: { report: Report }) {
   const outcome = OUTCOME[report.extraction_status];

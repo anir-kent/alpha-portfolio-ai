@@ -6,15 +6,15 @@ See spec: "To review" is client-side aggregation; Review layout; Insight Review 
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The inbox is built from the Report list; no new API call or backend change
-- [ ] Groups are ordered by Report upload time, newest first; Insights by page then ID
-- [ ] Group headers show title, uploader, upload time and remaining count; the tab badge shows the total; both agree with the library counts at all times
-- [ ] The Research Analyst lands on To review at sign-in and when opening Research
-- [ ] Review detail and Approve/Reject behave exactly as on Report detail, including the 409 notice and inline errors
-- [ ] After an Insight Review the selection advances in inbox order; a group disappears when its last Insight is reviewed
-- [ ] The selected Insight is in the URL, so reload and deep links restore it
-- [ ] "All caught up" shows when nothing awaits review, and is visibly different from loading and error states
-- [ ] The Research Analyst checklist section gains: fresh database shows All caught up; after uploading the demo house view its Insights appear grouped in page order; reviewing the last Insight of a group removes the group and the badge reaches zero
-- [ ] Typecheck, lint, format check and build pass
+- [x] The inbox is built from the Report list; no new API call or backend change
+- [x] Groups are ordered by Report upload time, newest first; Insights by page then ID
+- [x] Group headers show title, uploader, upload time and remaining count; the tab badge shows the total; both agree with the library counts at all times
+- [x] The Research Analyst lands on To review at sign-in and when opening Research
+- [x] Review detail and Approve/Reject behave exactly as on Report detail, including the 409 notice and inline errors
+- [x] After an Insight Review the selection advances in inbox order; a group disappears when its last Insight is reviewed
+- [x] The selected Insight is in the URL, so reload and deep links restore it
+- [x] "All caught up" shows when nothing awaits review, and is visibly different from loading and error states
+- [x] The Research Analyst checklist section gains: fresh database shows All caught up; after uploading the demo house view its Insights appear grouped in page order; reviewing the last Insight of a group removes the group and the badge reaches zero
+- [x] Typecheck, lint, format check and build pass

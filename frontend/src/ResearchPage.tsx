@@ -1,6 +1,19 @@
 import { useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { KIND_LABEL, Outcome, SeedBadge, insightCounts, reportPath, useReports, type Report } from "./research";
+import {
+  KIND_LABEL,
+  Outcome,
+  SeedBadge,
+  toReviewGroups,
+  toReviewPath,
+  insightCounts,
+  reportsPath,
+  newestFirst,
+  reportPath,
+  useReports,
+  type Report,
+} from "./research";
+import { ToReviewTab } from "./ToReview";
 import { Empty, ErrorLine, Icon, PageHeader, Panel, minuteUtc } from "./ui";
 import { UploadReportButton } from "./UploadReportDialog";
 
@@ -16,9 +29,6 @@ const COLUMNS: { label: string; num?: boolean }[] = [
   { label: "Approved", num: true },
   { label: "Rejected", num: true },
 ];
-
-/** Newest upload first; ties broken by id so the order is stable across refetches. */
-const newestFirst = (a: Report, b: Report) => b.uploaded_at.localeCompare(a.uploaded_at) || a.id.localeCompare(b.id);
 
 function ReportRow({ report }: { report: Report }) {
   const navigate = useNavigate();
@@ -123,9 +133,38 @@ function ReportsTab() {
   );
 }
 
-/** The Research screen. Opens on Reports; the To review tab arrives with the Insight inbox. `canUpload`: the session
- * holds `report:upload`, so the header offers Upload Report. */
-export function ResearchPage({ canUpload }: { canUpload: boolean }) {
+export type ResearchTab = "to-review" | "reports";
+const TABS: { value: ResearchTab; text: string; path: string }[] = [
+  { value: "to-review", text: "To review", path: toReviewPath },
+  { value: "reports", text: "Reports", path: reportsPath },
+];
+
+/** The number awaiting review on the To review tab, from the same inbox groups the tab lists. Hidden while loading. */
+function AwaitingBadge() {
+  const reports = useReports();
+  if (!reports.data) return null;
+  const total = toReviewGroups(reports.data.items).reduce((n, g) => n + g.insights.length, 0);
+  return (
+    <>
+      <span className="tab-count" data-zero={total === 0} aria-hidden>
+        {total}
+      </span>
+      <span className="sr-only">, {total} awaiting review</span>
+    </>
+  );
+}
+
+/** The Research screen: To review (where it opens) and the Reports library, each with its own URL. `canUpload`: the
+ * session holds `report:upload`, so the header offers Upload Report. `canReview`: it holds `insight:approve`. */
+export function ResearchPage({
+  tab,
+  canUpload,
+  canReview,
+}: {
+  tab: ResearchTab;
+  canUpload: boolean;
+  canReview: boolean;
+}) {
   return (
     <div>
       <PageHeader
@@ -140,14 +179,15 @@ export function ResearchPage({ canUpload }: { canUpload: boolean }) {
           )
         }
       />
-      <div role="tablist" aria-label="Research sections" className="seg mb-3">
-        <button type="button" role="tab" aria-selected id="research-tab-reports" aria-controls="research-panel-reports">
-          Reports
-        </button>
-      </div>
-      <div role="tabpanel" id="research-panel-reports" aria-labelledby="research-tab-reports">
-        <ReportsTab />
-      </div>
+      <nav aria-label="Research sections" className="seg mb-3">
+        {TABS.map((t) => (
+          <Link key={t.value} to={t.path} aria-current={tab === t.value ? "page" : undefined}>
+            {t.text}
+            {t.value === "to-review" && <AwaitingBadge />}
+          </Link>
+        ))}
+      </nav>
+      {tab === "to-review" ? <ToReviewTab canReview={canReview} canUpload={canUpload} /> : <ReportsTab />}
     </div>
   );
 }

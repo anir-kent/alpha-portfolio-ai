@@ -108,14 +108,14 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 
 ## Research Analyst
 
-- [ ] Sign-in screen offers Research Analyst; logging in as `research_analyst` lands on the Research screen (URL `/research`), not the "Select a section" placeholder, even when the tab was left on another role's page (e.g. `/queue`)
-- [ ] Nav shows a single Research item under RESEARCH; the screen opens on the Reports tab
-- [ ] Reports table lists the 5 seeded Reports, newest first, each with title, kind (PDF/Text), page count, uploader, upload time (UTC), extraction outcome and Awaiting review / Approved / Rejected counts that add up to the Report's Insights
+- [ ] Sign-in screen offers Research Analyst; logging in as `research_analyst` lands on the Research screen's To review tab (URL `/research`), not the "Select a section" placeholder, even when the tab was left on another role's page (e.g. `/queue`)
+- [ ] Nav shows a single Research item under RESEARCH; it opens on the To review tab (`/research`), with Reports as the second tab (`/research/reports`); the Research nav item stays active on both and on Report detail
+- [ ] On the Reports tab, the table lists the 5 seeded Reports, newest first, each with title, kind (PDF/Text), page count, uploader, upload time (UTC), extraction outcome and Awaiting review / Approved / Rejected counts that add up to the Report's Insights
 - [ ] Every seeded Report carries a "Human-verified seed" badge and a "Seeded" outcome
 - [ ] Failed extraction (with `APP_LLM_MODE=recorded`, upload any new `.txt`, which has no recording): the Report shows a red "Extraction failed" pill with an alert icon and text (hover shows the stored error), and its row is marked
 - [ ] Throttle the network (DevTools, Slow 3G) and reload: skeleton rows show while the list loads; stop the API and reload: an error line says "Could not load Reports"
-- [ ] `advisor` and `auditor`: no Research item in the nav, and opening `/research` shows the placeholder, not the Reports table
-- [ ] Open a seeded Report (click its row or title, e.g. the Q2 research update): the header shows title, ID, kind, page count, uploader, upload time (UTC), "Seeded" and "Human-verified seed"; a "Reports" link returns to the library
+- [ ] `advisor` and `auditor`: no Research item in the nav, and opening `/research` or `/research/reports` shows the placeholder, not a Research tab
+- [ ] Open a seeded Report (click its row or title, e.g. the Q2 research update): the header shows title, ID, kind, page count, uploader, upload time (UTC), "Seeded" and "Human-verified seed"; a "Reports" link returns to the library (`/research/reports`)
 - [ ] The Insight list is in page order (then ID); each row shows subject, page, direction, confidence and status pills; the first Insight is selected
 - [ ] The detail pane shows the subject with its kind (Sector or Asset Class), direction and confidence pills, "Cited on page N", the cited passage, and a read-only Insight Review record at the top (Approved, reviewer `seed`, time, note) with a "Human-verified seed" marker and no Approve or Reject; nowhere does the UI say "decide" or "Decision"
 - [ ] The cited page shows in full with the passage highlighted and scrolled into view inside the page box (try an Insight whose passage is low on a long page); the page header carries a "Cited page" pill
@@ -145,6 +145,12 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] When the last Insight awaiting review is reviewed, the selection stays on it (now read-only with its outcome, reviewer, time and note) and the detail says "This Report is fully reviewed"
 - [ ] 409 race: open the same Report and Insight awaiting review in two browser sessions (a normal and an incognito window, both `research_analyst`); approve in one, then approve or reject in the other: a non-blocking notice says "Already reviewed by someone else…", the Insight refreshes to the first session's outcome, and the selection advances; nothing is recorded twice on the audit trail
 - [ ] Other failures: stop the API and approve: an inline error in the detail pane says the Insight Review was not saved, and the selection stays; a failed reject keeps its note, so reopening Reject… shows it for a retry
+- [ ] To review on a fresh database (seeded only, nothing uploaded): the tab shows "All caught up" with a check, Upload Report and Browse Reports, and the To review badge reads 0. It is plainly different from loading (throttle and reload: skeletons) and from an error (stop the API and reload: the red "Could not load Reports" line)
+- [ ] Upload the demo house view, then open To review: one group for it, with its title (a link to its Report), uploader `research_analyst`, upload time (UTC) and "3 to review"; its 3 Insights are in page order, without status pills, and the first is selected. The badge reads 3, matching the Reports tab's Awaiting review count. Upload it again: the newer copy's group comes first and the badge reads 6
+- [ ] Selecting an Insight shows "From <Report title>" above the same detail, cited page and highlight as Report detail; `?insight=` is in the URL (`&page=` too while another page is read), and a reload or the URL in a new tab restores it
+- [ ] Approve and reject from To review behave as on Report detail (optional approval note, required reject note, "Saving…", inline errors, the 409 notice across two sessions; a 409 on the last Insight awaiting review keeps it selected and, once refreshed, shows the other session's Insight Review read-only, with no Approve or Reject); the Insight leaves the list, and the group count, the badge and the Reports tab's count drop at once; the selection moves to the next Insight in inbox order, into the next group after a group's last Insight
+- [ ] Reviewing the last Insight of a group removes the group; reviewing the last one overall shows "All caught up" with the notice above it, the badge reaches 0, and the URL has no `?insight=`
+- [ ] `/research?insight=9999` shows "There is no Insight #9999" with "Show the first Insight awaiting review"; a link to an Insight reviewed since (e.g. a seeded one) opens it read-only with "This Insight is no longer awaiting review"
 
 ## Supersession and clean portfolio
 

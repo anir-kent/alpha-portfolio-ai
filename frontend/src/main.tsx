@@ -11,7 +11,7 @@ import { GovernancePage } from "./GovernancePage";
 import { PortfolioPage } from "./PortfolioPage";
 import { QueuePage } from "./QueuePage";
 import { ReportDetailPage } from "./ReportDetail";
-import { ResearchPage } from "./ResearchPage";
+import { ResearchPage, type ResearchTab } from "./ResearchPage";
 import { landingRoute, visibleNav } from "./nav";
 import { Icon, Pill, useQueue } from "./ui";
 import "./index.css";
@@ -294,6 +294,13 @@ function Capsule({
 function Shell({ username, role, permissions }: { username: string; role: string; permissions: string[] }) {
   const qc = useQueryClient();
   const landing = landingRoute(permissions);
+  const research = (tab: ResearchTab) => (
+    <ResearchPage
+      tab={tab}
+      canUpload={permissions.includes("report:upload")}
+      canReview={permissions.includes("insight:approve")}
+    />
+  );
   const logout = useMutation({
     mutationFn: () => api.POST("/api/auth/logout"),
     onSuccess: () => {
@@ -319,9 +326,8 @@ function Shell({ username, role, permissions }: { username: string; role: string
             {permissions.includes("approvals:read") && (
               <Route path="/approvals" element={<ApprovalsPage permissions={permissions} />} />
             )}
-            {permissions.includes("report:read") && (
-              <Route path="/research" element={<ResearchPage canUpload={permissions.includes("report:upload")} />} />
-            )}
+            {permissions.includes("report:read") && <Route path="/research" element={research("to-review")} />}
+            {permissions.includes("report:read") && <Route path="/research/reports" element={research("reports")} />}
             {permissions.includes("report:read") && (
               <Route
                 path="/research/reports/:reportId"

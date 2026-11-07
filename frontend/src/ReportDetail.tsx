@@ -3,27 +3,35 @@
  * once the server confirms, the selection advances to the next Insight awaiting review in this Report. A failed
  * extraction offers Upload again. Selection, status filter and the page being read all live in the URL, so a reload or a
  * shared link restores them. */
-import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ReviewActions } from "./InsightReview";
-import { findPassage } from "./passage";
+import { useMemo } from "react";
+import { Link, useParams } from "react-router-dom";
 import {
-  CONFIDENCE,
-  DIRECTION,
   KIND_LABEL,
   Outcome,
   STATUS,
-  SUBJECT_KIND,
   SeedBadge,
   insightCounts,
+  reportsPath,
   pageOrder,
-  useReportPage,
   useReports,
+  useUrlParams,
   type Insight,
   type InsightStatus,
   type Report,
 } from "./research";
-import { Empty, ErrorLine, Icon, PageHeader, Panel, Pill, minuteUtc } from "./ui";
+import {
+  ChevronLeft,
+  InsightDetail,
+  InsightRow,
+  PageReader,
+  ReviewNotice,
+  SPLIT,
+  SplitSkeleton,
+  pagesLabel,
+  useReviewFlow,
+  wholeNumber,
+} from "./ReviewLayout";
+import { Empty, ErrorLine, Icon, PageHeader, Panel, minuteUtc } from "./ui";
 import { UploadReportButton } from "./UploadReportDialog";
 
 type Filter = InsightStatus | "all";
@@ -38,37 +46,10 @@ const EMPTY_FILTER: Record<InsightStatus, string> = {
   approved: "No Insights in this Report have been approved.",
   rejected: "No Insights in this Report have been rejected.",
 };
-const SKELETON_ROWS = 4;
-const SKELETON_LINES = ["96%", "88%", "92%", "70%", "94%", "82%", "60%"];
-/** The review split: stacked below 1280px, list beside detail from there up. Shared with the loading skeleton. */
-const SPLIT = "grid items-start gap-3 xl:grid-cols-[minmax(20rem,26rem)_minmax(0,1fr)]";
-
-/** A whole number from a URL parameter (leading zeros allowed), or null. */
-const wholeNumber = (raw: string | null) => (raw && /^\d+$/.test(raw) ? Number(raw) : null);
-
-const pagesLabel = (n: number) => (n === 1 ? "page" : "pages");
-
-function ChevronLeft() {
-  return (
-    <span className="inline-flex rotate-180" aria-hidden>
-      <Icon name="chevron" size={13} />
-    </span>
-  );
-}
-
-/** Direction and confidence, the claim an Analyst reviews. */
-function ClaimPills({ insight }: { insight: Insight }) {
-  return (
-    <>
-      <Pill tone={DIRECTION[insight.direction].tone}>{DIRECTION[insight.direction].text}</Pill>
-      <Pill tone={CONFIDENCE[insight.confidence].tone}>{CONFIDENCE[insight.confidence].text}</Pill>
-    </>
-  );
-}
 
 function BackLink() {
   return (
-    <Link to="/research" className="btn btn-ghost btn-sm mb-1 !pl-1.5">
+    <Link to={reportsPath} className="btn btn-ghost btn-sm mb-1 !pl-1.5">
       <ChevronLeft />
       Reports
     </Link>
@@ -97,24 +78,6 @@ function ReportHeader({ report }: { report: Report }) {
         </span>
       }
     />
-  );
-}
-
-function InsightRow({ insight, selected, onSelect }: { insight: Insight; selected: boolean; onSelect: () => void }) {
-  const status = STATUS[insight.status];
-  return (
-    <li>
-      <button type="button" className="insight-row" aria-current={selected || undefined} onClick={onSelect}>
-        <span className="flex items-baseline gap-2">
-          <span className="min-w-0 flex-1 truncate font-semibold">{insight.subject}</span>
-          <span className="mono shrink-0 text-ink-3">p. {insight.page}</span>
-        </span>
-        <span className="flex flex-wrap gap-1">
-          <ClaimPills insight={insight} />
-          <Pill tone={status.tone}>{status.text}</Pill>
-        </span>
-      </button>
-    </li>
   );
 }
 
@@ -165,218 +128,8 @@ function InsightList({
   );
 }
 
-/** The next Insight awaiting review after `current` in page order, wrapping to the start; null when none remain. */
-function nextAwaitingReview(ordered: Insight[], current: Insight): Insight | null {
-  const waiting = ordered.filter((i) => i.status === "pending" && i.id !== current.id);
-  return waiting.find((i) => pageOrder(i, current) > 0) ?? waiting[0] ?? null;
-}
-
-/** Shown in place of the actions to anyone who cannot review Insights. */
-function AwaitingReview() {
-  return (
-    <p className="callout callout-info">
-      <Icon name="approvals" size={14} />
-      Awaiting review. No Insight informs a Portfolio until a Research Analyst approves it.
-    </p>
-  );
-}
-
-/** The read-only record of an Insight Review: outcome, reviewer, time and note. */
-function ReviewRecord({ insight }: { insight: Insight }) {
-  const status = STATUS[insight.status];
-  return (
-    <section aria-label="Insight Review" className="panel">
-      <div className="panel-body">
-        <p className="eyebrow mb-2">Insight Review</p>
-        <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1.5">
-          <dt className="text-ink-3">Outcome</dt>
-          <dd>
-            <Pill tone={status.tone}>{status.text}</Pill>
-          </dd>
-          <dt className="text-ink-3">Reviewer</dt>
-          <dd className="mono">{insight.decided_by ?? "—"}</dd>
-          <dt className="text-ink-3">Reviewed (UTC)</dt>
-          <dd className="mono" title={insight.decided_at ?? undefined}>
-            {insight.decided_at ? minuteUtc(insight.decided_at) : "—"}
-          </dd>
-          <dt className="text-ink-3">Note</dt>
-          <dd>
-            {insight.decision_note ? insight.decision_note : <span className="text-ink-3">No note recorded</span>}
-          </dd>
-        </dl>
-      </div>
-    </section>
-  );
-}
-
-/** The selected Insight. `review` sits at the top: the actions while it awaits review, else its Insight Review record.
- * The pane takes focus after an Insight Review, so keyboard and screen-reader users land on what is shown next. */
-function InsightDetail({ insight, review, ref }: { insight: Insight; review: ReactNode; ref: Ref<HTMLElement> }) {
-  return (
-    <section ref={ref} tabIndex={-1} className="panel outline-none" aria-label={`Insight ${insight.subject}`}>
-      <div className="panel-body space-y-3">
-        {review}
-        <div>
-          <p className="eyebrow">
-            {SUBJECT_KIND[insight.subject_kind]} · Insight <span className="mono">#{insight.id}</span>
-          </p>
-          <h2 className="!text-[1.3846rem] !font-semibold">{insight.subject}</h2>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <ClaimPills insight={insight} />
-            <Pill tone="mute">
-              Cited on page <span className="mono">{insight.page}</span>
-            </Pill>
-            {insight.human_verified && <SeedBadge what="Insight" />}
-          </div>
-        </div>
-        <figure>
-          <figcaption className="eyebrow">Cited passage</figcaption>
-          <blockquote className="quote">{insight.passage}</blockquote>
-        </figure>
-      </div>
-    </section>
-  );
-}
-
-/** One page of the Report's text. On the cited page the passage is highlighted and scrolled into view. */
-function PageReader({
-  report,
-  page,
-  cited,
-  onPage,
-}: {
-  report: Report;
-  page: number;
-  cited: Insight | null;
-  onPage: (page: number) => void;
-}) {
-  const text = useReportPage(report.id, page);
-  const onCitedPage = cited !== null && cited.page === page;
-  const match = useMemo(
-    () => (onCitedPage && text.data ? findPassage(text.data.text, cited.passage) : null),
-    [onCitedPage, text.data, cited],
-  );
-  const boxRef = useRef<HTMLDivElement>(null);
-  const markRef = useRef<HTMLElement>(null);
-
-  // Scroll inside the page box only, so the window and the Insight list stay where the Analyst left them.
-  useEffect(() => {
-    const box = boxRef.current;
-    if (!box) return;
-    const mark = markRef.current;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    box.scrollTo({ top: mark ? Math.max(0, mark.offsetTop - box.clientHeight / 3) : 0 });
-    // When the panes stack, or a long review record pushes the page down, bring the passage onto the screen too.
-    mark?.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
-  }, [match, text.data]);
-
-  const pages = Array.from({ length: report.page_count }, (_, i) => i + 1);
-  return (
-    <section className="panel" aria-label={`Report page ${page}`}>
-      <div className="panel-head flex-wrap">
-        <h2>
-          Page <span className="mono">{page}</span>{" "}
-          <span className="font-normal text-ink-3">
-            of <span className="mono">{report.page_count}</span>
-          </span>
-        </h2>
-        {onCitedPage && <Pill tone="ai">Cited page</Pill>}
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          {cited && !onCitedPage && (
-            <button type="button" className="btn btn-sm" onClick={() => onPage(cited.page)}>
-              Back to cited page <span className="mono">{cited.page}</span>
-            </button>
-          )}
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm !px-2"
-            aria-label="Previous page"
-            disabled={page <= 1}
-            onClick={() => onPage(page - 1)}
-          >
-            <ChevronLeft />
-          </button>
-          <label className="flex items-center gap-1.5 text-ink-3">
-            <span className="sr-only">Read page</span>
-            <select className="field btn-sm !h-7 !pr-2" value={page} onChange={(e) => onPage(Number(e.target.value))}>
-              {pages.map((p) => (
-                <option key={p} value={p}>
-                  Page {p}
-                  {cited?.page === p ? " (cited)" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm !px-2"
-            aria-label="Next page"
-            disabled={page >= report.page_count}
-            onClick={() => onPage(page + 1)}
-          >
-            <Icon name="chevron" size={13} />
-          </button>
-        </div>
-      </div>
-      <div className="panel-body space-y-2">
-        {onCitedPage && text.data && !match && (
-          <p role="status" className="callout callout-warn">
-            <Icon name="alert" size={14} />
-            Cited passage not found verbatim on page {page}. The page is shown without a highlight; check the citation.
-          </p>
-        )}
-        {text.isError ? (
-          <div className="space-y-2">
-            <ErrorLine>Could not load page {page} of this Report.</ErrorLine>
-            <button type="button" className="btn btn-sm" onClick={() => void text.refetch()}>
-              Try again
-            </button>
-          </div>
-        ) : (
-          <div
-            ref={boxRef}
-            className="page-text"
-            tabIndex={0}
-            aria-label={`Text of page ${page}`}
-            aria-busy={text.isLoading}
-          >
-            {text.isLoading && (
-              <div className="space-y-2.5 py-1" aria-hidden>
-                {SKELETON_LINES.map((w, i) => (
-                  <span key={i} className="skeleton" style={{ width: w }} />
-                ))}
-              </div>
-            )}
-            {text.isLoading && (
-              <p role="status" className="sr-only">
-                Loading page {page}…
-              </p>
-            )}
-            {text.data &&
-              (text.data.text.trim() === "" ? (
-                <Empty>This page has no extractable text.</Empty>
-              ) : match ? (
-                <>
-                  {text.data.text.slice(0, match.start)}
-                  <mark ref={markRef} className="cited">
-                    {text.data.text.slice(match.start, match.end)}
-                  </mark>
-                  {text.data.text.slice(match.end)}
-                </>
-              ) : (
-                text.data.text
-              ))}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-type Notice = { tone: "pos" | "info"; text: string };
-
 function ReportDetail({ report, canUpload, canReview }: { report: Report; canUpload: boolean; canReview: boolean }) {
-  const [params, setParams] = useSearchParams();
+  const [params, update] = useUrlParams();
   const rawFilter = params.get("status");
   const filter: Filter = FILTERS.some((f) => f.value === rawFilter) ? (rawFilter as Filter) : "all";
   const insightParam = params.get("insight");
@@ -394,75 +147,16 @@ function ReportDetail({ report, canUpload, canReview }: { report: Report; canUpl
   const page =
     pageParam !== null && pageParam >= 1 && pageParam <= report.page_count ? pageParam : (selected?.page ?? 1);
 
-  // Replace rather than push: Back leaves the Report instead of stepping through every click.
-  const update = (changes: Record<string, string | null>) =>
-    setParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        for (const [k, v] of Object.entries(changes)) {
-          if (v === null) next.delete(k);
-          else next.set(k, v);
-        }
-        return next;
-      },
-      { replace: true },
-    );
-
-  // What the last Insight Review did, said in text; it stays until dismissed, the next review or another selection.
-  const [notice, setNotice] = useState<Notice | null>(null);
-  const detailRef = useRef<HTMLElement>(null);
-  const [focusRequests, setFocusRequests] = useState(0);
-  useEffect(() => {
-    if (focusRequests > 0) detailRef.current?.focus({ preventScroll: true });
-  }, [focusRequests]);
-  // A save can finish after the Analyst picked another Insight, or after a refetch moved statuses; the review callbacks
-  // read what is on screen now, not what was there when Approve or Reject was pressed.
-  const latest = useRef({ ordered, selectedId: selected?.id ?? null });
-  useEffect(() => {
-    latest.current = { ordered, selectedId: selected?.id ?? null };
+  // When none remain the selection stays on the Insight just reviewed, now read-only.
+  const { notice, clearNotice, detailRef, reviewFor } = useReviewFlow({
+    order: ordered,
+    selected,
+    canReview,
+    onAdvance: (from, next) => update({ insight: String((next ?? from).id), page: null }),
   });
-
-  /** After an Insight Review, select the next Insight awaiting review, or keep this one (now read-only) if none remain.
-   * Returns false, and changes nothing, when the Analyst has already moved on to another Insight. */
-  const advance = (from: Insight): { moved: boolean; next: Insight | null } => {
-    if (latest.current.selectedId !== from.id) return { moved: false, next: null };
-    const next = nextAwaitingReview(latest.current.ordered, from);
-    update({ insight: String((next ?? from).id), page: null });
-    setFocusRequests((n) => n + 1);
-    return { moved: true, next };
-  };
-  const onReviewed = (reviewed: Insight) => {
-    const { moved, next } = advance(reviewed);
-    if (!moved) return;
-    const outcome = reviewed.status === "approved" ? "Approved" : "Rejected";
-    setNotice({
-      tone: "pos",
-      text: `${outcome} ${reviewed.subject} (Insight #${reviewed.id}).${next ? " Showing the next Insight awaiting review." : ""}`,
-    });
-  };
-  const onAlreadyReviewed = (current: Insight) => {
-    if (!advance(current).moved) return;
-    setNotice({
-      tone: "info",
-      text: `Already reviewed by someone else: your Insight Review of ${current.subject} (Insight #${current.id}) was not saved. Refreshing the Report to show theirs.`,
-    });
-  };
 
   const counts = insightCounts(report);
   const fullyReviewed = canReview && report.insights.length > 0 && counts.pending === 0;
-  const review =
-    selected === null ? null : selected.status !== "pending" ? (
-      <ReviewRecord insight={selected} />
-    ) : canReview ? (
-      <ReviewActions
-        key={selected.id}
-        insight={selected}
-        onReviewed={onReviewed}
-        onAlreadyReviewed={() => onAlreadyReviewed(selected)}
-      />
-    ) : (
-      <AwaitingReview />
-    );
 
   const failed = report.extraction_status === "failed";
   return (
@@ -495,28 +189,13 @@ function ReportDetail({ report, canUpload, canReview }: { report: Report; canUpl
             // A page read for the old selection would outlive it when the filter moves the default selection.
             onFilter={(f) => update({ status: f === "all" ? null : f, page: null })}
             onSelect={(id) => {
-              setNotice(null);
+              clearNotice();
               update({ insight: String(id), page: null });
             }}
           />
         )}
         <div className="min-w-0 space-y-3">
-          <div aria-live="polite" className="empty:hidden">
-            {notice && (
-              <p className={`callout callout-${notice.tone} items-start`}>
-                <Icon name={notice.tone === "pos" ? "approvals" : "alert"} size={14} />
-                <span className="flex-1">{notice.text}</span>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm -my-1 !px-2"
-                  aria-label="Dismiss"
-                  onClick={() => setNotice(null)}
-                >
-                  <Icon name="close" size={12} />
-                </button>
-              </p>
-            )}
-          </div>
+          <ReviewNotice notice={notice} onDismiss={clearNotice} />
           {fullyReviewed && (
             <p className="callout callout-pos">
               <Icon name="approvals" size={14} />
@@ -540,7 +219,7 @@ function ReportDetail({ report, canUpload, canReview }: { report: Report; canUpl
               )}
             </Panel>
           )}
-          {selected && <InsightDetail ref={detailRef} insight={selected} review={review} />}
+          {selected && <InsightDetail ref={detailRef} insight={selected} review={reviewFor(selected)} />}
           {report.page_count > 0 && (
             <PageReader
               report={report}
@@ -566,25 +245,7 @@ function DetailSkeleton() {
         <span className="skeleton !h-7" style={{ width: "40%" }} />
         <span className="skeleton" style={{ width: "55%" }} />
       </div>
-      <div className={SPLIT} aria-hidden>
-        <Panel title="Insights">
-          <div className="space-y-4">
-            {Array.from({ length: SKELETON_ROWS }, (_, i) => (
-              <div key={i} className="space-y-1.5">
-                <span className="skeleton" style={{ width: "65%" }} />
-                <span className="skeleton" style={{ width: "85%" }} />
-              </div>
-            ))}
-          </div>
-        </Panel>
-        <Panel title="Page">
-          <div className="space-y-2.5">
-            {SKELETON_LINES.map((w, i) => (
-              <span key={i} className="skeleton" style={{ width: w }} />
-            ))}
-          </div>
-        </Panel>
-      </div>
+      <SplitSkeleton listTitle="Insights" />
     </div>
   );
 }
