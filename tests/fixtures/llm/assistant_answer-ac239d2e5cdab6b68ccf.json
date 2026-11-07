@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "There are currently 0 items waiting on the Approvals panel.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "approvals.total_items",
+            "kind": "engine"
+          }
+        ],
+        "text": "The total number of items waiting on the Approvals panel is 0."
+      }
+    ],
+    "follow_up_questions": [
+      "What types of items typically appear on the Approvals panel?",
+      "How can I initiate an Analysis Run to generate new recommendations?",
+      "Where can I view the Audit Events related to approvals?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

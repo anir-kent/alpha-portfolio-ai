@@ -2185,6 +2185,160 @@
         ],
         "title": "ApprovalsOut"
       },
+      "AssistantCard": {
+        "properties": {
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "scope_policy": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scope Policy"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/AssistantLimits"
+          },
+          "latest_eval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssistantEvalSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt_version",
+          "scope_policy",
+          "limits",
+          "latest_eval"
+        ],
+        "title": "AssistantCard"
+      },
+      "AssistantEvalSummary": {
+        "properties": {
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "ran_at": {
+            "type": "string",
+            "title": "Ran At"
+          },
+          "cases": {
+            "type": "integer",
+            "title": "Cases"
+          },
+          "passed": {
+            "type": "integer",
+            "title": "Passed"
+          },
+          "refusal_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal Rate"
+          },
+          "false_refusal_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "False Refusal Rate"
+          },
+          "claims_total": {
+            "type": "integer",
+            "title": "Claims Total"
+          },
+          "ungrounded_claim_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ungrounded Claim Rate"
+          },
+          "failed_turns": {
+            "type": "integer",
+            "title": "Failed Turns"
+          },
+          "injection_leaks": {
+            "type": "integer",
+            "title": "Injection Leaks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt_version",
+          "model",
+          "ran_at",
+          "cases",
+          "passed",
+          "refusal_rate",
+          "false_refusal_rate",
+          "claims_total",
+          "ungrounded_claim_rate",
+          "failed_turns",
+          "injection_leaks"
+        ],
+        "title": "AssistantEvalSummary",
+        "description": "The headline figures of one run of the guardrail eval set; the model card shows these."
+      },
+      "AssistantLimits": {
+        "properties": {
+          "question_max_chars": {
+            "type": "integer",
+            "title": "Question Max Chars"
+          },
+          "questions_per_conversation": {
+            "type": "integer",
+            "title": "Questions Per Conversation"
+          },
+          "questions_per_hour": {
+            "type": "integer",
+            "title": "Questions Per Hour"
+          },
+          "history_pairs": {
+            "type": "integer",
+            "title": "History Pairs"
+          },
+          "context_rows": {
+            "type": "integer",
+            "title": "Context Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question_max_chars",
+          "questions_per_conversation",
+          "questions_per_hour",
+          "history_pairs",
+          "context_rows"
+        ],
+        "title": "AssistantLimits"
+      },
       "AuditEvent": {
         "properties": {
           "id": {
@@ -4400,6 +4554,9 @@
             },
             "type": "array",
             "title": "Controls"
+          },
+          "assistant": {
+            "$ref": "#/components/schemas/AssistantCard"
           }
         },
         "type": "object",
@@ -4410,7 +4567,8 @@
           "temperature",
           "tilt_bound_pp",
           "current_prompt_versions",
-          "controls"
+          "controls",
+          "assistant"
         ],
         "title": "ModelCard"
       },

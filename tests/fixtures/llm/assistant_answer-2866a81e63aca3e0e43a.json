@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "The Research Tilt status is \"failed\" and there are no research tilt entries listed in the screen context. Therefore, no Report passages drove the Research Tilt for this recommendation.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "research_tilt",
+            "kind": "engine"
+          }
+        ],
+        "text": "The research tilt status is \"failed\" with no entries, indicating no research tilt was applied."
+      }
+    ],
+    "follow_up_questions": [
+      "What are the reasons for the high impact approval requirement?",
+      "Can you explain the turnover percentage and its thresholds?",
+      "What are the details of the trade lines in this recommendation?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

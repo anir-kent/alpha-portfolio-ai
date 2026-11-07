@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "A Recommendation in the Alpha Portfolio platform passes through three decisions: Advisor, Compliance, and Investment Committee decisions. Each step in this decision process is recorded as an Audit Event in a hash-chained log.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "PLATFORM BRIEF",
+            "kind": "engine"
+          }
+        ],
+        "text": "A Recommendation passes through Advisor, Compliance, and Investment Committee decisions, with each step recorded as an Audit Event."
+      }
+    ],
+    "follow_up_questions": [
+      "What information is included in an Audit Event?",
+      "How is the priority score for Recommendations determined?",
+      "Can I view the history of decisions for a specific Recommendation?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

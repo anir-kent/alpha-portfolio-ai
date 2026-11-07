@@ -29,5 +29,6 @@ class Settings(BaseSettings):
         50  # Questions a Conversation takes; then 429 until the next login
     )
     assistant_questions_per_hour: PositiveInt = 20  # Questions a user may ask in any rolling hour; then 429
+    assistant_eval_path: str = "data/assistant_eval.json"  # latest live eval results, shown on the model card
     seed_dir: str = "data/seed"
     cors_origins: list[str] = ["http://localhost:5173"]

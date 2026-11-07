@@ -57,7 +57,7 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] On `/portfolios/C001` the drawer header reads "Portfolio C001"; on a screen that publishes no context (e.g. a Recommendation's Lineage page) it reads "No context on this screen" and the Question box is disabled
 - [ ] Ask "Which asset class drives the drift?" on C001: "Thinking…" shows, then the Answer renders as Markdown (bold, lists) with no raw HTML; follow-up questions fill the Question box when clicked
 - [ ] Ask "Should I buy NVDA?": the fixed refusal shows ("I can only help with questions about this platform…"), never the model's text
-- [ ] As auditor, the turn's LLM Exchange (task `assistant_answer`, `assistant_answer@v1`) is listed on LLM Exchanges with no Client name or email in its prompt, an `assistant.answered` or `assistant.refused` Audit Event references it, and Verify chain passes
+- [ ] As auditor, the turn's LLM Exchange (task `assistant_answer`, `assistant_answer@v2`) is listed on LLM Exchanges with no Client name or email in its prompt, an `assistant.answered` or `assistant.refused` Audit Event references it, and Verify chain passes
 - [ ] Ask two Questions on C001, then reload the page: reopening the drawer shows both turns in order
 - [ ] Ask on C001, open `/portfolios/C002` and ask again: a "Context changed · Portfolio C002" divider separates the turns; the earlier turn still reads as asked on C001; a follow-up ("and why?") gets an Answer that uses the earlier turn (its Exchange prompt has a CONVERSATION SO FAR block with text only, no earlier Screen Context)
 - [ ] Switch role (logout) and log back in: the drawer is empty, and the first Question is turn 1 of a new Conversation
@@ -82,7 +82,8 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] As auditor on `/audit`, search for Portfolio C003 and ask "What happened to this Portfolio?": the turn's Exchange prompt holds only C003's events, newest first (at most `APP_ASSISTANT_CONTEXT_ROWS`, with a "showing N of M" note when cut). A row's spark button makes the header "Audit, Event N"
 - [ ] As auditor on `/llm-exchanges`, open an Exchange: the header reads "LLM Exchange N"; ask "What did the model see?": the new turn's Exchange prompt holds the opened Exchange's system text, prompt and reply fenced between `<<<LLM_EXCHANGE ...>>>` and `<<<END_LLM_EXCHANGE>>>`. Closing the Exchange returns the header to "LLM Exchanges", and the prompt then carries no Exchange body
 - [ ] As platform_owner on `/governance`, ask "Which model and prompt versions are in use?": the Answer matches the model card
-- [ ] As platform_owner on `/config` and `/health`, ask "How does an Analysis Run work?": the Answer explains it from the platform brief, and the turn's Exchange prompt holds no config values or health figures
+- [ ] As platform_owner on `/config` and `/health`, ask "How does an Analysis Run work?": the Answer explains it from the platform brief, and the turn's Exchange prompt holds no config values or health figures, and the Answer has no Claims
+- [ ] As auditor on `/governance`, the Assistant panel shows `assistant_answer@v2`, the scope policy, the five limits, and the latest live eval (refusal rate, false refusals, ungrounded-Claim rate, failed turns, injection leaks) with no "run against" warning
 
 ## Assistant (Suggested Questions and replay mode)
 

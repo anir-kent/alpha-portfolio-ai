@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "A Target Allocation in the platform covers the Asset Classes of equity, bond, and cash.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "PLATFORM BRIEF",
+            "kind": "engine"
+          }
+        ],
+        "text": "A Client's Target Allocation is defined by Asset Classes: equity, bond, and cash."
+      }
+    ],
+    "follow_up_questions": [
+      "How is drift from Target Allocation calculated for each Asset Class?",
+      "What happens if a Portfolio's Asset Class drift is outside the tolerance band?",
+      "Can Target Allocations be customized by Client Risk Profile?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

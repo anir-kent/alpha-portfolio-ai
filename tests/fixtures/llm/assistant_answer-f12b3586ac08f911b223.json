@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "There are no Restrictions applied to this Portfolio as indicated by the empty Restrictions array in the screen context.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "restrictions",
+            "kind": "engine"
+          }
+        ],
+        "text": "No Restrictions are applied to the Portfolio as the Restrictions array is empty."
+      }
+    ],
+    "follow_up_questions": [
+      "Are there any draft Recommendations for this Portfolio?",
+      "What is the current Suitability status of this Portfolio?",
+      "What is the Portfolio Drift and is it within tolerance?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

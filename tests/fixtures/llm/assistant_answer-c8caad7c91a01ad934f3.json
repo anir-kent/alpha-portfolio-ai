@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "The Assistant requires an LLM Exchange to be selected because the detailed content of an LLM Exchange\u2014such as the system text, prompt, and reply\u2014is only available when a specific Exchange is chosen. Without selecting one, the Assistant has no data from the current screen context to analyze or discuss regarding any LLM Exchange.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "No LLM Exchange is selected, so none is included. Open one to ask about it.",
+            "kind": "engine"
+          }
+        ],
+        "text": "The Assistant needs a selected LLM Exchange to access its system text, prompt, and reply for discussion."
+      }
+    ],
+    "follow_up_questions": [
+      "How can I select an LLM Exchange on this screen?",
+      "What information does an LLM Exchange contain?",
+      "Can I view past LLM Exchanges for audit purposes?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

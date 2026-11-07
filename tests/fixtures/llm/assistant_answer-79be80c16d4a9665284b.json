@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "Drift is judged against the tolerance band defined by the Client's Risk Profile. Specifically, the platform calculates the drift of each Asset Class from its Target Allocation in percentage points. If the drift falls outside the tolerance band set by the Risk Profile, the Portfolio is considered outside tolerance and may trigger a draft Recommendation to rebalance the holdings back toward the target allocation.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "PLATFORM BRIEF",
+            "kind": "engine"
+          }
+        ],
+        "text": "Drift is judged against the tolerance band of the Client's Risk Profile, and a Portfolio outside tolerance gets a draft Recommendation to rebalance."
+      }
+    ],
+    "follow_up_questions": [
+      "What happens if a Portfolio's drift is within the tolerance band?",
+      "How is the priority score for the Queue determined?",
+      "Can the tolerance band be customized for different Clients?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

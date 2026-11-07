@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "The prompt versions currently in use on the platform are:\n- insight_extraction@v1\n- research_tilt@v1\n- recommendation_narrative@v1\n- priority_narrative@v1\n- assistant_answer@v2",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "model_card.current_prompt_versions",
+            "kind": "engine"
+          }
+        ],
+        "text": "The prompt versions in use are insight_extraction@v1, research_tilt@v1, recommendation_narrative@v1, priority_narrative@v1, and assistant_answer@v2."
+      }
+    ],
+    "follow_up_questions": [
+      "What are the functions of each prompt version?",
+      "How often are prompt versions updated?",
+      "Can I see the history of prompt version changes?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}

@@ -584,7 +584,12 @@ def _governance(db: Session, user: User, screen: ScreenIdentity, settings: Setti
         return None
     card = governance.model_card(db, settings)
     figures = {"model_card.temperature": card.temperature, "model_card.tilt_bound_pp": card.tilt_bound_pp}
-    context = {"screen": "governance", "model_card": card.model_dump(), "figures": figures}
+    for key, value in card.assistant.limits.model_dump().items():
+        figures[f"model_card.assistant.limits.{key}"] = float(value)
+    # The latest eval results are left out: every live eval run rewrites them, and the governance prompt must stay
+    # byte-identical for its Suggested Questions to replay.
+    shown = card.model_dump(exclude={"assistant": {"latest_eval"}})
+    context = {"screen": "governance", "model_card": shown, "figures": figures}
     return ScreenContext(label=label(screen), portfolio_id=None, text=serialise(context), figures=figures)
 
 

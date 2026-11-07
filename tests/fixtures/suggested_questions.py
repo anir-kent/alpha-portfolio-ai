@@ -98,7 +98,7 @@ def demo_screens(app) -> list[dict]:
     return screens
 
 
-class _ReplayOrLive:
+class ReplayOrLive:
     """Replays whatever is recorded; an Assistant call with no recording goes live and is recorded. Every other task
     only replays, so the Analysis Run's AI steps behave exactly as on replay."""
 
@@ -128,7 +128,7 @@ def record() -> int:
     live = OpenAICompatibleLlm(
         base_url=env.llm_base_url, api_key=env.llm_api_key, model=env.llm_model, record_dir=RECORDINGS
     )
-    client = _ReplayOrLive(live)
+    client = ReplayOrLive(live)
     with tempfile.TemporaryDirectory() as tmp:
         app = create_app(lift_question_limits(replay_settings(Path(tmp))))
         inner: LlmClient = client

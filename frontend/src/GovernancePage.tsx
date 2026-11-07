@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Fragment } from "react";
 import { api } from "./api/client";
+import type { components } from "./api/schema";
 import { usePublishScreen } from "./assistantScreen";
 import { Empty, ErrorLine, Icon, PageHeader, Panel, Pill, ScoreDial } from "./ui";
 
@@ -250,6 +252,8 @@ export function GovernancePage({ canRunFixtures }: { canRunFixtures: boolean }) 
         )}
       </Panel>
 
+      <AssistantPanel assistant={card.assistant} />
+
       <Panel title="Prompt / version log" label="Prompt version log" flush>
         {log.length === 0 ? (
           <Empty>No LLM calls recorded yet.</Empty>
@@ -279,5 +283,107 @@ export function GovernancePage({ canRunFixtures }: { canRunFixtures: boolean }) 
         )}
       </Panel>
     </div>
+  );
+}
+
+type AssistantCard = components["schemas"]["AssistantCard"];
+
+const LIMITS: [keyof AssistantCard["limits"], string, string][] = [
+  ["question_max_chars", "Question length", "characters"],
+  ["questions_per_conversation", "Per Conversation", "Questions"],
+  ["questions_per_hour", "Per user per hour", "Questions"],
+  ["history_pairs", "History sent", "Question/Answer pairs"],
+  ["context_rows", "List rows sent", "rows"],
+];
+
+function AssistantPanel({ assistant }: { assistant: AssistantCard }) {
+  const latest = assistant.latest_eval;
+  const stale = latest !== null && latest.prompt_version !== assistant.prompt_version;
+  return (
+    <Panel
+      title="Assistant"
+      label="Assistant"
+      flush
+      aside={
+        <Pill tone="ai">
+          <span className="mono">{assistant.prompt_version}</span>
+        </Pill>
+      }
+    >
+      <div className="grid gap-3 p-3 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <ul className="space-y-1">
+          {assistant.scope_policy.map((rule) => (
+            <li key={rule} className="flex gap-1.5 text-ink-2">
+              <span className="mt-0.5 text-pos">
+                <Icon name="approvals" size={13} />
+              </span>
+              {rule}
+            </li>
+          ))}
+        </ul>
+        <dl className="grid grid-cols-[11rem_1fr] content-start gap-y-1">
+          {LIMITS.map(([key, label, unit]) => (
+            <Fragment key={key}>
+              <dt className="text-ink-3">{label}</dt>
+              <dd>
+                <span className="mono">{assistant.limits[key].toLocaleString()}</span> {unit}
+              </dd>
+            </Fragment>
+          ))}
+        </dl>
+      </div>
+      <div className="border-t border-line">
+        {latest === null ? (
+          <Empty>
+            No live eval results yet. Run <span className="mono">uv run python -m tests.fixtures.assistant_eval</span>{" "}
+            and commit the results.
+          </Empty>
+        ) : (
+          <>
+            <p className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
+              <span className="eyebrow">Latest live eval</span>
+              <Pill tone={latest.passed === latest.cases ? "pos" : "warn"}>
+                {latest.passed}/{latest.cases} cases passed
+              </Pill>
+              {stale && <Pill tone="warn">run against {latest.prompt_version}</Pill>}
+              <span className="text-ink-2">
+                <span className="mono">{latest.model}</span> at <span className="mono">{latest.ran_at}</span>
+              </span>
+            </p>
+            <div className="grid grid-cols-2 divide-x divide-line sm:grid-cols-5">
+              <Kpi
+                label="Refusal rate"
+                value={pct(latest.refusal_rate)}
+                sub="out-of-scope Questions the model refused"
+              />
+              <Kpi
+                label="False refusals"
+                value={pct(latest.false_refusal_rate)}
+                sub="in-scope Questions refused"
+                tone={latest.false_refusal_rate ? "neg" : undefined}
+              />
+              <Kpi
+                label="Ungrounded Claims"
+                value={pct(latest.ungrounded_claim_rate)}
+                sub={`of ${latest.claims_total} Claims`}
+                tone={latest.ungrounded_claim_rate ? "neg" : undefined}
+              />
+              <Kpi
+                label="Failed turns"
+                value={String(latest.failed_turns)}
+                sub="unreadable or rejected"
+                tone={latest.failed_turns > 0 ? "neg" : undefined}
+              />
+              <Kpi
+                label="Injection leaks"
+                value={String(latest.injection_leaks)}
+                sub="injection cases obeyed or out of scope"
+                tone={latest.injection_leaks > 0 ? "neg" : "pos"}
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </Panel>
   );
 }

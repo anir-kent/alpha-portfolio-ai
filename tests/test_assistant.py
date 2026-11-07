@@ -79,7 +79,7 @@ def test_an_advisor_asks_on_the_portfolio_screen_and_gets_a_markdown_answer(logi
     assert turn["answer"]["follow_up_questions"] == ["Which Restriction applies?"]
     assert isinstance(turn["exchange_id"], int) and len(turn["exchange_hash"]) == 64
     (request,) = model.requests
-    assert request.prompt_version == "assistant_answer@v1"
+    assert request.prompt_version == "assistant_answer@v2"
     assert "Which asset class drives the drift?" in request.user
 
 
@@ -116,6 +116,8 @@ def test_the_system_text_holds_the_scope_policy_and_the_read_only_rule(login, mo
     assert "out of scope" in system and "investment advice" in system
     assert "read-only" in system
     assert "never state a figure" in system
+    # v2: the platform brief is background, not a source, so a platform-only explanation carries no Claims.
+    assert "platform brief cannot be cited" in system and "no other citation kind" in system
     assert set(model.requests[0].schema["properties"]) == {
         "in_scope",
         "answer_markdown",
@@ -172,7 +174,7 @@ def test_an_answered_turn_writes_an_audit_event_anchoring_its_exchange_and_the_c
     assert event["seq"] == 1 and len(event["screen_context_hash"]) == 64
     auditor = login("auditor")
     ex = auditor.get(f"/api/llm/exchanges/{turn['exchange_id']}").json()
-    assert ex["task"] == "assistant_answer" and ex["prompt_version"] == "assistant_answer@v1"
+    assert ex["task"] == "assistant_answer" and ex["prompt_version"] == "assistant_answer@v2"
     verdict = auditor.get("/api/audit/verify").json()
     assert verdict["valid"] and verdict["exchanges_checked"] >= 1
 
@@ -991,6 +993,33 @@ def test_the_governance_prompt_holds_the_model_card(login, model, role):
         assert f'"{version}"' in prompt
     for control in card["controls"]:
         assert json.dumps(control) in prompt
+
+
+def test_the_governance_prompt_holds_the_assistant_entry_without_the_eval_results(app, login, model, tmp_path):
+    eval_results = tmp_path / "assistant_eval.json"
+    eval_results.write_text(
+        '{"prompt_version":"assistant_answer@v0","model":"m","ran_at":"2026-01-01T00:00:00+00:00","cases":1,'
+        '"passed":1,"refusal_rate":0.97,"false_refusal_rate":0.0,"claims_total":3,"ungrounded_claim_rate":0.33,'
+        '"failed_turns":0,"injection_leaks":0,"results":[]}'
+    )
+    app.state.settings.assistant_eval_path = str(eval_results)
+    auditor = login("auditor")
+    assistant = auditor.get("/api/governance").json()["model_card"]["assistant"]
+    assert assistant["latest_eval"]["refusal_rate"] == 0.97  # the screen shows it
+    model.reply = claims_reply(
+        {
+            "text": f"A Question can be {assistant['limits']['question_max_chars']} characters long.",
+            "citations": [engine_cite("model_card.assistant.limits.question_max_chars")],
+        }
+    )
+    turn = ask(auditor, "How long can a Question be?", screen("governance")).json()
+    assert [c["grounded"] for c in turn["answer"]["claims"]] == [True]
+    prompt = model.requests[0].user
+    assert f'"prompt_version":"{assistant["prompt_version"]}"' in prompt
+    for rule in assistant["scope_policy"]:
+        assert json.dumps(rule) in prompt
+    # Each live eval run rewrites the results; keeping them out keeps the governance prompt replayable.
+    assert "latest_eval" not in prompt and "0.97" not in prompt
 
 
 @pytest.mark.parametrize("role", ["advisor", "compliance_officer"])

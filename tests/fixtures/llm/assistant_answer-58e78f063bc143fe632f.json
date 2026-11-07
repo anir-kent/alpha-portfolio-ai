@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "This Portfolio has no Suitability Rules flagged as warnings or breaches. All Suitability Rules have a status of \"pass\". Specifically:\n- Maximum equity share is within the 55% cap for a moderate Risk Profile.\n- No single-name positions are held.\n- Sector concentration is within the 30% limit for Financials.\n- Cash holdings meet the minimum cash reserve requirement relative to liquidity needs.\n- No Client Restrictions are violated.\n- The investment horizon of 12 years is not considered short.\n- Unrealised gains in taxable accounts are below the 15% warning threshold.\n\nTherefore, the Portfolio passes all Suitability Rules without any flags.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "latest_analysis_run.suitability_rules",
+            "kind": "engine"
+          }
+        ],
+        "text": "All Suitability Rules for this Portfolio have a status of 'pass', indicating no flags or breaches."
+      }
+    ],
+    "follow_up_questions": [
+      "What are the specific thresholds for each Suitability Rule?",
+      "How does the Portfolio Drift compare to the tolerance band?",
+      "Are there any Recommendations generated for this Portfolio?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v2",
+  "task": "assistant_answer"
+}
