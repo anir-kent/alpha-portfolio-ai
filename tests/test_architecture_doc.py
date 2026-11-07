@@ -126,12 +126,12 @@ def test_check_renders_every_mermaid_block_in_the_real_document(capsys):
 
 @needs_npx
 def test_check_reports_a_mermaid_block_that_does_not_render(doc, capsys):
-    edit(doc / "03-context-and-scope.md", "  platform -->|schema-bound calls| llm", "  platform -->|unclosed llm ((")
+    edit(doc / "03-context-and-scope.md", "  class platform system", "  platform -->|unclosed llm ((")
 
     code, out = run(capsys, "check", "--doc-dir", str(doc))
 
     assert code == 1
-    assert "03-context-and-scope.md:7: Mermaid block does not render" in out
+    assert "03-context-and-scope.md:9: Mermaid block does not render" in out
     assert "unclosed llm ((" in out  # names the offending diagram source, not just a line number
 
 

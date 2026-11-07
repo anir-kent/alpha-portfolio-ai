@@ -4,10 +4,10 @@
 
 **Blocked by:** 01, 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] §1 stakeholder table covers the eight RBAC roles and the review audiences
-- [ ] Quality goals ranked exactly as agreed; non-goals stated
-- [ ] §3 C4 L1 diagram in Mermaid renders under `check`
-- [ ] §4 links every ADR rather than restating it
-- [ ] Every factual claim verified against the code on the baseline commit; `check` green
+- [x] §1 stakeholder table covers the eight RBAC roles and the review audiences
+- [x] Quality goals ranked exactly as agreed; non-goals stated
+- [x] §3 C4 L1 diagram in Mermaid renders under `check`
+- [x] §4 links every ADR rather than restating it
+- [x] Every factual claim verified against the code on the baseline commit; `check` green
