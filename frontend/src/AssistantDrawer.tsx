@@ -14,6 +14,38 @@ type ClaimResult = components["schemas"]["ClaimResult"];
 /** Cached under this key, so logout (which drops every query but "me") clears the Conversation from the page too. */
 const CONVERSATION_KEY = ["assistant-conversation"];
 const FAILED_MESSAGE = "The Assistant couldn't answer, try again.";
+/** A usage limit the server applied (429). Cached so logout clears it with the Conversation; a new login starts a new
+ * Conversation, and with it a fresh per-Conversation count. */
+const LIMIT_KEY = ["assistant-limit"];
+
+type Limit = { message: string; until: number | null }; // until: epoch ms from Retry-After; null lasts the login
+
+/** The server refused the Question outright (400 too long, 429 a limit), with a plain message. Nothing was stored, so
+ * there is no turn to show and retrying the same request won't help. */
+class LimitRejection extends Error {
+  constructor(
+    message: string,
+    readonly limit: Limit | null,
+  ) {
+    super(message);
+  }
+}
+
+/** The limit in force, cleared when its Retry-After passes. */
+function useLimit(): Limit | null {
+  const qc = useQueryClient();
+  const { data: limit } = useQuery<Limit | null>({
+    queryKey: LIMIT_KEY,
+    queryFn: () => null, // set only from a 429; there is nothing to fetch
+    staleTime: Infinity,
+  });
+  useEffect(() => {
+    if (!limit || limit.until === null) return;
+    const id = window.setTimeout(() => qc.setQueryData(LIMIT_KEY, null), Math.max(limit.until - Date.now(), 0));
+    return () => window.clearTimeout(id);
+  }, [limit, qc]);
+  return limit ?? null;
+}
 
 /** How the drawer names a turn's context: the server's label, or for a turn whose screen the user couldn't read
  * (the server names nothing) the identity the browser itself sent. */
@@ -226,11 +258,22 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
     staleTime: Infinity, // only this drawer adds turns, and it writes them into the cache itself
   });
   const turns = conversation.data?.turns ?? [];
+  const limit = useLimit();
   const ask = useMutation({
     mutationFn: async ({ question, screen }: { question: string; screen: Screen }) => {
-      const { data, error } = await api.POST("/api/assistant/questions", { body: { question, screen } });
+      const { data, error, response } = await api.POST("/api/assistant/questions", { body: { question, screen } });
+      if (response.status === 400 || response.status === 429) {
+        const message =
+          (error && "detail" in error && typeof error.detail === "string" && error.detail) || FAILED_MESSAGE;
+        const retryAfter = Number(response.headers.get("Retry-After"));
+        const until = retryAfter > 0 ? Date.now() + retryAfter * 1000 : null;
+        throw new LimitRejection(message, response.status === 429 ? { message, until } : null);
+      }
       if (error || !data) throw new Error(FAILED_MESSAGE);
       return data;
+    },
+    onError: (e) => {
+      if (e instanceof LimitRejection && e.limit) qc.setQueryData<Limit>(LIMIT_KEY, e.limit);
     },
     onSuccess: async (turn) => {
       const known = qc.getQueryData<Conversation | null>(CONVERSATION_KEY);
@@ -239,6 +282,8 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
       else await qc.invalidateQueries({ queryKey: CONVERSATION_KEY });
     },
   });
+  // Nothing can be asked while a request is in flight or a limit applies.
+  const blocked = ask.isPending || limit !== null;
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -247,17 +292,17 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
   }, [open, onClose]);
   const send = () => {
     const q = question.trim();
-    if (!q || !current || ask.isPending) return;
+    if (!q || !current || blocked) return;
     // Clearing only here keeps whatever is being typed when a retry lands.
     ask.mutate({ question: q, screen: current.screen }, { onSuccess: () => setQuestion("") });
   };
   // A Suggested Question or a follow-up is asked as is, about the current screen, leaving the Question box alone.
   const askNow = (q: string) => {
-    if (current && !ask.isPending) ask.mutate({ question: q, screen: current.screen });
+    if (current && !blocked) ask.mutate({ question: q, screen: current.screen });
   };
   // The same Question and screen identity as the failed turn, even after moving to another screen.
   const retry = (turn: Turn) => {
-    if (!ask.isPending) ask.mutate({ question: turn.question, screen: turn.screen });
+    if (!blocked) ask.mutate({ question: turn.question, screen: turn.screen });
   };
   return (
     <aside id="assistant-drawer" className="assistant panel" aria-label="Assistant" hidden={!open}>
@@ -299,17 +344,26 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
           {turns.map((t, i) => (
             <Fragment key={t.seq}>
               {i > 0 && !sameScreen(turns[i - 1].screen, t.screen) && <ContextDivider turn={t} />}
-              <TurnView turn={t} onFollowUp={askNow} onRetry={retry} busy={ask.isPending || !current} />
+              <TurnView turn={t} onFollowUp={askNow} onRetry={retry} busy={blocked || !current} />
             </Fragment>
           ))}
         </ol>
         <div aria-live="polite">
           {ask.isPending && <p className="mt-3 text-ink-3">Thinking…</p>}
-          {ask.isError && (
-            <div className="mt-3">
-              {/* The request never became a turn (network or server error): retry sends the same Question again. */}
-              <FailedCallout message={ask.error.message} onRetry={() => ask.mutate(ask.variables)} busy={false} />
-            </div>
+          {limit ? (
+            <p className="callout callout-warn mt-3" role="status">
+              {limit.message}
+            </p>
+          ) : ask.error instanceof LimitRejection ? (
+            // A limit's own message shows above while it applies; once it lifts, the old 429 is no longer news.
+            !ask.error.limit && <p className="callout callout-neg mt-3">{ask.error.message}</p>
+          ) : (
+            ask.isError && (
+              <div className="mt-3">
+                {/* The request never became a turn (network or server error): retry sends the same Question again. */}
+                <FailedCallout message={ask.error.message} onRetry={() => ask.mutate(ask.variables)} busy={false} />
+              </div>
+            )
           )}
         </div>
       </div>
@@ -320,14 +374,20 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
           send();
         }}
       >
-        {current && <SuggestedQuestions kind={current.screen.kind} onAsk={askNow} busy={ask.isPending} />}
+        {current && <SuggestedQuestions kind={current.screen.kind} onAsk={askNow} busy={blocked} />}
         <label className="label">
           Question
           <textarea
             className="field min-h-[4.5rem]"
             value={question}
-            disabled={!current}
-            placeholder={current ? `Ask about ${current.label}` : "Open the Queue or a Portfolio to ask about it"}
+            disabled={!current || limit !== null}
+            placeholder={
+              limit
+                ? "Asking is paused by a usage limit"
+                : current
+                  ? `Ask about ${current.label}`
+                  : "Open the Queue or a Portfolio to ask about it"
+            }
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -337,7 +397,7 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
             }}
           />
         </label>
-        <button className="btn btn-primary w-full" disabled={!current || !question.trim() || ask.isPending}>
+        <button className="btn btn-primary w-full" disabled={!current || !question.trim() || blocked}>
           Send
         </button>
       </form>

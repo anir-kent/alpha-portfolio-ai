@@ -6,6 +6,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
@@ -13,6 +14,7 @@ from app.db import AssistantTurnRow, AuditEventRow, ClientRow, ConversationRow, 
 from app.exchanges import CapturingLlm
 from app.llm import LlmError, LlmRequest, LlmResponse
 from app.seeder import PLANTED
+from app.settings import Settings
 from tests.runs import run_and_wait
 from tests.test_ai_recommendations import ai, narrative_reply, tilt_for  # noqa: F401  (fixture)
 from tests.test_portfolio import url
@@ -1038,3 +1040,120 @@ def test_a_selected_audit_event_outside_the_screens_search_gets_the_refusal(logi
     other = auditor.get("/api/audit/events", params={"portfolio_id": "C001"}).json()["items"][0]
     turn = ask(auditor, "What is this?", screen("audit", selected=str(other["id"]), portfolio_id="C003")).json()
     assert refused_without_a_call(turn, model)
+
+
+def turn_count(c):
+    r = c.get("/api/assistant/conversation")
+    return 0 if r.status_code == 204 else len(r.json()["turns"])
+
+
+def test_a_question_over_2000_characters_is_400_with_a_plain_message_and_makes_no_turn(login, model):
+    advisor = login("advisor")
+    assert ask(advisor, "x" * 2000, portfolio_screen("C001")).status_code == 200
+    r = ask(advisor, "x" * 2001, portfolio_screen("C001"))
+    assert r.status_code == 400
+    assert r.json()["detail"] == "A Question can be at most 2,000 characters."
+    assert turn_count(advisor) == 1 and len(model.requests) == 1
+
+
+CONVERSATION_LIMIT = "This Conversation has reached its limit of 50 Questions. Log out and back in to start a new one."
+
+
+def test_the_51st_question_in_a_conversation_is_429_with_a_plain_message_and_makes_no_turn(app, login, model):
+    app.state.settings.assistant_questions_per_hour = 1000
+    advisor = login("advisor")
+    for n in range(50):
+        assert ask(advisor, f"Question {n}?", portfolio_screen("C001")).status_code == 200
+    r = ask(advisor, "One more?", portfolio_screen("C001"))
+    assert r.status_code == 429 and r.json()["detail"] == CONVERSATION_LIMIT
+    assert turn_count(advisor) == 50 and len(model.requests) == 50
+
+
+def test_failed_and_refused_turns_count_towards_the_conversation_limit(app, login, model):
+    app.state.settings.assistant_questions_per_conversation = 2
+    advisor = login("advisor")
+    model.error = "boom"
+    assert ask(advisor, "Fails?", portfolio_screen("C001")).json()["outcome"] == "failed"
+    assert ask(advisor, "Unreadable?", portfolio_screen("C999")).json()["outcome"] == "refused"
+    r = ask(advisor, "Third?", portfolio_screen("C001"))
+    assert r.status_code == 429 and "limit of 2 Questions" in r.json()["detail"]
+
+
+def test_a_new_login_starts_a_conversation_with_its_own_limit(app, login, model):
+    app.state.settings.assistant_questions_per_conversation = 1
+    first = login("advisor")
+    ask(first, "One?", portfolio_screen("C001"))
+    assert ask(first, "Two?", portfolio_screen("C001")).status_code == 429
+    first.post("/api/auth/logout")
+    assert ask(login("advisor"), "Two?", portfolio_screen("C001")).status_code == 200
+
+
+def age_turns(app, minutes):
+    """Moves every stored turn `minutes` into the past."""
+    with app.state.session_factory() as db:
+        for t in db.scalars(select(AssistantTurnRow)).all():
+            then = datetime.strptime(t.created_at, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=UTC)
+            t.created_at = (then - timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        db.commit()
+
+
+def test_the_21st_question_in_an_hour_is_429_across_logins_with_a_plain_message(login, model):
+    first = login("advisor")
+    for n in range(12):
+        ask(first, f"Question {n}?", portfolio_screen("C001"))
+    first.post("/api/auth/logout")
+    second = login("advisor")
+    for n in range(8):
+        assert ask(second, f"Question {n}?", portfolio_screen("C001")).status_code == 200
+    r = ask(second, "One more?", portfolio_screen("C001"))
+    assert r.status_code == 429
+    assert r.json()["detail"] == "You've reached the limit of 20 Questions an hour. Try again in 60 minutes."
+    assert r.headers["Retry-After"] == "3600"
+    assert turn_count(second) == 8 and len(model.requests) == 20
+
+
+def test_the_hourly_limit_is_per_user(login, model):
+    advisor = login("advisor")
+    for n in range(20):
+        ask(advisor, f"Question {n}?", portfolio_screen("C001"))
+    assert ask(advisor, "More?", portfolio_screen("C001")).status_code == 429
+    assert ask(login("portfolio_manager"), "Mine?", portfolio_screen("C001")).status_code == 200
+
+
+def test_the_hour_rolls_so_questions_free_up_as_the_oldest_ages_out(app, login, model):
+    app.state.settings.assistant_questions_per_hour = 2
+    advisor = login("advisor")
+    ask(advisor, "One?", portfolio_screen("C001"))
+    age_turns(app, 45)
+    ask(advisor, "Two?", portfolio_screen("C001"))
+    r = ask(advisor, "Three?", portfolio_screen("C001"))
+    assert r.status_code == 429
+    assert r.json()["detail"] == "You've reached the limit of 2 Questions an hour. Try again in 15 minutes."
+    assert 899 <= int(r.headers["Retry-After"]) <= 900
+    age_turns(app, 16)
+    assert ask(advisor, "Three?", portfolio_screen("C001")).status_code == 200
+
+
+LIMIT_ENV = {
+    "APP_ASSISTANT_QUESTION_MAX_CHARS": ("assistant_question_max_chars", 500),
+    "APP_ASSISTANT_QUESTIONS_PER_CONVERSATION": ("assistant_questions_per_conversation", 10),
+    "APP_ASSISTANT_QUESTIONS_PER_HOUR": ("assistant_questions_per_hour", 5),
+    "APP_ASSISTANT_HISTORY_PAIRS": ("assistant_history_pairs", 3),
+    "APP_ASSISTANT_CONTEXT_ROWS": ("assistant_context_rows", 12),
+}
+
+
+def test_every_limit_is_an_app_prefixed_setting(monkeypatch):
+    for env, (_, value) in LIMIT_ENV.items():
+        monkeypatch.setenv(env, str(value))
+    settings = Settings(_env_file=None)
+    assert {env: getattr(settings, field) for env, (field, _) in LIMIT_ENV.items()} == {
+        env: value for env, (_, value) in LIMIT_ENV.items()
+    }
+
+
+@pytest.mark.parametrize("env", list(LIMIT_ENV)[:3])
+def test_a_question_limit_below_one_is_rejected_at_startup(monkeypatch, env):
+    monkeypatch.setenv(env, "0")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)

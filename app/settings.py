@@ -1,3 +1,4 @@
+from pydantic import PositiveInt
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,5 +24,10 @@ class Settings(BaseSettings):
     llm_stream_max_seconds: float = 300.0  # a stream closes after this; the browser reconnects with its last event id
     assistant_history_pairs: int = 6  # Question/Answer pairs of earlier turns sent with each Question
     assistant_context_rows: int = 25  # rows of a list screen (the Queue) a Screen Context holds, by the screen's sort
+    assistant_question_max_chars: PositiveInt = 2000  # a longer Question is refused with 400
+    assistant_questions_per_conversation: PositiveInt = (
+        50  # Questions a Conversation takes; then 429 until the next login
+    )
+    assistant_questions_per_hour: PositiveInt = 20  # Questions a user may ask in any rolling hour; then 429
     seed_dir: str = "data/seed"
     cors_origins: list[str] = ["http://localhost:5173"]

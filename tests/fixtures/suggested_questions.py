@@ -59,6 +59,14 @@ def replay_settings(directory: Path) -> Settings:
     )
 
 
+def lift_question_limits(settings: Settings) -> Settings:
+    """Lifts the per-Conversation and per-hour Question limits, for sweeps that ask every Suggested Question on every
+    demo screen as every role: far more than one user may ask in an hour."""
+    settings.assistant_questions_per_conversation = 10_000
+    settings.assistant_questions_per_hour = 10_000
+    return settings
+
+
 def login(app, role: str) -> TestClient:
     c = TestClient(app)
     r = c.post("/api/auth/login", json={"username": role, "password": SEED_PASSWORD})
@@ -122,7 +130,7 @@ def record() -> int:
     )
     client = _ReplayOrLive(live)
     with tempfile.TemporaryDirectory() as tmp:
-        app = create_app(replay_settings(Path(tmp)))
+        app = create_app(lift_question_limits(replay_settings(Path(tmp))))
         inner: LlmClient = client
         app.state.llm = CapturingLlm(inner, app.state.session_factory, mode="recorded")
         seed_demo(app)

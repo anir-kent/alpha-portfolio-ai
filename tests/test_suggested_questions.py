@@ -8,7 +8,7 @@ import pytest
 from app.exchanges import CapturingLlm
 from app.main import create_app
 from tests.conftest import ROLES
-from tests.fixtures.suggested_questions import demo_screens, replay_settings, seed_demo
+from tests.fixtures.suggested_questions import demo_screens, lift_question_limits, replay_settings, seed_demo
 from tests.fixtures.suggested_questions import login as demo_login
 from tests.test_assistant import PromptCapturingLlm, answer, ask, events, model, portfolio_screen  # noqa: F401  (fixture)
 from tests.test_queue import seeded  # noqa: F401  (fixture)
@@ -91,7 +91,7 @@ def test_a_failure_in_live_mode_keeps_the_ordinary_failure_message(login, model)
 def _seeded_demo_prompts(directory) -> list[tuple[str, str, str]]:
     """(role, screen kind, prompt) for every Suggested Question on every demo screen, on a freshly seeded app."""
     directory.mkdir()
-    app = create_app(replay_settings(directory))
+    app = create_app(lift_question_limits(replay_settings(directory)))
     seed_demo(app)
     fake = PromptCapturingLlm(answer())
     app.state.llm = CapturingLlm(fake, app.state.session_factory, mode="recorded")
@@ -115,6 +115,7 @@ def test_every_demo_screen_context_is_byte_identical_across_freshly_seeded_datab
 
 @pytest.fixture
 def demo(app):
+    lift_question_limits(app.state.settings)
     seed_demo(app)
     return app
 

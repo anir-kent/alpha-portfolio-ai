@@ -6,7 +6,8 @@ Conversation (ADR-0004). The model's text is never shown for an out-of-scope Que
 Out-of-Scope Refusal instead.
 """
 
-from datetime import UTC, datetime
+import math
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, ValidationError, field_validator
@@ -34,6 +35,59 @@ Outcome = Literal["answered", "refused", "failed"]
 # Why a turn failed, on its `assistant.failed` Audit Event. The user sees FAILED_MESSAGE, except for a recorded-mode
 # miss (`replay_miss`), which says honestly that only Suggested Questions replay.
 FailureReason = Literal["llm_error", "unreadable_reply", "pii", "replay_miss"]
+
+
+class LimitExceeded(Exception):
+    """A usage limit stops the Question before it becomes a turn: nothing is stored or sent to the model."""
+
+    def __init__(self, status: int, message: str, retry_after: int | None = None):
+        super().__init__(message)
+        self.status = status  # 400 for an over-length Question, 429 for a count limit
+        self.message = message  # plain, shown to the user as is
+        self.retry_after = retry_after  # seconds until a Question would be accepted; None when time alone won't do
+
+
+def _hourly_wait(db: Session, user: User, per_hour: int) -> int | None:
+    """Seconds until the user may ask again under the rolling-hour limit, or None if they may ask now. The user's turns
+    count across all their Conversations, ended ones included."""
+    now = datetime.now(UTC)
+    since = audit.format_ts(now - timedelta(hours=1))  # stored timestamps share this format, so they sort as strings
+    recent = db.scalars(
+        select(AssistantTurnRow.created_at)
+        .join(ConversationRow, AssistantTurnRow.conversation_id == ConversationRow.id)
+        .where(ConversationRow.user_id == user.id, AssistantTurnRow.created_at > since)
+        .order_by(AssistantTurnRow.created_at.desc())
+    ).all()
+    if len(recent) < per_hour:
+        return None
+    # The newest `per_hour` turns fill the window; the oldest of them has to age out before there is room.
+    frees_at = datetime.fromisoformat(recent[per_hour - 1]) + timedelta(hours=1)
+    return max(math.ceil((frees_at - now).total_seconds()), 1)
+
+
+def check_limits(db: Session, user: User, session: SessionRow, question: str, settings: Settings) -> None:
+    """Raises LimitExceeded when a configured limit stops this Question (sme-assistant spec: Limits). Every stored turn
+    counts, whatever its outcome: each one was a Question asked."""
+    if len(question) > settings.assistant_question_max_chars:
+        raise LimitExceeded(400, f"A Question can be at most {settings.assistant_question_max_chars:,} characters.")
+    per_conversation = settings.assistant_questions_per_conversation
+    conv = _open_conversation(db, session.token_hash)
+    asked = db.scalar(select(func.count()).where(AssistantTurnRow.conversation_id == conv.id)) if conv else 0
+    if (asked or 0) >= per_conversation:
+        raise LimitExceeded(
+            429,
+            f"This Conversation has reached its limit of {per_conversation:,} Questions. Log out and back in to start "
+            "a new one.",
+        )
+    per_hour = settings.assistant_questions_per_hour
+    if (wait := _hourly_wait(db, user, per_hour)) is not None:
+        minutes = math.ceil(wait / 60)
+        raise LimitExceeded(
+            429,
+            f"You've reached the limit of {per_hour:,} Questions an hour. Try again in {minutes} "
+            f"minute{'' if minutes == 1 else 's'}.",
+            retry_after=wait,
+        )
 
 
 def _failure_message(reason: str | None) -> str:
@@ -186,7 +240,9 @@ def ask(
     screen: ScreenIdentity,
     settings: Settings,
 ) -> Turn:
-    """Afterwards the turn is stored in the session's Conversation and its Audit Event is in the chain."""
+    """Afterwards the turn is stored in the session's Conversation and its Audit Event is in the chain. Raises
+    LimitExceeded, storing nothing, when a usage limit stops the Question."""
+    check_limits(db, user, session, question, settings)
     context = screen_context.build(db, market, user, screen, settings)
     outcome: Outcome
     answer: Answer | None = None

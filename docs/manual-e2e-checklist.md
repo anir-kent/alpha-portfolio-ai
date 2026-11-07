@@ -94,6 +94,15 @@ Setup: `APP_LLM_MODE=recorded`, `APP_LLM_RECORDINGS_DIR=tests/fixtures/llm`, the
 - [ ] Clicking a follow-up suggestion under an Answer asks it straight away about the current screen, leaving the Question box untouched; in replay mode a follow-up that isn't a Suggested Question gets the replay-mode message
 - [ ] On `/audit`, a Suggested Question gets the replay-mode message: Audit Events carry wall-clock timestamps, so the Audit context never matches a recording (expected)
 
+## Assistant (usage limits)
+
+Setup: `APP_ASSISTANT_QUESTION_MAX_CHARS=40`, `APP_ASSISTANT_QUESTIONS_PER_CONVERSATION=3`, `APP_ASSISTANT_QUESTIONS_PER_HOUR=5` (defaults 2,000, 50 and 20). Every turn counts, failed and refused ones included.
+
+- [ ] Paste a Question over 40 characters and Send: the drawer shows "A Question can be at most 40 characters." with no Retry, no turn is added, the Question box keeps the text, and a shorter Question still sends
+- [ ] As advisor, ask three Questions, then a fourth: the drawer shows "This Conversation has reached its limit of 3 Questions. Log out and back in to start a new one." The Question box, Send, Suggested Questions, follow-ups and Retry buttons are all disabled
+- [ ] Log out and back in as advisor: the limit message is gone and two more Questions send. The next one shows "You've reached the limit of 5 Questions an hour. Try again in 60 minutes." and sending stays disabled
+- [ ] Log in as portfolio_manager in another browser: their Questions are not held back by the advisor's hourly count
+
 ## Approvals
 
 - [ ] C002/C003 (no breach, not high-impact): Advisor accept -> Approved

@@ -22,12 +22,27 @@ def _session(db: Session, request: Request) -> SessionRow:
     return session
 
 
+class LimitDetail(BaseModel):
+    detail: str  # the plain message the drawer shows as is
+
+
 class QuestionIn(BaseModel):
     question: str = Field(min_length=1)
     screen: ScreenIdentity
 
 
-@router.post("/questions", response_model=Turn, operation_id="askAssistant")
+@router.post(
+    "/questions",
+    response_model=Turn,
+    responses={
+        400: {"model": LimitDetail, "description": "The Question is longer than the configured limit"},
+        429: {
+            "model": LimitDetail,
+            "description": "A per-Conversation or per-user-per-hour limit is hit. Retry-After is set for the hourly one",
+        },
+    },
+    operation_id="askAssistant",
+)
 def ask(
     body: QuestionIn,
     request: Request,
@@ -37,7 +52,13 @@ def ask(
     market: MarketData = Depends(get_market),
 ):
     session = _session(db, request)
-    return assistant.ask(db, llm, market, user, session, body.question.strip(), body.screen, request.app.state.settings)
+    try:
+        return assistant.ask(
+            db, llm, market, user, session, body.question.strip(), body.screen, request.app.state.settings
+        )
+    except assistant.LimitExceeded as e:
+        headers = {"Retry-After": str(e.retry_after)} if e.retry_after is not None else None
+        raise HTTPException(e.status, e.message, headers=headers) from e
 
 
 @router.get(

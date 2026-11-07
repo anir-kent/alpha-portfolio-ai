@@ -445,6 +445,26 @@
               }
             }
           },
+          "400": {
+            "description": "The Question is longer than the configured limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LimitDetail"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "A per-Conversation or per-user-per-hour limit is hit. Retry-After is set for the hourly one",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LimitDetail"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4139,6 +4159,19 @@
           "count"
         ],
         "title": "IssueCount"
+      },
+      "LimitDetail": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "LimitDetail"
       },
       "Lineage": {
         "properties": {
