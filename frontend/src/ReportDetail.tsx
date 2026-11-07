@@ -1,6 +1,6 @@
 /** Report detail: a Report's metadata and every Insight in the review layout, each beside the full text of its cited
- * page with the passage highlighted. Read-only; the Insight Review actions land in the detail pane (ticket 04).
- * Selection, status filter and the page being read all live in the URL, so a reload or a shared link restores them. */
+ * page with the passage highlighted. Read-only; the Insight Review actions land in the detail pane (ticket 04). A
+ * failed extraction offers Upload again. Selection, status filter and the page being read all live in the URL, so a reload or a shared link restores them. */
 import { useEffect, useMemo, useRef } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { findPassage } from "./passage";
@@ -21,6 +21,7 @@ import {
   type Report,
 } from "./research";
 import { Empty, ErrorLine, Icon, PageHeader, Panel, Pill, minuteUtc } from "./ui";
+import { UploadReportButton } from "./UploadReportDialog";
 
 type Filter = InsightStatus | "all";
 const FILTERS: { value: Filter; text: string }[] = [
@@ -358,7 +359,7 @@ function PageReader({
   );
 }
 
-function ReportDetail({ report }: { report: Report }) {
+function ReportDetail({ report, canUpload }: { report: Report; canUpload: boolean }) {
   const [params, setParams] = useSearchParams();
   const rawFilter = params.get("status");
   const filter: Filter = FILTERS.some((f) => f.value === rawFilter) ? (rawFilter as Filter) : "all";
@@ -397,11 +398,12 @@ function ReportDetail({ report }: { report: Report }) {
       <BackLink />
       <ReportHeader report={report} />
       {failed && (
-        <div className="mb-3">
+        <div className="mb-3 space-y-2">
           <ErrorLine>
             Extraction failed: {report.extraction_error ?? "no error was recorded"}. No Insights were kept from this
             Report.
           </ErrorLine>
+          {canUpload && <UploadReportButton className="btn btn-primary btn-sm">Upload again</UploadReportButton>}
         </div>
       )}
       <div className={SPLIT}>
@@ -489,8 +491,8 @@ function DetailSkeleton() {
   );
 }
 
-/** Route element for /research/reports/:reportId. */
-export function ReportDetailPage() {
+/** Route element for /research/reports/:reportId. `canUpload`: a failed extraction offers Upload again. */
+export function ReportDetailPage({ canUpload }: { canUpload: boolean }) {
   const { reportId = "" } = useParams();
   const reports = useReports();
 
@@ -516,5 +518,5 @@ export function ReportDetailPage() {
         </Panel>
       </div>
     );
-  return <ReportDetail report={report} />;
+  return <ReportDetail report={report} canUpload={canUpload} />;
 }

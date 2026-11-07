@@ -543,6 +543,33 @@
       var(--shadow-pop),
       inset 0 1px 0 #fff;
   }
+  /* Upload Report drop zone: a debossed well like .field that lifts toward the file being dragged over it. */
+  .dropzone {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1.1rem 1rem;
+    border-radius: 18px;
+    border: 1.5px dashed rgb(31 38 80 / 0.2);
+    background: linear-gradient(to bottom, rgb(31 38 80 / 0.04), rgb(255 255 255 / 0.35));
+    box-shadow: inset 0 2px 6px rgb(31 38 135 / 0.07);
+    transition:
+      border-color 140ms,
+      background-color 140ms,
+      box-shadow 140ms;
+  }
+  .dropzone[data-dragging] {
+    border-color: rgb(42 91 220 / 0.7);
+    background-color: rgb(226 236 255 / 0.7);
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 0.8),
+      0 0 0 4px rgb(42 91 220 / 0.14);
+  }
+  .dropzone[data-busy] {
+    border-style: solid;
+    border-color: rgb(42 91 220 / 0.25);
+    background: linear-gradient(135deg, rgb(226 236 255 / 0.8), rgb(226 236 255 / 0.4));
+  }
   .run-step {
     display: flex;
     align-items: center;

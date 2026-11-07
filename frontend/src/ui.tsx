@@ -416,3 +416,32 @@ export function Drawer({ title, onClose, children }: { title: string; onClose: (
     document.body,
   );
 }
+
+/** Enabled controls a user can Tab to; anything taken out of the tab order (tabindex -1, e.g. a hidden file input) is not. */
+const FOCUSABLE = [
+  "button:not([disabled])",
+  "[href]",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]",
+]
+  .map((s) => `${s}:not([tabindex='-1'])`)
+  .join(", ");
+
+/** A dialog's Tab handler: Tab and Shift+Tab cycle through the dialog's enabled controls and never leave it. With none
+ * enabled (e.g. while it saves), focus stays on the dialog itself. */
+export function trapTab(e: { key: string; shiftKey: boolean; preventDefault: () => void }, dialog: HTMLElement | null) {
+  if (e.key !== "Tab" || !dialog) return;
+  const focusable = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)];
+  if (focusable.length === 0) return e.preventDefault();
+  const first = focusable[0],
+    last = focusable[focusable.length - 1];
+  if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}

@@ -7,12 +7,14 @@ Button labels below are taken from the code, not from a live run, and may differ
 ## 0. Before you start
 
 **LLM mode.** `.env` may be in live mode (`APP_LLM_MODE=live`, `APP_LLM_RECORD=true`). This matters for what you will see:
+
 - The repo only ships recordings for insight extraction. In `recorded` mode, the tilt, rationale, memo and queue narrative all fail with `LlmError`. The app handles that by showing a "failed" status instead of crashing.
 - For a realistic AI walkthrough, stay in live mode. Each reply is also saved as a recording, so you can switch to `recorded` for repeat runs.
 - Recorded mode ships recordings only for insight extraction, so the tilt, rationale, memo and narrative steps show failed Exchanges there. In a Recommendation's AI contribution each such step shows as `recorded` and `failed` with a short reason, and latency reads "n/a (replayed)".
 - A failed AI step is itself a useful check. The deterministic parts (drift, suitability, approvals) must still work.
 
 **Reset and start** (three terminals, from the repo root):
+
 ```bash
 source .venv/bin/activate
 uv run python -m app.seeder            # 25 synthetic clients, deterministic
@@ -20,6 +22,7 @@ uv run python -m app.research_seed     # 5 reports + human-verified approved ins
 uv run uvicorn app.main:create_app --factory --port 8000   # Terminal 1
 cd frontend && npm run dev                                  # Terminal 2 -> http://localhost:5173
 ```
+
 - The Vite dev server proxies `/api` to port 8000.
 - All users log in with the password in `APP_SEED_USER_PASSWORD` (`aditya@123` in `.env.example`; check your `.env`).
 - **The username is the role name:** `advisor`, `relationship_manager`, `compliance_officer`, `investment_committee`, `auditor`, `platform_owner`, `research_analyst`, `portfolio_manager`.
@@ -27,13 +30,13 @@ cd frontend && npm run dev                                  # Terminal 2 -> http
 
 ## Planted scenarios
 
-| Client | Scenario | What to expect |
-|---|---|---|
-| C001 | Heavy tech | Sector concentration through look-through |
-| C002 | Overweight energy | Asset-class or sector drift |
-| C003 | Cash drag | Minimum-cash or drift signal |
-| C004 | Holds XOM, which is restricted | Restriction breach, so Compliance is required |
-| C005 | Clean portfolio | No action, so the system doesn't over-recommend |
+| Client | Scenario                       | What to expect                                  |
+| ------ | ------------------------------ | ----------------------------------------------- |
+| C001   | Heavy tech                     | Sector concentration through look-through       |
+| C002   | Overweight energy              | Asset-class or sector drift                     |
+| C003   | Cash drag                      | Minimum-cash or drift signal                    |
+| C004   | Holds XOM, which is restricted | Restriction breach, so Compliance is required   |
+| C005   | Clean portfolio                | No action, so the system doesn't over-recommend |
 
 ## Act 1: Advisor builds the queue (stories 1-6, 66-68)
 
@@ -61,6 +64,7 @@ cd frontend && npm run dev                                  # Terminal 2 -> http
 ## Act 3: Recommendation, grounding and the AI memo (stories 13-17, 56-60)
 
 In the recommendation panel on C001, check that:
+
 - Trade Lines show both percentages and currency amounts;
 - the rationale carries citations to report passages and engine figures;
 - ungrounded claims are flagged and excluded from the memo, but still visible;
@@ -105,6 +109,7 @@ In the recommendation panel on C001, check that:
 ## Act 9: Auditor evidence (stories 39-46, 61)
 
 Log in as `auditor`.
+
 1. **Audit:** search by event type, actor, client and date range.
    - Look for `access_denied`.
    - Check that overrides (modified recommendations and exception approvals) are highlighted.
@@ -122,7 +127,8 @@ Log in as `auditor`.
 ## Act 11: API-only roles (stories 47-55)
 
 These have no UI, so use `curl`, or `/docs` at http://localhost:8000/docs.
-- `research_analyst`: upload a report with `POST /api/reports`. Its insights should be **pending** and should not affect any tilt until approved through `POST /api/insights/{id}/decision`.
+
+- `research_analyst`: Insight Reviews still go through `POST /api/insights/{id}/decision` until the review actions land. Uploading now has a UI: Research → **Upload Report** (see the Research Analyst section of the checklist). Start the API with `APP_LLM_RECORDINGS_DIR=tests/fixtures/llm` so the demo house view (`tests/fixtures/house_view_demo.txt`) replays its committed extraction and lands with 3 Insights **pending**; any other new text has no recording and shows the failed extraction with **Upload again**. Pending Insights do not affect any tilt until approved.
 - `platform_owner`: `GET /api/health` and `PATCH /api/config`. Lower the tilt bound or the high-impact threshold, rerun analysis, and see the effect.
 - `portfolio_manager`: read-only access to portfolios and config.
 

@@ -8,15 +8,15 @@ See spec: Upload dialog; Access.
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The Upload Report action is shown only with the `report:upload` permission
-- [ ] The dialog accepts a picked or dropped PDF or plain-text file; other types and files over 20 MB are rejected in the browser with a specific message, before any request
-- [ ] The title is optional and defaults to the file name
-- [ ] During the request the dialog shows the extracting state, disables its controls, and Escape or a backdrop click does not close it
-- [ ] On success the Report list is refreshed and the Analyst is taken to the new Report's detail
-- [ ] 413 and 422 responses are shown inline in the dialog with the server's message, and the Analyst can pick another file and retry
-- [ ] A Report returned with failed extraction lands on its detail with the stored error and an Upload again action
-- [ ] The dialog manages focus: focus moves into it on open, is trapped while open, and returns to the Upload Report button on close
-- [ ] The Research Analyst checklist section gains: upload the demo house view and land on it with Insights awaiting review; upload an unsupported file type; upload a file over 20 MB; upload a file with no recording (recorded mode) and see the failed state with Upload again
-- [ ] Typecheck, lint, format check and build pass
+- [x] The Upload Report action is shown only with the `report:upload` permission
+- [x] The dialog accepts a picked or dropped PDF or plain-text file; other types and files over 20 MB are rejected in the browser with a specific message, before any request
+- [x] The title is optional and defaults to the file name
+- [x] During the request the dialog shows the extracting state, disables its controls, and Escape or a backdrop click does not close it
+- [x] On success the Report list is refreshed and the Analyst is taken to the new Report's detail
+- [x] 413 and 422 responses are shown inline in the dialog with the server's message, and the Analyst can pick another file and retry
+- [x] A Report returned with failed extraction lands on its detail with the stored error and an Upload again action
+- [x] The dialog manages focus: focus moves into it on open, is trapped while open, and returns to the Upload Report button on close
+- [x] The Research Analyst checklist section gains: upload the demo house view and land on it with Insights awaiting review; upload an unsupported file type; upload a file over 20 MB; upload a file with no recording (recorded mode) and see the failed state with Upload again
+- [x] Typecheck, lint, format check and build pass

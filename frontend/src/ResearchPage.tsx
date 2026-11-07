@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { KIND_LABEL, Outcome, SeedBadge, insightCounts, reportPath, useReports, type Report } from "./research";
-import { Empty, ErrorLine, PageHeader, Panel, minuteUtc } from "./ui";
+import { Empty, ErrorLine, Icon, PageHeader, Panel, minuteUtc } from "./ui";
+import { UploadReportButton } from "./UploadReportDialog";
 
 const SKELETON_ROWS = 4;
 const COLUMNS: { label: string; num?: boolean }[] = [
@@ -122,13 +123,22 @@ function ReportsTab() {
   );
 }
 
-/** The Research screen. Opens on Reports; the To review tab arrives with the Insight inbox. */
-export function ResearchPage() {
+/** The Research screen. Opens on Reports; the To review tab arrives with the Insight inbox. `canUpload`: the session
+ * holds `report:upload`, so the header offers Upload Report. */
+export function ResearchPage({ canUpload }: { canUpload: boolean }) {
   return (
     <div>
       <PageHeader
         title="Research"
         sub="Reports in the platform and the Insights extracted from them. No Insight informs a Portfolio until it is approved."
+        actions={
+          canUpload && (
+            <UploadReportButton className="btn btn-primary">
+              <Icon name="research" />
+              Upload Report
+            </UploadReportButton>
+          )
+        }
       />
       <div role="tablist" aria-label="Research sections" className="seg mb-3">
         <button type="button" role="tab" aria-selected id="research-tab-reports" aria-controls="research-panel-reports">

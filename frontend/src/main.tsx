@@ -319,9 +319,14 @@ function Shell({ username, role, permissions }: { username: string; role: string
             {permissions.includes("approvals:read") && (
               <Route path="/approvals" element={<ApprovalsPage permissions={permissions} />} />
             )}
-            {permissions.includes("report:read") && <Route path="/research" element={<ResearchPage />} />}
             {permissions.includes("report:read") && (
-              <Route path="/research/reports/:reportId" element={<ReportDetailPage />} />
+              <Route path="/research" element={<ResearchPage canUpload={permissions.includes("report:upload")} />} />
+            )}
+            {permissions.includes("report:read") && (
+              <Route
+                path="/research/reports/:reportId"
+                element={<ReportDetailPage canUpload={permissions.includes("report:upload")} />}
+              />
             )}
             {permissions.includes("audit:read") && <Route path="/audit" element={<AuditPage />} />}
             {permissions.includes("audit:read") && (

@@ -6,6 +6,7 @@ import type { components } from "./api/schema";
 import { Icon, Pill, type Tone } from "./ui";
 
 export type Report = components["schemas"]["ReportOut"];
+export type ReportList = components["schemas"]["ReportList"];
 export type Insight = components["schemas"]["InsightOut"];
 export type InsightStatus = Insight["status"];
 export type InsightCounts = Record<InsightStatus, number>;

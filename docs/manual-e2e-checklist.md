@@ -112,7 +112,7 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] Nav shows a single Research item under RESEARCH; the screen opens on the Reports tab
 - [ ] Reports table lists the 5 seeded Reports, newest first, each with title, kind (PDF/Text), page count, uploader, upload time (UTC), extraction outcome and Awaiting review / Approved / Rejected counts that add up to the Report's Insights
 - [ ] Every seeded Report carries a "Human-verified seed" badge and a "Seeded" outcome
-- [ ] Failed extraction (with `APP_LLM_MODE=recorded`, `POST /api/reports` any new `.txt`, which has no recording): the Report shows a red "Extraction failed" pill with an alert icon and text (hover shows the stored error), and its row is marked
+- [ ] Failed extraction (with `APP_LLM_MODE=recorded`, upload any new `.txt`, which has no recording): the Report shows a red "Extraction failed" pill with an alert icon and text (hover shows the stored error), and its row is marked
 - [ ] Throttle the network (DevTools, Slow 3G) and reload: skeleton rows show while the list loads; stop the API and reload: an error line says "Could not load Reports"
 - [ ] `advisor` and `auditor`: no Research item in the nav, and opening `/research` shows the placeholder, not the Reports table
 - [ ] Open a seeded Report (click its row or title, e.g. the Q2 research update): the header shows title, ID, kind, page count, uploader, upload time (UTC), "Seeded" and "Human-verified seed"; a "Reports" link returns to the library
@@ -127,6 +127,15 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] At 1280px and wider the Insight list and the detail sit side by side; narrower, the list stacks above the detail
 - [ ] A Report whose extraction failed shows the stored error in red and "No Insights, because extraction failed"; a Report that succeeded with none shows the neutral "No Insights were extracted from this Report" with its page count; both still let you read their pages
 - [ ] Throttle the network and open a Report: skeletons for the header, list and page text; stop the API and pick an unloaded page: "Could not load page N of this Report"
+- [ ] Upload setup: start the API with `APP_LLM_MODE=recorded APP_LLM_RECORDINGS_DIR=tests/fixtures/llm`, where the committed extraction recordings live (`data/llm_recordings/` is gitignored, and a stale local recording there can replay an empty extraction)
+- [ ] `research_analyst` sees an Upload Report button in the Research header; `advisor` and `auditor` never reach the screen; nothing else shows it
+- [ ] Upload Report: focus moves into the dialog on "Choose a file"; Tab and Shift+Tab cycle inside it; Escape, Cancel, the close button or a backdrop click close it and focus returns to Upload Report
+- [ ] Upload the demo house view (`tests/fixtures/house_view_demo.txt`), picked and then again by drag and drop (the zone highlights on drag-over): the file name and size show, the title placeholder is the file name; Upload and extract shows "Extracting Insights from your Report…" with every control disabled, and Escape or a backdrop click does nothing; it then closes and lands on the new Report's detail with 3 Insights awaiting review (Information Technology, Utilities, equity), and the Reports tab lists it newest first with Awaiting review 3
+- [ ] A typed title replaces the file name as the Report's title; an empty one keeps the file name
+- [ ] Unsupported type (e.g. a `.docx` or `.png`): rejected in the dialog with "… is not a PDF or text file", and DevTools Network shows no `POST /api/reports`
+- [ ] Over 20 MB (`head -c 21000000 /dev/zero > big.txt`): rejected in the dialog with "big.txt is 20.03 MB, over the 20 MB limit", no request sent
+- [ ] Server refusals stay inline: an empty or non-UTF-8 `.txt`, or a `.pdf` that is not a PDF, shows the server's 422 message in the dialog; picking another file clears it and the upload can be retried without reopening
+- [ ] Failed extraction: upload a `.txt` with no recording (any new text): lands on its detail with "Extraction failed: No recorded response for insight_extraction …" and an Upload again button, which reopens the dialog and returns focus to it on close
 
 ## Supersession and clean portfolio
 
