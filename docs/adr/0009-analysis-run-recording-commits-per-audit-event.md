@@ -1,0 +1,19 @@
+# An Analysis Run is scored in one transaction but recorded one Audit Event at a time (corrects ADR-0005)
+
+ADR-0005 says the scoring part of an Analysis Run "stays one transaction" and rejects committing stages separately because a crash would leave a half-scored run. The code does not work that way. This ADR records what the code does and the gap that leaves. ADR-0005's other decisions still stand: in-process Run Step progress, server-sent events, one Analysis Run in flight, and interrupted runs marked at startup.
+
+An Analysis Run commits in three phases. First, loading inputs and scoring every Portfolio happen in one transaction. That transaction flushes the run's priority and suitability results, each new Recommendation (status `pending_advisor`) and its Research Tilt record. Every Research Tilt LLM Exchange goes into it behind a savepoint (ADR-0004). It holds SQLite's write lock throughout, so ADR-0005's reasoning about progress rows holds for this phase. Second, the `record_run` Run Step writes the run's Audit Events, and `audit.record` commits after every event (ADR-0002). The first event, `analysis_run_started`, therefore commits all the scoring rows. Each later event commits on its own: `recommendation_superseded` for every Recommendation the run replaces (with its status change), then `suitability_evaluated`, `priority_scored`, the Research Tilt events and `recommendation_drafted` for each Portfolio. Third, a final commit sets the run `completed`. Only then does it become current, because the Queue and the drill-down's drift and suitability figures read the latest completed run.
+
+## Considered Options
+
+- **Make recording atomic now**: deferred, not rejected. `audit.record` would join the caller's transaction instead of committing, and `record_run` would commit once, so the scoring rows, every Audit Event and `completed` would land together. That changes the contract of a function every write path uses. Each caller that relies on its commit would need checking, and the fix belongs in a code ticket, not in a correction to the record.
+- **Edit ADR-0005 in place**: rejected. ADRs are not rewritten (ADR-0002 treats the audit trail the same way). A correcting ADR keeps what was believed, and when, visible.
+- **Scope Recommendation reads to the current run**: deferred with the atomic fix. It would hide the effects of an interrupted run but leave the partial audit trail, so it treats the symptom.
+
+## Consequences
+
+A crash in the scoring phase loses nothing durable. The transaction never commits, and at startup the run is marked interrupted with its scoring Run Steps skipped. A crash during `record_run` is different. The run is still never current and is marked interrupted. But its committed scoring rows remain, and so do any Audit Events written before the crash. Recommendations are not read by run:
+- The approvals inbox lists every Recommendation by status.
+- The Portfolio drill-down shows each Client's newest Recommendation.
+
+The interrupted run's Recommendations are therefore visible and open to a Decision. Some may have no `recommendation_drafted` Audit Event. Some of the Recommendations they replace may already be superseded while others are still open. Meanwhile the Queue still shows the previous run's scores. The audit chain is never broken by this, because each event is appended and hashed as usual. It is incomplete, not tampered with. Other writers, such as Decisions and Insight Reviews, can also land between those per-event commits, so they wait only for the scoring phase, not for the whole run. The window for the inconsistency is the length of `record_run`, short at demonstrator scale but not zero. Until the deferred fix lands, an interrupted run that has scoring rows but is not marked `completed` should be treated as suspect, and its Recommendations reviewed before any Decision. The single-process assumptions in ADR-0008 are unchanged.
