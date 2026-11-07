@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** closed
 
 - [x] A raising LLM produces a failed turn, an `assistant.failed` Audit Event (with the error Exchange reference when capture stored one) and a safe message with no exception text
 - [x] The drawer shows "The Assistant couldn't answer, try again" with a retry button; retry resubmits the same Question and screen identity as a new turn
