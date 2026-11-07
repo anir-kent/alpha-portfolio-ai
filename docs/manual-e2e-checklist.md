@@ -115,6 +115,18 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] Failed extraction (with `APP_LLM_MODE=recorded`, `POST /api/reports` any new `.txt`, which has no recording): the Report shows a red "Extraction failed" pill with an alert icon and text (hover shows the stored error), and its row is marked
 - [ ] Throttle the network (DevTools, Slow 3G) and reload: skeleton rows show while the list loads; stop the API and reload: an error line says "Could not load Reports"
 - [ ] `advisor` and `auditor`: no Research item in the nav, and opening `/research` shows the placeholder, not the Reports table
+- [ ] Open a seeded Report (click its row or title, e.g. the Q2 research update): the header shows title, ID, kind, page count, uploader, upload time (UTC), "Seeded" and "Human-verified seed"; a "Reports" link returns to the library
+- [ ] The Insight list is in page order (then ID); each row shows subject, page, direction, confidence and status pills; the first Insight is selected
+- [ ] The detail pane shows the subject with its kind (Sector or Asset Class), direction and confidence pills, "Cited on page N", the cited passage, and a read-only Insight Review record (Approved, reviewer `seed`, time, note) with a "Human-verified seed" marker; no approve or reject buttons yet, and nowhere does the UI say "decide" or "Decision"
+- [ ] The cited page shows in full with the passage highlighted and scrolled into view inside the page box (try an Insight whose passage is low on a long page); the page header carries a "Cited page" pill
+- [ ] Switch page with the picker and the previous/next buttons: other pages show unhighlighted and "Back to cited page N" returns; reselecting an Insight returns to its cited page
+- [ ] Passage-not-found warning: in DevTools, override the response of `GET /api/reports/{id}/pages/{n}` with text missing the passage (or wait for an uploaded Report in ticket 03 whose passage is edited): the page shows unhighlighted with "Cited passage not found verbatim on page N"
+- [ ] Filter by status: Awaiting review / Approved / Rejected / All with counts; Awaiting review on a seeded Report shows "No Insights in this Report are awaiting review."; reload keeps the filter (`?status=` in the URL)
+- [ ] Select an Insight, then reload: the same Insight and page come back (`?insight=` in the URL); copy the URL into a new tab, same result
+- [ ] `/research/reports/NOPE` shows "Report not found"; `?insight=9999` on a real Report shows "Insight #9999 is not in this Report" with "Show the first Insight"
+- [ ] At 1280px and wider the Insight list and the detail sit side by side; narrower, the list stacks above the detail
+- [ ] A Report whose extraction failed shows the stored error in red and "No Insights, because extraction failed"; a Report that succeeded with none shows the neutral "No Insights were extracted from this Report" with its page count; both still let you read their pages
+- [ ] Throttle the network and open a Report: skeletons for the header, list and page text; stop the API and pick an unloaded page: "Could not load page N of this Report"
 
 ## Supersession and clean portfolio
 

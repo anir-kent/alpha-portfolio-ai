@@ -10,6 +10,7 @@ import { ExchangesPage } from "./ExchangesPage";
 import { GovernancePage } from "./GovernancePage";
 import { PortfolioPage } from "./PortfolioPage";
 import { QueuePage } from "./QueuePage";
+import { ReportDetailPage } from "./ReportDetail";
 import { ResearchPage } from "./ResearchPage";
 import { landingRoute, visibleNav } from "./nav";
 import { Icon, Pill, useQueue } from "./ui";
@@ -319,6 +320,9 @@ function Shell({ username, role, permissions }: { username: string; role: string
               <Route path="/approvals" element={<ApprovalsPage permissions={permissions} />} />
             )}
             {permissions.includes("report:read") && <Route path="/research" element={<ResearchPage />} />}
+            {permissions.includes("report:read") && (
+              <Route path="/research/reports/:reportId" element={<ReportDetailPage />} />
+            )}
             {permissions.includes("audit:read") && <Route path="/audit" element={<AuditPage />} />}
             {permissions.includes("audit:read") && (
               <Route

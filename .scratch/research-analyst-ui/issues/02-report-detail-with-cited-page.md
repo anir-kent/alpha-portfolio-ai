@@ -8,17 +8,17 @@ See spec: Review layout; Passage matching; Reports library (detail); States.
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Report detail header shows title, kind, page count, uploader, upload time and the human-verified seed badge where it applies
-- [ ] A Report whose extraction failed shows the stored extraction error; a Report that succeeded with no Insights shows the neutral "No Insights were extracted from this Report" state with its page count, without error styling
-- [ ] The Insight list is in page order (then ID) and filters by status; the filter state survives a reload
-- [ ] Selecting an Insight fetches its cited page (cached per page) and highlights the passage, using whitespace-insensitive, case-sensitive matching, and scrolls it into view
-- [ ] When no match is found the page is shown unhighlighted with the not-found warning naming the page
-- [ ] Reviewed Insights show outcome, reviewer, time and note read-only; UI text says "review", "approve", "reject", never "decide" or "Decision"
-- [ ] The page picker shows any page of the Report
-- [ ] The selected Insight is in the URL; reload and deep link restore it; an unknown Insight or Report gets a clear not-found state
-- [ ] At narrow widths the two panes stack (list above detail); at 1280px and wider they sit side by side
-- [ ] Loading, empty and error states for the Report, its Insights and the page text
-- [ ] The Research Analyst checklist section gains: open a seeded Report, see the highlighted passage, switch page, filter by status, reload on a selected Insight
-- [ ] Typecheck, lint, format check and build pass
+- [x] Report detail header shows title, kind, page count, uploader, upload time and the human-verified seed badge where it applies
+- [x] A Report whose extraction failed shows the stored extraction error; a Report that succeeded with no Insights shows the neutral "No Insights were extracted from this Report" state with its page count, without error styling
+- [x] The Insight list is in page order (then ID) and filters by status; the filter state survives a reload
+- [x] Selecting an Insight fetches its cited page (cached per page) and highlights the passage, using whitespace-insensitive, case-sensitive matching, and scrolls it into view
+- [x] When no match is found the page is shown unhighlighted with the not-found warning naming the page
+- [x] Reviewed Insights show outcome, reviewer, time and note read-only; UI text says "review", "approve", "reject", never "decide" or "Decision"
+- [x] The page picker shows any page of the Report
+- [x] The selected Insight is in the URL; reload and deep link restore it; an unknown Insight or Report gets a clear not-found state
+- [x] At narrow widths the two panes stack (list above detail); at 1280px and wider they sit side by side
+- [x] Loading, empty and error states for the Report, its Insights and the page text
+- [x] The Research Analyst checklist section gains: open a seeded Report, see the highlighted passage, switch page, filter by status, reload on a selected Insight
+- [x] Typecheck, lint, format check and build pass
