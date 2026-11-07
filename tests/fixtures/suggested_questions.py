@@ -42,21 +42,30 @@ RECORDINGS = Path(__file__).parent / "llm"
 SNAPSHOT = ROOT / "data" / "market_snapshot.json"
 LOOKTHROUGH = ROOT / "data" / "fund_lookthrough.json"
 SEED_PASSWORD = "test-only-password"
+# The model and endpoint the committed recordings were made against. The Governance model card names both, so they
+# are part of the governance prompt and its recording keys: changing them means re-recording.
+RECORDED_MODEL = "gpt-4.1-mini"
+RECORDED_BASE_URL = "https://api.openai.com/v1/"
 
 
 def replay_settings(directory: Path) -> Settings:
-    """Settings for a throwaway app in recorded mode. The developer's `.env` is ignored: what goes into a prompt (the
-    model card names the model and endpoint, the row budget cuts lists) must be the same here, in CI and when
-    recording."""
-    return Settings(
-        _env_file=None,  # a pydantic-settings init option: read no .env
-        database_url=f"sqlite:///{directory / 'test.db'}",
-        seed_user_password=SEED_PASSWORD,
-        market_data_snapshot_path=str(directory / "snapshot.json"),
-        llm_mode="recorded",
-        llm_recordings_dir=str(RECORDINGS),
-        seed_dir=str(ROOT / "data" / "seed"),
-    )
+    """Settings for a throwaway app in recorded mode. Neither the developer's `.env` nor exported `APP_*` variables
+    are read: what goes into a prompt (the model card names the model and endpoint, the row budget cuts lists) must be
+    the same here, in CI and when recording."""
+    # Init values outrank environment variables, so passing every field's default makes each one ignore the process
+    # environment.
+    values = {name: field.get_default(call_default_factory=True) for name, field in Settings.model_fields.items()}
+    values |= {
+        "llm_model": RECORDED_MODEL,
+        "llm_base_url": RECORDED_BASE_URL,
+        "database_url": f"sqlite:///{directory / 'test.db'}",
+        "seed_user_password": SEED_PASSWORD,
+        "market_data_snapshot_path": str(directory / "snapshot.json"),
+        "llm_mode": "recorded",
+        "llm_recordings_dir": str(RECORDINGS),
+        "seed_dir": str(ROOT / "data" / "seed"),
+    }
+    return Settings(_env_file=None, **values)  # `_env_file=None`: a pydantic-settings init option, read no .env
 
 
 def lift_question_limits(settings: Settings) -> Settings:
@@ -124,6 +133,12 @@ def record() -> int:
     env = Settings()
     if not env.llm_api_key:
         print("APP_LLM_API_KEY must be set to record", file=sys.stderr)
+        return 1
+    if (env.llm_model, env.llm_base_url) != (RECORDED_MODEL, RECORDED_BASE_URL):
+        print(
+            f"record against {RECORDED_MODEL} at {RECORDED_BASE_URL}, or change RECORDED_MODEL and RECORDED_BASE_URL",
+            file=sys.stderr,
+        )
         return 1
     live = OpenAICompatibleLlm(
         base_url=env.llm_base_url, api_key=env.llm_api_key, model=env.llm_model, record_dir=RECORDINGS
