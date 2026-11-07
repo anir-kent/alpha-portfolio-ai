@@ -65,6 +65,10 @@ A source document (research, house view, outlook) ingested into the platform.
 A cited, structured claim extracted from a Report (e.g. a sector view), always traceable to a Report passage.
 _Avoid_: Signal, finding
 
+**Insight Review**:
+A Research Analyst's final approval or rejection of an Insight; an Insight not yet reviewed is awaiting review, and only approved Insights can inform a Research Tilt.
+_Avoid_: Insight Decision, validation
+
 **Research Tilt**:
 A bounded, configurable adjustment to target weights derived from an Insight and validated by the engine.
 
