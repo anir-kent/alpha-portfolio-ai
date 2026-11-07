@@ -76,6 +76,12 @@ def _cut(rows: list, row_budget: int, total: int) -> tuple[list, dict]:
 
 # --- Queue ------------------------------------------------------------------------------------------------------------
 
+QUEUE_SUGGESTED = (
+    "Why is the top Portfolio ranked above the second one?",
+    "Which priority component contributes most to the scores on this Queue?",
+    "Which Portfolios have breached their review SLA?",
+)
+
 
 def _queue(db: Session, user: User, screen: ScreenIdentity, row_budget: int) -> ScreenContext | None:
     """The prioritised Portfolios, cut to `row_budget` rows by the Queue's own sort and filters, saying what it cut. A
@@ -129,6 +135,12 @@ def _queue_row_figures(row: dict) -> dict[str, float]:
 
 
 # --- Portfolio --------------------------------------------------------------------------------------------------------
+
+PORTFOLIO_SUGGESTED = (
+    "Which asset class drives this Portfolio's drift?",
+    "Which Suitability Rules flag this Portfolio, and why?",
+    "Which Restrictions apply to this Portfolio?",
+)
 
 
 def _portfolio(db: Session, market: MarketData, user: User, screen: ScreenIdentity) -> ScreenContext | None:
@@ -218,6 +230,12 @@ def _portfolio_figures(detail: "PortfolioDetail") -> dict[str, float]:
 
 
 # --- Recommendation ---------------------------------------------------------------------------------------------------
+
+RECOMMENDATION_SUGGESTED = (
+    "Why does this Recommendation propose these Trade Lines?",
+    "Which Report passages drove the Research Tilt?",
+    "What is the post-trade Suitability outcome?",
+)
 
 
 def _recommendation(db: Session, user: User, screen: ScreenIdentity) -> ScreenContext | None:
@@ -339,6 +357,12 @@ def _fenced_passages(insights: list[InsightRow]) -> str:
 
 # --- Approvals --------------------------------------------------------------------------------------------------------
 
+APPROVALS_SUGGESTED = (
+    "What is waiting for my decision?",
+    "Which pending item has flagged Suitability Rules?",
+    "How many items are waiting on this panel?",
+)
+
 
 def _approvals(
     db: Session, market: MarketData, user: User, screen: ScreenIdentity, row_budget: int
@@ -413,6 +437,14 @@ def _approval_figures(item: dict) -> dict[str, float]:
 
 # --- Audit ------------------------------------------------------------------------------------------------------------
 
+# Audit Events carry wall-clock timestamps and chain hashes, and every Assistant turn adds one, so an Audit Screen Context
+# is never byte-identical across runs: these are served but cannot replay from a recording (sme-assistant ticket 08).
+AUDIT_SUGGESTED = (
+    "What happened in these Audit Events?",
+    "Which of these events were written by the LLM?",
+    "How does chain verification detect tampering?",
+)
+
 
 class _AuditFilters(BaseModel):
     """The Audit screen's search, as its API takes it; anything else is refused."""
@@ -469,6 +501,12 @@ def _audit(db: Session, user: User, screen: ScreenIdentity, row_budget: int) -> 
 
 # --- Exchanges --------------------------------------------------------------------------------------------------------
 
+EXCHANGES_SUGGESTED = (
+    "What does the LLM Exchanges screen show?",
+    "Why does the Assistant need an LLM Exchange selected to discuss it?",
+    "What does a grounding verdict on an Exchange mean?",
+)
+
 _EXCHANGE_TEXTS = ("system_text", "user_prompt", "raw_reply", "parsed_content", "messages")
 
 
@@ -522,6 +560,23 @@ def _exchanges(db: Session, user: User, screen: ScreenIdentity) -> ScreenContext
 
 # --- Governance, Config and Health ------------------------------------------------------------------------------------
 
+GOVERNANCE_SUGGESTED = (
+    "Which prompt versions are in use?",
+    "What controls keep the LLM from inventing figures?",
+    "How is the Research Tilt bounded?",
+)
+# Config and Health contexts hold only the platform brief, so their Questions must be answerable from it alone.
+CONFIG_SUGGESTED = (
+    "How is drift judged against a Client's Risk Profile?",
+    "Which decisions does a Recommendation pass through?",
+    "What does an Analysis Run compute for each Portfolio?",
+)
+HEALTH_SUGGESTED = (
+    "What does an Analysis Run do, step by step?",
+    "What orders the Queue?",
+    "Which Asset Classes does a Target Allocation cover?",
+)
+
 
 def _governance(db: Session, user: User, screen: ScreenIdentity, settings: Settings) -> ScreenContext | None:
     """The model card, as the Governance screen shows it; None without `governance:read`."""
@@ -552,6 +607,23 @@ def _note_only(screen: ScreenIdentity, note: str) -> ScreenContext:
 
 
 # --- screen identity --------------------------------------------------------------------------------------------------
+
+SUGGESTED_QUESTIONS: dict[ScreenKind, tuple[str, str, str]] = {
+    "queue": QUEUE_SUGGESTED,
+    "portfolio": PORTFOLIO_SUGGESTED,
+    "recommendation": RECOMMENDATION_SUGGESTED,
+    "approvals": APPROVALS_SUGGESTED,
+    "audit": AUDIT_SUGGESTED,
+    "exchanges": EXCHANGES_SUGGESTED,
+    "governance": GOVERNANCE_SUGGESTED,
+    "config": CONFIG_SUGGESTED,
+    "health": HEALTH_SUGGESTED,
+}
+
+
+def is_suggested(kind: ScreenKind, question: str) -> bool:
+    """Whether `question` is, word for word, one of the screen kind's Suggested Questions."""
+    return question in SUGGESTED_QUESTIONS[kind]
 
 
 def label(screen: ScreenIdentity) -> str:

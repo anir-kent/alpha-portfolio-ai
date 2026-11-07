@@ -1,12 +1,8 @@
-from pathlib import Path
-
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import create_app
-from app.settings import Settings
-
-SEED_PASSWORD = "test-only-password"
+from tests.fixtures.suggested_questions import SEED_PASSWORD, replay_settings
 
 ROLES = [
     "relationship_manager",
@@ -22,13 +18,7 @@ ROLES = [
 
 @pytest.fixture
 def settings(tmp_path):
-    return Settings(
-        database_url=f"sqlite:///{tmp_path / 'test.db'}",
-        seed_user_password=SEED_PASSWORD,
-        market_data_snapshot_path=str(tmp_path / "snapshot.json"),
-        llm_mode="recorded",
-        llm_recordings_dir=str(Path(__file__).parent / "fixtures" / "llm"),
-    )
+    return replay_settings(tmp_path)  # ignores the developer's .env, so local runs see what CI sees
 
 
 @pytest.fixture

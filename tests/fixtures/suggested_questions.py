@@ -1,0 +1,146 @@
+"""The seeded data Suggested Questions are recorded against, and the script that records them (sme-assistant spec:
+Replay mode). Re-record with `uv run python -m tests.fixtures.suggested_questions` after any change to a Screen Context
+builder, the platform brief, the prompt or the seeded data; it needs `APP_LLM_API_KEY` (and the live endpoint and model
+settings) in the environment or `.env`.
+
+The script seeds a fresh database exactly as the replay tests do, runs one Analysis Run in recorded mode (so its AI
+steps behave as they will on replay), then asks every Suggested Question on every demo screen, as every role that can
+read it, live with recording on. Identical prompts are asked once. Recordings of `assistant_answer` that no prompt uses
+any more are removed. Audit screens are skipped: their context is never byte-identical (wall-clock timestamps, and each
+turn adds an event), so their Suggested Questions do not replay.
+"""
+
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+from app.exchanges import CapturingLlm
+from app.llm import (
+    LlmClient,
+    LlmRequest,
+    LlmResponse,
+    OpenAICompatibleLlm,
+    RecordedLlm,
+    RecordingMissing,
+    recording_key,
+)
+from app.main import create_app
+from app.market_data import MarketData
+from app.prompts import ASSISTANT_ANSWER
+from app.rbac import ROLES
+from app.research_seed import seed_research
+from app.screen_context import SUGGESTED_QUESTIONS
+from app.seeder import PLANTED, seed_clients
+from app.settings import Settings
+from tests.runs import run_and_wait
+
+ROOT = Path(__file__).resolve().parents[2]
+RECORDINGS = Path(__file__).parent / "llm"
+SNAPSHOT = ROOT / "data" / "market_snapshot.json"
+LOOKTHROUGH = ROOT / "data" / "fund_lookthrough.json"
+SEED_PASSWORD = "test-only-password"
+
+
+def replay_settings(directory: Path) -> Settings:
+    """Settings for a throwaway app in recorded mode. The developer's `.env` is ignored: what goes into a prompt (the
+    model card names the model and endpoint, the row budget cuts lists) must be the same here, in CI and when
+    recording."""
+    return Settings(
+        _env_file=None,  # a pydantic-settings init option: read no .env
+        database_url=f"sqlite:///{directory / 'test.db'}",
+        seed_user_password=SEED_PASSWORD,
+        market_data_snapshot_path=str(directory / "snapshot.json"),
+        llm_mode="recorded",
+        llm_recordings_dir=str(RECORDINGS),
+        seed_dir=str(ROOT / "data" / "seed"),
+    )
+
+
+def login(app, role: str) -> TestClient:
+    c = TestClient(app)
+    r = c.post("/api/auth/login", json={"username": role, "password": SEED_PASSWORD})
+    assert r.status_code == 200, r.text
+    return c
+
+
+def seed_demo(app) -> None:
+    """The seeded data: the synthetic Clients, the research seeds and one completed Analysis Run by the advisor."""
+    shutil.copy(SNAPSHOT, app.state.settings.market_data_snapshot_path)
+    seed_clients(app.state.session_factory, MarketData.load(SNAPSHOT, LOOKTHROUGH))
+    seed_research(app.state.session_factory, app.state.settings.seed_dir)
+    run_and_wait(login(app, "advisor"))
+
+
+def demo_screens(app) -> list[dict]:
+    """The screen identities Suggested Questions are recorded on, exactly as the frontend publishes them: the Queue in
+    its default sort, each planted Portfolio and its Recommendation, and the list screens with nothing selected."""
+    advisor = login(app, "advisor")
+    screens: list[dict] = [{"kind": "queue", "entity_ids": {"sort": "score"}, "selected_item": None}]
+    for portfolio_id in PLANTED.values():
+        screens.append({"kind": "portfolio", "entity_ids": {"portfolio_id": portfolio_id}, "selected_item": None})
+        rec = advisor.get(f"/api/portfolios/{portfolio_id}").json().get("recommendation")
+        if rec:
+            ids = {"recommendation_id": str(rec["id"]), "portfolio_id": rec["portfolio_id"]}
+            screens.append({"kind": "recommendation", "entity_ids": ids, "selected_item": None})
+    for kind in ("approvals", "exchanges", "governance", "config", "health"):
+        screens.append({"kind": kind, "entity_ids": {}, "selected_item": None})
+    return screens
+
+
+class _ReplayOrLive:
+    """Replays whatever is recorded; an Assistant call with no recording goes live and is recorded. Every other task
+    only replays, so the Analysis Run's AI steps behave exactly as on replay."""
+
+    def __init__(self, live: OpenAICompatibleLlm):
+        self.recorded = RecordedLlm(RECORDINGS)
+        self.live = live
+        self.model = live.model
+        self.used: set[str] = set()
+
+    def complete(self, request: LlmRequest) -> LlmResponse:
+        try:
+            return self.recorded.complete(request)
+        except RecordingMissing:
+            if request.task != ASSISTANT_ANSWER.name:
+                raise
+            return self.live.complete(request)
+        finally:
+            if request.task == ASSISTANT_ANSWER.name:
+                self.used.add(recording_key(request))
+
+
+def record() -> int:
+    env = Settings()
+    if not env.llm_api_key:
+        print("APP_LLM_API_KEY must be set to record", file=sys.stderr)
+        return 1
+    live = OpenAICompatibleLlm(
+        base_url=env.llm_base_url, api_key=env.llm_api_key, model=env.llm_model, record_dir=RECORDINGS
+    )
+    client = _ReplayOrLive(live)
+    with tempfile.TemporaryDirectory() as tmp:
+        app = create_app(replay_settings(Path(tmp)))
+        inner: LlmClient = client
+        app.state.llm = CapturingLlm(inner, app.state.session_factory, mode="recorded")
+        seed_demo(app)
+        failures = []
+        for screen in demo_screens(app):
+            for role in ROLES:
+                c = login(app, role)  # a fresh login per role: each Question starts its own Conversation
+                for question in SUGGESTED_QUESTIONS[screen["kind"]]:
+                    turn = c.post("/api/assistant/questions", json={"question": question, "screen": screen}).json()
+                    print(f"{turn['outcome']:9} {role:22} {screen['kind']:15} {question}")
+                    if turn["outcome"] == "failed":
+                        failures.append((role, screen, question))
+    stale = [p for p in RECORDINGS.glob(f"{ASSISTANT_ANSWER.name}-*.json") if p.stem.split("-")[-1] not in client.used]
+    for path in stale:
+        path.unlink()
+    print(f"{len(client.used)} recordings in use, {len(stale)} stale removed, {len(failures)} failed")
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(record())

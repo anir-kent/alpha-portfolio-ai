@@ -1,0 +1,30 @@
+{
+  "content": {
+    "answer_markdown": "There are no Restrictions applied to this Portfolio. The `restrictions` field is an empty array, and the suitability rule for Client Restrictions shows a status of \"pass\" with the message \"No Restriction is violated.\"",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "restrictions",
+            "kind": "engine"
+          },
+          {
+            "figure": "latest_analysis_run.suitability_rules",
+            "kind": "engine"
+          }
+        ],
+        "text": "The Portfolio has no Restrictions applied, as indicated by the empty `restrictions` array and the suitability rule status \"pass\" for Client Restrictions."
+      }
+    ],
+    "follow_up_questions": [
+      "What are the current suitability breaches for this Portfolio?",
+      "What is the Portfolio's drift by Asset Class?",
+      "Which holdings contribute most to the equity concentration breach?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v1",
+  "task": "assistant_answer"
+}

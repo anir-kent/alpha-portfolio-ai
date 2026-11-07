@@ -361,6 +361,7 @@ class AssistantTurnRow(Base):
     grounding_check_id: Mapped[str | None] = mapped_column(String, nullable=True)
     exchange_id: Mapped[int | None] = mapped_column(nullable=True)
     exchange_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(String, nullable=True)  # a failed turn's reason, else None
 
 
 def make_session_factory(url: str) -> sessionmaker:
@@ -378,6 +379,7 @@ def make_session_factory(url: str) -> sessionmaker:
     Base.metadata.create_all(engine)
     _add_run_outcome_columns(engine)
     _generalise_grounding_results(engine)
+    _add_turn_failure_reason(engine)
     return sessionmaker(engine, expire_on_commit=False)
 
 
@@ -391,6 +393,14 @@ def _add_run_outcome_columns(engine) -> None:
             if name not in existing:
                 conn.execute(text(f"ALTER TABLE analysis_runs ADD COLUMN {name} {kind}"))
         conn.execute(text("UPDATE analysis_runs SET outcome = 'completed' WHERE completed"))
+
+
+def _add_turn_failure_reason(engine: Engine) -> None:
+    """An existing database predates stored failure reasons: afterwards the column exists, empty for older turns (which
+    then show the ordinary failure message)."""
+    with engine.begin() as conn:
+        if "failure_reason" not in {c["name"] for c in inspect(conn).get_columns("assistant_turns")}:
+            conn.execute(text("ALTER TABLE assistant_turns ADD COLUMN failure_reason VARCHAR"))
 
 
 def _generalise_grounding_results(engine: Engine) -> None:

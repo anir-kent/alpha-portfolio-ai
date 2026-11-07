@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "The Research Tilt is bounded by a configured limit of 2.0 percentage points, as set by the platform's deterministic engine. This means that any Research Tilt applied to a portfolio's allocation is clipped so that it does not exceed this 2.0 percentage point bound.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "model_card.tilt_bound_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "The Research Tilt is clipped by the engine to the configured bound of 2.0 percentage points."
+      }
+    ],
+    "follow_up_questions": [
+      "Can you show examples of Research Tilts applied to portfolios?",
+      "How does the platform ensure only approved Insights influence the Research Tilt?",
+      "Where can I find the audit log for Research Tilt decisions?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v1",
+  "task": "assistant_answer"
+}

@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "There are currently no items waiting for your decision in the Approvals queue. The screen shows zero total items and zero shown items.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "approvals.total_items",
+            "kind": "engine"
+          }
+        ],
+        "text": "There are 0 items waiting for decision in the Approvals queue."
+      }
+    ],
+    "follow_up_questions": [
+      "Have there been any recent recommendations submitted for approval?",
+      "Can I see the history of past approvals and decisions?",
+      "How can I be notified when new items require my decision?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v1",
+  "task": "assistant_answer"
+}

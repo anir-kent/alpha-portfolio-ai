@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app import audit, grounding, prompts, screen_context
 from app.db import AssistantTurnRow, ClientRow, ConversationRow, SessionRow, User
 from app.grounding import CheckSubject, Claim, ClaimResult
-from app.llm import LlmClient, LlmError, LlmRequest, LlmResponse, exchange_ref
+from app.llm import LlmClient, LlmError, LlmRequest, LlmResponse, RecordingMissing, exchange_ref
 from app.market_data import MarketData
 from app.screen_context import ScreenIdentity
 from app.settings import Settings
@@ -28,10 +28,22 @@ OUT_OF_SCOPE_REFUSAL = (
     "discuss Clients or items you don't have access to."
 )
 FAILED_MESSAGE = "The Assistant couldn't answer, try again."
+REPLAY_MESSAGE = "Only Suggested Questions work in replay mode."
 
 Outcome = Literal["answered", "refused", "failed"]
-# Why a turn failed, on its `assistant.failed` Audit Event. The user sees only FAILED_MESSAGE whatever the reason.
-FailureReason = Literal["llm_error", "unreadable_reply", "pii"]
+# Why a turn failed, on its `assistant.failed` Audit Event. The user sees FAILED_MESSAGE, except for a recorded-mode
+# miss (`replay_miss`), which says honestly that only Suggested Questions replay.
+FailureReason = Literal["llm_error", "unreadable_reply", "pii", "replay_miss"]
+
+
+def _failure_message(reason: str | None) -> str:
+    return REPLAY_MESSAGE if reason == "replay_miss" else FAILED_MESSAGE
+
+
+def _replay_miss(error: LlmError) -> bool:
+    """Whether the call failed because replay had no recording for it. The capture wrapper re-raises the miss as a
+    plain LlmError caused by it."""
+    return isinstance(error, RecordingMissing) or isinstance(error.__cause__, RecordingMissing)
 
 
 class AssistantReply(BaseModel):
@@ -59,7 +71,7 @@ class Turn(BaseModel):
     question: str
     outcome: Outcome
     answer: Answer | None  # None for a failed turn
-    message: str | None  # the safe message shown for a failed turn
+    message: str | None  # the safe message shown for a failed turn (the replay-mode message for a recorded miss)
     screen: ScreenIdentity
     context_label: str | None  # how the drawer names the context; None when nothing was readable
     exchange_id: int | None
@@ -185,13 +197,16 @@ def ask(
     if context is None:  # nothing readable: refuse without calling the model or saying whether the entity exists
         outcome = "refused"
     else:
-        request = _prompt(context, _history(db, session, settings.assistant_history_pairs), question)
+        # A Suggested Question goes without the Conversation so far: its prompt depends only on the screen and its data,
+        # so its recording replays whatever was asked before it (spec: Replay mode).
+        pairs = 0 if screen_context.is_suggested(screen.kind, question) else settings.assistant_history_pairs
+        request = _prompt(context, _history(db, session, pairs), question)
         try:
             called = llm.complete(request)
             model = called.model
             reply = AssistantReply.model_validate(called.content)
         except LlmError as e:  # includes a call capture could not record: it fails closed, no Answer reaches the user
-            called, outcome, reason = e, "failed", "llm_error"
+            called, outcome, reason = e, "failed", "replay_miss" if _replay_miss(e) else "llm_error"
         except ValidationError:
             outcome, reason = "failed", "unreadable_reply"
         else:
@@ -235,6 +250,7 @@ def ask(
             grounding_check_id=check_id,
             exchange_id=ref.get("exchange_id"),
             exchange_hash=ref.get("exchange_hash"),
+            failure_reason=reason,
         )
     )
     portfolio_id = context.portfolio_id if context else None
@@ -265,7 +281,7 @@ def ask(
         question=question,
         outcome=outcome,
         answer=answer,
-        message=FAILED_MESSAGE if outcome == "failed" else None,
+        message=_failure_message(reason) if outcome == "failed" else None,
         screen=screen,
         context_label=context.label if context else None,
         exchange_id=ref.get("exchange_id"),
@@ -287,7 +303,7 @@ def _turn(row: AssistantTurnRow) -> Turn:
         question=row.question,
         outcome=row.outcome,  # only ever written from Outcome
         answer=Answer.model_validate_json(row.answer_json) if row.answer_json else None,
-        message=FAILED_MESSAGE if row.outcome == "failed" else None,
+        message=_failure_message(row.failure_reason) if row.outcome == "failed" else None,
         screen=screen,
         # A context was built only when the user could read the screen; otherwise nothing is named, as when asked.
         context_label=screen_context.label(screen) if row.screen_context_hash else None,

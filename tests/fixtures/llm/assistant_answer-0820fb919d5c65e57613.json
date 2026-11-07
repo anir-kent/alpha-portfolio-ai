@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "There are no Restrictions applied to this Portfolio. The `restrictions` field in the screen context is an empty array, indicating no instruments or sectors are restricted for this Client.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "restrictions",
+            "kind": "engine"
+          }
+        ],
+        "text": "The Portfolio has no Restrictions applied as indicated by the empty restrictions array in the screen context."
+      }
+    ],
+    "follow_up_questions": [
+      "What is the current drift status of each Asset Class in this Portfolio?",
+      "What are the Suitability Rule results for this Portfolio?",
+      "What is the Client's Risk Profile and how does it affect the Portfolio?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v1",
+  "task": "assistant_answer"
+}

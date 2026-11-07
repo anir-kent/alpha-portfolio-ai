@@ -1,0 +1,30 @@
+{
+  "content": {
+    "answer_markdown": "There are currently no pending items in the Approvals queue, so no items have flagged Suitability Rules.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "approvals.shown_items",
+            "kind": "engine"
+          },
+          {
+            "figure": "approvals.total_items",
+            "kind": "engine"
+          }
+        ],
+        "text": "There are zero pending items in the Approvals queue as shown by the figures approvals.shown_items and approvals.total_items both being 0."
+      }
+    ],
+    "follow_up_questions": [
+      "Are there any recent Audit Events related to Suitability Rule breaches?",
+      "Can you show the Queue of Recommendations awaiting a Decision?",
+      "Is there a Portfolio with a current Suitability Rule breach?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v1",
+  "task": "assistant_answer"
+}

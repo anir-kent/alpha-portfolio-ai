@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "Only one Portfolio has breached its review SLA: Portfolio C003. This Portfolio has a `sla_breached` status of `true` and is ranked 1 with a high score of 93.33.",
+    "claims": [
+      {
+        "asset": "C003",
+        "citations": [
+          {
+            "figure": "queue.C003.sla_breached",
+            "kind": "engine"
+          }
+        ],
+        "text": "Portfolio C003 has breached its review SLA as indicated by `sla_breached` being true in the data."
+      }
+    ],
+    "follow_up_questions": [
+      "What are the main reasons for the SLA breach in Portfolio C003?",
+      "Can I see the detailed drift and risk components for Portfolio C003?",
+      "Which Portfolios are closest to breaching their SLA?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v1",
+  "task": "assistant_answer"
+}

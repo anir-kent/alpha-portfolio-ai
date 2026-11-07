@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "The Portfolio has a restriction on the instrument Exxon Mobil Corp (symbol: XOM).",
+    "claims": [
+      {
+        "asset": "XOM",
+        "citations": [
+          {
+            "figure": "restrictions[0]",
+            "kind": "engine"
+          }
+        ],
+        "text": "The Portfolio has a restriction on the instrument Exxon Mobil Corp (XOM)."
+      }
+    ],
+    "follow_up_questions": [
+      "What is the impact of the restriction breach on the Portfolio's suitability?",
+      "Which holdings contribute most to the Portfolio's drift?",
+      "What are the next recommended actions for this Portfolio?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v1",
+  "task": "assistant_answer"
+}

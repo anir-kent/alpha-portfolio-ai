@@ -1,0 +1,26 @@
+{
+  "content": {
+    "answer_markdown": "The priority component that contributes most to the scores on this Queue is the \"drift\" component. It has the highest weight of 0.4 among the components (drift, risk, opportunity, urgency) used to calculate the portfolio scores.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "queue.C003.components",
+            "kind": "engine"
+          }
+        ],
+        "text": "The drift component has a weight of 0.4, which is the highest among the components contributing to the portfolio scores in the Queue."
+      }
+    ],
+    "follow_up_questions": [
+      "How is the drift component score calculated for each portfolio?",
+      "What are the definitions of the other priority components (risk, opportunity, urgency)?",
+      "Can I see the detailed score breakdown for a specific portfolio in the Queue?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v1",
+  "task": "assistant_answer"
+}

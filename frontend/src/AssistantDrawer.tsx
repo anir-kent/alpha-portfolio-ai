@@ -120,6 +120,39 @@ function ContextDivider({ turn }: { turn: Turn }) {
   );
 }
 
+/** The current screen kind's three Suggested Questions; clicking one asks it. In replay mode only these are answered. */
+function SuggestedQuestions({
+  kind,
+  onAsk,
+  busy,
+}: {
+  kind: Screen["kind"];
+  onAsk: (q: string) => void;
+  busy: boolean;
+}) {
+  const suggested = useQuery({
+    queryKey: ["assistant-suggested-questions", kind],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/assistant/suggested-questions", { params: { query: { kind } } });
+      if (error || !data) throw new Error("Suggested Questions couldn't be loaded.");
+      return data.questions;
+    },
+    staleTime: Infinity, // defined in code next to each Screen Context builder: they change only with a deploy
+  });
+  if (!suggested.data) return null;
+  return (
+    <ul className="flex flex-wrap gap-1" aria-label="Suggested Questions">
+      {suggested.data.map((q) => (
+        <li key={q}>
+          <button type="button" className="chip chip-engine" onClick={() => onAsk(q)} disabled={busy}>
+            {q}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** The safe failure message with a retry button. Retry asks again as a new turn; the failed one stays in the record. */
 function FailedCallout({ message, onRetry, busy }: { message: string; onRetry: () => void; busy: boolean }) {
   return (
@@ -160,7 +193,7 @@ function TurnView({
             <ul className="flex flex-wrap gap-1" aria-label="Follow-up questions">
               {turn.answer.follow_up_questions.map((q) => (
                 <li key={q}>
-                  <button type="button" className="chip chip-engine" onClick={() => onFollowUp(q)}>
+                  <button type="button" className="chip chip-engine" onClick={() => onFollowUp(q)} disabled={busy}>
                     {q}
                   </button>
                 </li>
@@ -218,6 +251,10 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
     // Clearing only here keeps whatever is being typed when a retry lands.
     ask.mutate({ question: q, screen: current.screen }, { onSuccess: () => setQuestion("") });
   };
+  // A Suggested Question or a follow-up is asked as is, about the current screen, leaving the Question box alone.
+  const askNow = (q: string) => {
+    if (current && !ask.isPending) ask.mutate({ question: q, screen: current.screen });
+  };
   // The same Question and screen identity as the failed turn, even after moving to another screen.
   const retry = (turn: Turn) => {
     if (!ask.isPending) ask.mutate({ question: turn.question, screen: turn.screen });
@@ -262,7 +299,7 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
           {turns.map((t, i) => (
             <Fragment key={t.seq}>
               {i > 0 && !sameScreen(turns[i - 1].screen, t.screen) && <ContextDivider turn={t} />}
-              <TurnView turn={t} onFollowUp={setQuestion} onRetry={retry} busy={ask.isPending} />
+              <TurnView turn={t} onFollowUp={askNow} onRetry={retry} busy={ask.isPending || !current} />
             </Fragment>
           ))}
         </ol>
@@ -283,6 +320,7 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
           send();
         }}
       >
+        {current && <SuggestedQuestions kind={current.screen.kind} onAsk={askNow} busy={ask.isPending} />}
         <label className="label">
           Question
           <textarea

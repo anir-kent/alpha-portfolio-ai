@@ -1,0 +1,92 @@
+{
+  "content": {
+    "answer_markdown": "This Recommendation proposes these Trade Lines to rebalance the Portfolio back to its Target Allocation by Asset Class, which is currently out of tolerance. Specifically, the Portfolio has an equity allocation of 60.0% versus a 45.0% target (+15.0 percentage points, breach), a bond allocation of 35.0% versus a 45.0% target (-10.0 percentage points, breach), and a cash allocation of 5.0% versus a 10.0% target (-5.0 percentage points, warning). The Trade Lines include selling equity-related holdings (e.g., JNJ, PG, SPY, XLE, XOM) and buying bond-related holdings (e.g., AGG, LQD, SGOV, SHY) to bring the allocations closer to target. The turnover is 14.99% of the Portfolio, which is within the threshold for requiring compliance approval. After the proposed trades, the post-trade drift for each asset class is within tolerance, indicating the Portfolio will be rebalanced effectively. Additionally, the Recommendation respects the suitability rules except for a breach in the single-position limit for XOM, which remains after the trades.",
+    "claims": [
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "drift.equity.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.equity.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.equity.drift_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.bond.drift_pp",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.actual_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.target_pct",
+            "kind": "engine"
+          },
+          {
+            "figure": "drift.cash.drift_pp",
+            "kind": "engine"
+          }
+        ],
+        "text": "The Portfolio's equity allocation is 60.0% versus a 45.0% target, a breach of +15.0 percentage points, and bond allocation is 35.0% versus a 45.0% target, a breach of -10.0 percentage points, with cash at 5.0% versus 10.0% target, a warning of -5.0 percentage points."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "trade_line_count",
+            "kind": "engine"
+          },
+          {
+            "figure": "turnover_pct",
+            "kind": "engine"
+          }
+        ],
+        "text": "The Recommendation includes 5 sell and 4 buy Trade Lines with a turnover of 14.99% of the Portfolio to rebalance towards target allocations."
+      },
+      {
+        "asset": null,
+        "citations": [
+          {
+            "figure": "post_trade_drift",
+            "kind": "engine"
+          }
+        ],
+        "text": "Post-trade drift figures show the Portfolio will be rebalanced within tolerance for all asset classes after executing the Trade Lines."
+      },
+      {
+        "asset": "XOM",
+        "citations": [
+          {
+            "figure": "post_trade_suitability",
+            "kind": "engine"
+          }
+        ],
+        "text": "Suitability rules are mostly passed except for a breach in the single-position limit for XOM at 11.25% against a 10% limit, which remains after the trades."
+      }
+    ],
+    "follow_up_questions": [
+      "What are the specific compliance concerns for this Recommendation?",
+      "Can you show the detailed impact of each Trade Line on the Portfolio's drift?",
+      "What is the priority score and how does it affect the handling of this Recommendation?"
+    ],
+    "in_scope": true
+  },
+  "model": "gpt-4.1-mini-2025-04-14",
+  "prompt_version": "assistant_answer@v1",
+  "task": "assistant_answer"
+}

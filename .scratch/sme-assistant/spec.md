@@ -137,7 +137,7 @@ These run in order, and the user sees nothing until they finish. PII runs before
   - the screen identity and the Screen Context hash,
   - the outcome: answered, refused or failed,
   - the Answer JSON, the grounding check id and the Exchange reference.
-- **Audit Events:** each turn writes `assistant.answered`, `assistant.refused` or `assistant.failed`, carrying the Exchange reference so chain verification covers it. `assistant.failed` also carries a `reason`: `llm_error` (the call or its capture failed), `unreadable_reply` or `pii`. The Exchange is written first, as today.
+- **Audit Events:** each turn writes `assistant.answered`, `assistant.refused` or `assistant.failed`, carrying the Exchange reference so chain verification covers it. `assistant.failed` also carries a `reason`: `llm_error` (the call or its capture failed), `unreadable_reply`, `pii` or `replay_miss` (recorded mode had no recording). The turn stores the reason too, so a reload shows the same message. The Exchange is written first, as today.
 
 ### API contract
 

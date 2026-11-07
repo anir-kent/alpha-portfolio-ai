@@ -4,13 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app import assistant
+from app import assistant, screen_context
 from app.assistant import Conversation, Turn
 from app.db import SessionRow, User
 from app.deps import find_session, get_db, get_llm, get_market, require
 from app.llm import LlmClient
 from app.market_data import MarketData
-from app.screen_context import ScreenIdentity
+from app.screen_context import ScreenIdentity, ScreenKind
 
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 
@@ -50,3 +50,14 @@ def conversation(request: Request, _: User = Depends(require("assistant:use")), 
     """The current login session's Conversation, turns in order, for rendering after a reload."""
     conv = assistant.current_conversation(db, _session(db, request))
     return conv if conv is not None else Response(status_code=204)
+
+
+class SuggestedQuestions(BaseModel):
+    kind: ScreenKind
+    questions: list[str]  # three, in the order the drawer shows them
+
+
+@router.get("/suggested-questions", response_model=SuggestedQuestions, operation_id="getSuggestedQuestions")
+def suggested_questions(kind: ScreenKind, _: User = Depends(require("assistant:use"))):
+    """The screen kind's three Suggested Questions. In recorded mode only these replay (from committed recordings)."""
+    return SuggestedQuestions(kind=kind, questions=list(screen_context.SUGGESTED_QUESTIONS[kind]))

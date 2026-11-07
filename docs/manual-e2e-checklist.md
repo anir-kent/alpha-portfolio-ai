@@ -84,6 +84,16 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] As platform_owner on `/governance`, ask "Which model and prompt versions are in use?": the Answer matches the model card
 - [ ] As platform_owner on `/config` and `/health`, ask "How does an Analysis Run work?": the Answer explains it from the platform brief, and the turn's Exchange prompt holds no config values or health figures
 
+## Assistant (Suggested Questions and replay mode)
+
+Setup: `APP_LLM_MODE=recorded`, `APP_LLM_RECORDINGS_DIR=tests/fixtures/llm`, the default `APP_LLM_MODEL`, `APP_LLM_BASE_URL` and `APP_ASSISTANT_CONTEXT_ROWS` (the Governance context names the model and endpoint), and a fresh database seeded with `uv run python -m app.seeder`, `uv run python -m app.research_seed` and one Analysis Run as advisor. This is the seeded data the recordings were made against (`tests/fixtures/suggested_questions.py`).
+
+- [ ] Every screen shows three Suggested Questions under the turns, and they change with the screen (Queue, Portfolio, Recommendation, Approvals, Audit, LLM Exchanges, Governance, Config, Health)
+- [ ] As advisor on `/portfolios/C004`, click each Suggested Question in any order: each one replays an Answer (no "Thinking…" stall, no failure), even after a free-form Question in the same Conversation
+- [ ] The replay-mode message shows: type a free-form Question (e.g. "What colour is the sky?") and Send. The turn reads "Only Suggested Questions work in replay mode." with a Retry button, and it still reads so after a reload. As auditor, its `assistant.failed` Audit Event has `reason` `replay_miss`
+- [ ] Clicking a follow-up suggestion under an Answer asks it straight away about the current screen, leaving the Question box untouched; in replay mode a follow-up that isn't a Suggested Question gets the replay-mode message
+- [ ] On `/audit`, a Suggested Question gets the replay-mode message: Audit Events carry wall-clock timestamps, so the Audit context never matches a recording (expected)
+
 ## Approvals
 
 - [ ] C002/C003 (no breach, not high-impact): Advisor accept -> Approved

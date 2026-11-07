@@ -483,6 +483,60 @@
         }
       }
     },
+    "/api/assistant/suggested-questions": {
+      "get": {
+        "tags": [
+          "assistant"
+        ],
+        "summary": "Suggested Questions",
+        "description": "The screen kind's three Suggested Questions. In recorded mode only these replay (from committed recordings).",
+        "operationId": "getSuggestedQuestions",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "queue",
+                "portfolio",
+                "recommendation",
+                "approvals",
+                "audit",
+                "exchanges",
+                "governance",
+                "config",
+                "health"
+              ],
+              "type": "string",
+              "title": "Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestedQuestions"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/audit/events": {
       "get": {
         "tags": [
@@ -5506,6 +5560,38 @@
           "recommendation"
         ],
         "title": "StepResult"
+      },
+      "SuggestedQuestions": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "queue",
+              "portfolio",
+              "recommendation",
+              "approvals",
+              "audit",
+              "exchanges",
+              "governance",
+              "config",
+              "health"
+            ],
+            "title": "Kind"
+          },
+          "questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Questions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "questions"
+        ],
+        "title": "SuggestedQuestions"
       },
       "SuitabilityLimits": {
         "properties": {
