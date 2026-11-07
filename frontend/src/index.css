@@ -811,6 +811,28 @@
     animation: sheen 1.4s ease-in-out infinite;
   }
 
+  /* A keyboard shortcut's key beside its button's label. It keeps the button's text colour at full strength, so it meets
+     the same contrast as the label on plain, primary and danger buttons alike; only the key cap's edge is tinted. */
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 0.3rem;
+    border-radius: 5px;
+    border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+    border-bottom-width: 2px;
+    background: color-mix(in srgb, currentColor 7%, transparent);
+    font-family: var(--font-mono);
+    font-size: 0.6923rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+  .kbd + .kbd {
+    margin-left: -0.15rem;
+  }
+
   /* Report detail: one Insight in the list. The selected row is raised like the active nav link. */
   .insight-row {
     display: flex;

@@ -1,9 +1,11 @@
 /** The review layout shared by Report detail and the To review tab: an Insight list beside the selected Insight and the
  * full text of its cited page, with the passage highlighted. `useReviewFlow` holds what happens around an Insight
  * Review (the actions or the read-only record, the advance to the next Insight awaiting review, the notice and focus),
- * so both views review exactly the same way and differ only in their order and where the selection goes. */
+ * so both views review exactly the same way and differ only in their order and where the selection goes.
+ * `useInsightStepper` moves the selection through the list shown, by button or by `j`/↓ and `k`/↑. */
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { ReviewActions } from "./InsightReview";
+import { Kbd, useShortcuts } from "./shortcuts";
 import { findPassage } from "./passage";
 import {
   CONFIDENCE,
@@ -22,6 +24,8 @@ const SKELETON_ROWS = 4;
 const SKELETON_LINES = ["96%", "88%", "92%", "70%", "94%", "82%", "60%"];
 /** The review split: stacked below 1280px, list beside detail from there up. Shared with the loading skeleton. */
 export const SPLIT = "grid items-start gap-3 xl:grid-cols-[minmax(20rem,26rem)_minmax(0,1fr)]";
+/** Tailwind's `xl`, where SPLIT puts the list beside the detail. */
+const SIDE_BY_SIDE = "(min-width: 80rem)";
 
 /** A whole number from a URL parameter (leading zeros allowed), or null. */
 export const wholeNumber = (raw: string | null) => (raw && /^\d+$/.test(raw) ? Number(raw) : null);
@@ -46,7 +50,8 @@ function ClaimPills({ insight }: { insight: Insight }) {
   );
 }
 
-/** One Insight in a list. `showStatus` is off where every Insight listed awaits review. */
+/** One Insight in a list. `showStatus` is off where every Insight listed awaits review. The selected row carries
+ * `aria-current`, the ARIA state for the current item of a set of buttons, which screen readers announce. */
 export function InsightRow({
   insight,
   selected,
@@ -61,7 +66,13 @@ export function InsightRow({
   const status = STATUS[insight.status];
   return (
     <li>
-      <button type="button" className="insight-row" aria-current={selected || undefined} onClick={onSelect}>
+      <button
+        type="button"
+        className="insight-row"
+        data-insight-id={insight.id}
+        aria-current={selected || undefined}
+        onClick={onSelect}
+      >
         <span className="flex items-baseline gap-2">
           <span className="min-w-0 flex-1 truncate font-semibold">{insight.subject}</span>
           <span className="mono shrink-0 text-ink-3">p. {insight.page}</span>
@@ -259,6 +270,7 @@ export function PageReader({
           <div
             ref={boxRef}
             className="page-text"
+            data-native-arrows
             tabIndex={0}
             aria-label={`Text of page ${page}`}
             aria-busy={text.isLoading}
@@ -293,6 +305,98 @@ export function PageReader({
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * Previous and Next through `list`, the Insights shown in the order shown, by button or by `j`/↓ and `k`/↑. With the
+ * selection outside `list` (filtered out, or none), Next goes to the first and Previous to the last. A shortcut also
+ * moves focus to the newly selected row, which scrolls it into view and announces it; the buttons keep focus, so they
+ * can be pressed again. `onSelect` puts the selection in the URL.
+ */
+export function useInsightStepper({
+  list,
+  selectedId,
+  onSelect,
+}: {
+  list: Insight[];
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+}) {
+  const at = list.findIndex((i) => i.id === selectedId);
+  const previous = at === -1 ? (list.at(-1) ?? null) : (list[at - 1] ?? null);
+  const next = at === -1 ? (list[0] ?? null) : (list[at + 1] ?? null);
+
+  // Runs after the render that marks the row selected, so it acts on the row the URL now names. A shortcut focuses the
+  // row; any other move (an auto-advance after an Insight Review, a click) only scrolls it into view, and only while the
+  // list sits beside the detail: stacked, the detail pane below has focus and the list would pull the screen away.
+  const focusRow = useRef<number | null>(null);
+  useEffect(() => {
+    if (selectedId === null) return;
+    const row = document.querySelector<HTMLElement>(`.insight-row[data-insight-id="${selectedId}"]`);
+    if (!row) return;
+    if (focusRow.current === selectedId) {
+      row.focus({ preventScroll: true });
+      row.scrollIntoView({ block: "nearest" });
+    } else if (window.matchMedia(SIDE_BY_SIDE).matches) row.scrollIntoView({ block: "nearest" });
+    focusRow.current = null;
+  }, [selectedId]);
+
+  const selectInsight = (to: Insight | null, focus: boolean) => {
+    if (!to) return;
+    if (focus) focusRow.current = to.id;
+    onSelect(to.id);
+  };
+  const toPrevious = () => selectInsight(previous, true);
+  const toNext = () => selectInsight(next, true);
+  useShortcuts({ j: toNext, ArrowDown: toNext, k: toPrevious, ArrowUp: toPrevious }, { repeat: true });
+
+  return {
+    position: at === -1 ? null : { index: at + 1, of: list.length },
+    previous: previous && (() => selectInsight(previous, false)),
+    next: next && (() => selectInsight(next, false)),
+  };
+}
+
+export type InsightStepperState = ReturnType<typeof useInsightStepper>;
+
+/** The visible equivalent of `j`/↓ and `k`/↑ above an Insight list, with where the selection sits in it. */
+export function InsightStepper({ stepper }: { stepper: InsightStepperState }) {
+  const { position, previous, next } = stepper;
+  return (
+    <div className="mb-2 flex items-center gap-1.5">
+      <span className="flex-1 text-ink-3">
+        {position && (
+          <>
+            Insight <span className="mono">{position.index}</span> of <span className="mono">{position.of}</span>
+          </>
+        )}
+      </span>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        aria-label="Previous Insight"
+        aria-keyshortcuts="k ArrowUp"
+        title="Previous Insight (K or ↑)"
+        disabled={!previous}
+        onClick={previous ?? undefined}
+      >
+        Previous <Kbd>K</Kbd>
+        <Kbd>↑</Kbd>
+      </button>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        aria-label="Next Insight"
+        aria-keyshortcuts="j ArrowDown"
+        title="Next Insight (J or ↓)"
+        disabled={!next}
+        onClick={next ?? undefined}
+      >
+        Next <Kbd>J</Kbd>
+        <Kbd>↓</Kbd>
+      </button>
+    </div>
   );
 }
 

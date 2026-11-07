@@ -1,12 +1,15 @@
 /** Insight Review: approve an Insight awaiting review, with an optional note, or reject it with a required note in a
  * small dialog. An Insight Review is final, so the copy says so beside the actions. Report detail and the To review tab
- * share these actions; each chooses where the selection goes once the server confirms. The server stays the only
+ * share these actions; each chooses where the selection goes once the server confirms. `a` approves and `r` opens the
+ * reject dialog: the actions exist only for an Insight awaiting review and a session that may review it, so the
+ * shortcuts do too. The server stays the only
  * enforcement point: it answers 409 when another Analyst reviewed the Insight first. */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { api } from "./api/client";
 import type { Insight, ReportList } from "./research";
+import { Kbd, useShortcuts } from "./shortcuts";
 import { ErrorLine, Icon, trapTab } from "./ui";
 
 type Action = "approve" | "reject";
@@ -97,19 +100,23 @@ export function ReviewActions({
     if (saving) return;
     review.mutate({ id: insight.id, action, note: note.trim() || null });
   };
+  const approve = () => submit("approve", noteOpen ? approveNote : "");
+  const openReject = () => !saving && setRejecting(true);
+  useShortcuts({ a: approve, r: openReject });
 
   const error = review.error && !(review.error instanceof AlreadyReviewed) ? review.error.message : null;
   return (
     <section aria-label="Insight Review" className="space-y-2" aria-busy={saving}>
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={saving}
-          onClick={() => submit("approve", noteOpen ? approveNote : "")}
-        >
+        <button type="button" className="btn btn-primary" disabled={saving} aria-keyshortcuts="a" onClick={approve}>
           <Icon name="approvals" size={14} />
-          {saving && !rejecting ? "Saving…" : "Approve"}
+          {saving && !rejecting ? (
+            "Saving…"
+          ) : (
+            <>
+              Approve <Kbd>A</Kbd>
+            </>
+          )}
         </button>
         <button
           ref={rejectButton}
@@ -117,9 +124,10 @@ export function ReviewActions({
           className="btn"
           disabled={saving}
           aria-haspopup="dialog"
-          onClick={() => setRejecting(true)}
+          aria-keyshortcuts="r"
+          onClick={openReject}
         >
-          Reject…
+          Reject… <Kbd>R</Kbd>
         </button>
         <button
           type="button"
@@ -280,8 +288,8 @@ function RejectDialog({
             </p>
           </div>
           <div className="flex justify-end gap-2 border-t border-[rgb(31_38_80/0.08)] px-4 py-2.5">
-            <button type="button" className="btn" onClick={dismiss} disabled={saving}>
-              Cancel
+            <button type="button" className="btn" onClick={dismiss} disabled={saving} aria-keyshortcuts="Escape">
+              Cancel <Kbd>Esc</Kbd>
             </button>
             <button type="submit" className="btn btn-danger" disabled={missing || saving}>
               {saving ? "Saving…" : "Reject Insight"}

@@ -6,12 +6,14 @@ See spec: Keyboard model.
 
 **Blocked by:** 05
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `j`/↓ and `k`/↑ move the selection on To review and Report detail, keeping the selected row in view and in the URL
-- [ ] `a` approves and `r` opens the reject dialog only for an Insight awaiting review and only with the `insight:approve` permission
-- [ ] Shortcuts do nothing while typing in a note or title field, while any dialog is open, or for a reviewed Insight
-- [ ] Each shortcut is shown as a key hint beside its button, and every shortcut has a visible, labelled button equivalent
-- [ ] The selected row is announced to assistive technology (selected state on the list item), and focus is visible
-- [ ] The Research Analyst checklist section gains: review the demo house view's Insights with the keyboard only, including one rejection with a note; confirm typing `a` in a note does not approve
-- [ ] Typecheck, lint, format check and build pass
+- [x] `j`/↓ and `k`/↑ move the selection on To review and Report detail, keeping the selected row in view and in the URL
+- [x] `a` approves and `r` opens the reject dialog only for an Insight awaiting review and only with the `insight:approve` permission
+- [x] Shortcuts do nothing while typing in a note or title field, while any dialog is open, or for a reviewed Insight
+- [x] Each shortcut is shown as a key hint beside its button, and every shortcut has a visible, labelled button equivalent
+- [x] The selected row is announced to assistive technology (selected state on the list item), and focus is visible
+- [x] The Research Analyst checklist section gains: review the demo house view's Insights with the keyboard only, including one rejection with a note; confirm typing `a` in a note does not approve
+- [x] Typecheck, lint, format check and build pass
+
+**Notes:** Shortcuts live in `frontend/src/shortcuts.tsx` (one blocking rule for typing targets, open dialogs, modifiers and Shift; arrows also yield to the scrollable page text). `a`/`r` are bound inside `ReviewActions`, which only mounts for an Insight awaiting review with `insight:approve`, so both gates are structural. `j`/`k` step through the list as shown (the status filter narrows it on Report detail) via `useInsightStepper`, with Previous/Next buttons as the visible equivalent. The selected row's state is `aria-current` on its button: `aria-selected` is not valid on a button or list item, and screen readers announce `aria-current` as "current".

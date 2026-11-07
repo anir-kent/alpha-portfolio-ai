@@ -23,11 +23,14 @@ import {
   ChevronLeft,
   InsightDetail,
   InsightRow,
+  InsightStepper,
   PageReader,
   ReviewNotice,
   SPLIT,
   SplitSkeleton,
   pagesLabel,
+  useInsightStepper,
+  type InsightStepperState,
   useReviewFlow,
   wholeNumber,
 } from "./ReviewLayout";
@@ -88,6 +91,7 @@ function InsightList({
   selectedId,
   onFilter,
   onSelect,
+  stepper,
 }: {
   report: Report;
   insights: Insight[];
@@ -95,6 +99,7 @@ function InsightList({
   selectedId: number | null;
   onFilter: (f: Filter) => void;
   onSelect: (id: number) => void;
+  stepper: InsightStepperState;
 }) {
   const counts = insightCounts(report);
   const total = report.insights.length;
@@ -118,11 +123,14 @@ function InsightList({
       {insights.length === 0 ? (
         <Empty>{filter === "all" ? "This Report has no Insights." : EMPTY_FILTER[filter]}</Empty>
       ) : (
-        <ul className="-mx-1 flex flex-col gap-1">
-          {insights.map((i) => (
-            <InsightRow key={i.id} insight={i} selected={i.id === selectedId} onSelect={() => onSelect(i.id)} />
-          ))}
-        </ul>
+        <>
+          <InsightStepper stepper={stepper} />
+          <ul className="-mx-1 flex flex-col gap-1">
+            {insights.map((i) => (
+              <InsightRow key={i.id} insight={i} selected={i.id === selectedId} onSelect={() => onSelect(i.id)} />
+            ))}
+          </ul>
+        </>
       )}
     </Panel>
   );
@@ -154,6 +162,13 @@ function ReportDetail({ report, canUpload, canReview }: { report: Report; canUpl
     canReview,
     onAdvance: (from, next) => update({ insight: String((next ?? from).id), page: null }),
   });
+
+  const select = (id: number) => {
+    clearNotice();
+    update({ insight: String(id), page: null });
+  };
+  // j/k and the arrows move through the Insights shown, so the status filter narrows them too.
+  const stepper = useInsightStepper({ list: shown, selectedId: selected?.id ?? null, onSelect: select });
 
   const counts = insightCounts(report);
   const fullyReviewed = canReview && report.insights.length > 0 && counts.pending === 0;
@@ -188,10 +203,8 @@ function ReportDetail({ report, canUpload, canReview }: { report: Report; canUpl
             selectedId={selected?.id ?? null}
             // A page read for the old selection would outlive it when the filter moves the default selection.
             onFilter={(f) => update({ status: f === "all" ? null : f, page: null })}
-            onSelect={(id) => {
-              clearNotice();
-              update({ insight: String(id), page: null });
-            }}
+            onSelect={select}
+            stepper={stepper}
           />
         )}
         <div className="min-w-0 space-y-3">

@@ -18,10 +18,13 @@ import {
 import {
   InsightDetail,
   InsightRow,
+  InsightStepper,
   PageReader,
   ReviewNotice,
   SplitSkeleton,
   SPLIT,
+  useInsightStepper,
+  type InsightStepperState,
   useReviewFlow,
   wholeNumber,
 } from "./ReviewLayout";
@@ -60,11 +63,13 @@ function InboxList({
   total,
   selectedId,
   onSelect,
+  stepper,
 }: {
   groups: ToReviewGroup[];
   total: number;
   selectedId: number | null;
   onSelect: (id: number) => void;
+  stepper: InsightStepperState;
 }) {
   return (
     <Panel
@@ -80,22 +85,25 @@ function InboxList({
       {groups.length === 0 ? (
         <Empty>Nothing else is awaiting review.</Empty>
       ) : (
-        groups.map(({ report, insights }) => (
-          <section key={report.id} className="inbox-group" aria-labelledby={`inbox-${report.id}`}>
-            <GroupHeader report={report} remaining={insights.length} id={`inbox-${report.id}`} />
-            <ul className="-mx-1 flex flex-col gap-1">
-              {insights.map((i) => (
-                <InsightRow
-                  key={i.id}
-                  insight={i}
-                  selected={i.id === selectedId}
-                  onSelect={() => onSelect(i.id)}
-                  showStatus={false}
-                />
-              ))}
-            </ul>
-          </section>
-        ))
+        <>
+          <InsightStepper stepper={stepper} />
+          {groups.map(({ report, insights }) => (
+            <section key={report.id} className="inbox-group" aria-labelledby={`inbox-${report.id}`}>
+              <GroupHeader report={report} remaining={insights.length} id={`inbox-${report.id}`} />
+              <ul className="-mx-1 flex flex-col gap-1">
+                {insights.map((i) => (
+                  <InsightRow
+                    key={i.id}
+                    insight={i}
+                    selected={i.id === selectedId}
+                    onSelect={() => onSelect(i.id)}
+                    showStatus={false}
+                  />
+                ))}
+              </ul>
+            </section>
+          ))}
+        </>
       )}
     </Panel>
   );
@@ -162,6 +170,12 @@ function Inbox({ reports, canReview, canUpload }: { reports: Report[]; canReview
     onAdvance: (from, next, outcome) =>
       update({ insight: next ? String(next.id) : outcome === "already-reviewed" ? String(from.id) : null, page: null }),
   });
+  const select = (id: number) => {
+    clearNotice();
+    update({ insight: String(id), page: null });
+  };
+  // j/k and the arrows move through the inbox in its order, across Report groups.
+  const stepper = useInsightStepper({ list: order, selectedId: selected?.id ?? null, onSelect: select });
   const showFirst = () => {
     clearNotice();
     update({ insight: null, page: null });
@@ -181,10 +195,8 @@ function Inbox({ reports, canReview, canUpload }: { reports: Report[]; canReview
         groups={groups}
         total={order.length}
         selectedId={selected?.id ?? null}
-        onSelect={(id) => {
-          clearNotice();
-          update({ insight: String(id), page: null });
-        }}
+        onSelect={select}
+        stepper={stepper}
       />
       <div className="min-w-0 space-y-3">
         <ReviewNotice notice={notice} onDismiss={clearNotice} />
