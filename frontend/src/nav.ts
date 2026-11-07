@@ -9,6 +9,7 @@ export interface NavItem {
 export const NAV: NavItem[] = [
   { to: "/queue", label: "Queue", requires: "queue:read" },
   { to: "/approvals", label: "Approvals", requires: "approvals:read" },
+  { to: "/research", label: "Research", requires: "report:read" },
   { to: "/audit", label: "Audit", requires: "audit:read" },
   { to: "/governance", label: "Governance", requires: "governance:read" },
   { to: "/llm-exchanges", label: "LLM Exchanges", requires: "llm:read" },
@@ -17,3 +18,9 @@ export const NAV: NavItem[] = [
 ];
 
 export const visibleNav = (permissions: string[]) => NAV.filter((n) => permissions.includes(n.requires));
+
+/** Where "/" lands. A role whose only screen is Research opens on it; every other role keeps the placeholder until it picks a section. */
+export const landingRoute = (permissions: string[]): string | null => {
+  const items = visibleNav(permissions);
+  return items.length === 1 && items[0].to === "/research" ? items[0].to : null;
+};

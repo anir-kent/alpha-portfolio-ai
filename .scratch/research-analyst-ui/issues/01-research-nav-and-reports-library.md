@@ -8,14 +8,14 @@ See spec: Access; Reports library; States; Visual design.
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The typed client is regenerated from the OpenAPI schema; no hand-written request types
-- [ ] A Research navigation item is shown only with the `report:read` permission, following the existing navigation-by-permission pattern; its routes are registered only for that permission
-- [ ] A user whose only screen is Research (the Research Analyst) lands on it at sign-in rather than the "Select a section" placeholder; other roles' landing is unchanged
-- [ ] The Reports table shows title, kind, page count, uploader, upload time, extraction outcome and the three Insight counts, all derived from the Report list response
-- [ ] Seeded Reports show a "Human-verified seed" badge; failed extraction shows an error pill with text, not colour alone
-- [ ] Loading shows skeleton rows; an empty list and a fetch error each have an explicit state, reusing the existing empty and error components
-- [ ] Built from the existing page header, panel, pill and design tokens, so it matches the Advisor and Auditor screens
-- [ ] `docs/manual-e2e-checklist.md` gains a "Research Analyst" section with this ticket's checks: Analyst lands on Research and sees the seeded Reports; an Advisor and an Auditor do not see Research
-- [ ] `npm run typecheck`, `npm run lint`, `npm run format:check` and the frontend build pass
+- [x] The typed client is regenerated from the OpenAPI schema; no hand-written request types
+- [x] A Research navigation item is shown only with the `report:read` permission, following the existing navigation-by-permission pattern; its routes are registered only for that permission
+- [x] A user whose only screen is Research (the Research Analyst) lands on it at sign-in rather than the "Select a section" placeholder; other roles' landing is unchanged
+- [x] The Reports table shows title, kind, page count, uploader, upload time, extraction outcome and the three Insight counts, all derived from the Report list response
+- [x] Seeded Reports show a "Human-verified seed" badge; failed extraction shows an error pill with text, not colour alone
+- [x] Loading shows skeleton rows; an empty list and a fetch error each have an explicit state, reusing the existing empty and error components
+- [x] Built from the existing page header, panel, pill and design tokens, so it matches the Advisor and Auditor screens
+- [x] `docs/manual-e2e-checklist.md` gains a "Research Analyst" section with this ticket's checks: Analyst lands on Research and sees the seeded Reports; an Advisor and an Auditor do not see Research
+- [x] `npm run typecheck`, `npm run lint`, `npm run format:check` and the frontend build pass

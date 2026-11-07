@@ -768,6 +768,16 @@
     background: rgb(255 255 255 / 0.45);
   }
 
+  /* Loading placeholder for a table cell: a sunken bar with a slow sheen. Stills under reduced motion. */
+  .skeleton {
+    display: block;
+    height: 0.8rem;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--color-sunken) 25%, rgb(255 255 255 / 0.6) 50%, var(--color-sunken) 75%);
+    background-size: 200% 100%;
+    animation: sheen 1.4s ease-in-out infinite;
+  }
+
   /* Faint measuring grid behind range charts. */
   .gridtex {
     background-color: rgb(255 255 255 / 0.28);
@@ -787,6 +797,14 @@
   }
 }
 
+@keyframes sheen {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -832,5 +850,8 @@
   .run-spin {
     animation: none !important;
     border-color: var(--color-info);
+  }
+  .skeleton {
+    animation: none !important;
   }
 }

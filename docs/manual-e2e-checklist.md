@@ -106,6 +106,16 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] `relationship_manager`: same summary, client name and email still masked
 - [ ] `compliance_officer` (Portfolio page): steps also show "Open exchange", which opens the Exchange drawer
 
+## Research Analyst
+
+- [ ] Sign-in screen offers Research Analyst; logging in as `research_analyst` lands on the Research screen (URL `/research`), not the "Select a section" placeholder, even when the tab was left on another role's page (e.g. `/queue`)
+- [ ] Nav shows a single Research item under RESEARCH; the screen opens on the Reports tab
+- [ ] Reports table lists the 5 seeded Reports, newest first, each with title, kind (PDF/Text), page count, uploader, upload time (UTC), extraction outcome and Awaiting review / Approved / Rejected counts that add up to the Report's Insights
+- [ ] Every seeded Report carries a "Human-verified seed" badge and a "Seeded" outcome
+- [ ] Failed extraction (with `APP_LLM_MODE=recorded`, `POST /api/reports` any new `.txt`, which has no recording): the Report shows a red "Extraction failed" pill with an alert icon and text (hover shows the stored error), and its row is marked
+- [ ] Throttle the network (DevTools, Slow 3G) and reload: skeleton rows show while the list loads; stop the API and reload: an error line says "Could not load Reports"
+- [ ] `advisor` and `auditor`: no Research item in the nav, and opening `/research` shows the placeholder, not the Reports table
+
 ## Supersession and clean portfolio
 
 - [ ] Rerun analysis: open recommendations become Superseded

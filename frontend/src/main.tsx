@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { api } from "./api/client";
 import { ApprovalsPage } from "./ApprovalsPage";
 import { AuditPage } from "./AuditPage";
@@ -10,7 +10,8 @@ import { ExchangesPage } from "./ExchangesPage";
 import { GovernancePage } from "./GovernancePage";
 import { PortfolioPage } from "./PortfolioPage";
 import { QueuePage } from "./QueuePage";
-import { visibleNav } from "./nav";
+import { ResearchPage } from "./ResearchPage";
+import { landingRoute, visibleNav } from "./nav";
 import { Icon, Pill, useQueue } from "./ui";
 import "./index.css";
 
@@ -27,6 +28,7 @@ const ROLE_LABEL: Record<string, string> = {
 const LOGIN_ROLES = [
   "advisor",
   "relationship_manager",
+  "research_analyst",
   "compliance_officer",
   "investment_committee",
   "auditor",
@@ -35,6 +37,7 @@ const LOGIN_ROLES = [
 const NAV_ICON: Record<string, string> = {
   "/queue": "queue",
   "/approvals": "approvals",
+  "/research": "research",
   "/audit": "audit",
   "/governance": "governance",
   "/llm-exchanges": "spark",
@@ -44,6 +47,7 @@ const NAV_ICON: Record<string, string> = {
 /** Sidebar grouping only; which items appear is still decided by the server-issued permissions in nav.ts. */
 const NAV_GROUPS: { label: string; routes: string[] }[] = [
   { label: "MONITORING", routes: ["/queue", "/approvals"] },
+  { label: "RESEARCH", routes: ["/research"] },
   { label: "GATEWAY", routes: ["/audit", "/governance", "/llm-exchanges"] },
   { label: "WORKSPACE", routes: ["/config", "/health"] },
 ];
@@ -288,6 +292,7 @@ function Capsule({
 
 function Shell({ username, role, permissions }: { username: string; role: string; permissions: string[] }) {
   const qc = useQueryClient();
+  const landing = landingRoute(permissions);
   const logout = useMutation({
     mutationFn: () => api.POST("/api/auth/logout"),
     onSuccess: () => {
@@ -313,6 +318,7 @@ function Shell({ username, role, permissions }: { username: string; role: string
             {permissions.includes("approvals:read") && (
               <Route path="/approvals" element={<ApprovalsPage permissions={permissions} />} />
             )}
+            {permissions.includes("report:read") && <Route path="/research" element={<ResearchPage />} />}
             {permissions.includes("audit:read") && <Route path="/audit" element={<AuditPage />} />}
             {permissions.includes("audit:read") && (
               <Route
@@ -331,7 +337,14 @@ function Shell({ username, role, permissions }: { username: string; role: string
             )}
             <Route
               path="*"
-              element={<p className="text-ink-2">Select a section. Screens arrive in later tickets.</p>}
+              element={
+                // A role with a single landing screen never sees the placeholder, even arriving on another role's URL.
+                landing ? (
+                  <Navigate to={landing} replace />
+                ) : (
+                  <p className="text-ink-2">Select a section. Screens arrive in later tickets.</p>
+                )
+              }
             />
           </Routes>
         </main>
