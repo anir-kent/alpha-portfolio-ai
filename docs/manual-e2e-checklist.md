@@ -54,7 +54,7 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 ## Assistant (Portfolio screen)
 
 - [ ] The Assistant button shows next to the status strip for every role; it opens the drawer (`aria-expanded` true), the close button or Escape hides it and focus returns to the Assistant button, it stays open while moving between screens, and closing then reopening keeps the turns
-- [ ] On `/portfolios/C001` the drawer header reads "Portfolio C001"; off the Queue and a Portfolio it reads "No context on this screen" and the Question box is disabled
+- [ ] On `/portfolios/C001` the drawer header reads "Portfolio C001"; on a screen that publishes no context (e.g. a Recommendation's Lineage page) it reads "No context on this screen" and the Question box is disabled
 - [ ] Ask "Which asset class drives the drift?" on C001: "Thinking…" shows, then the Answer renders as Markdown (bold, lists) with no raw HTML; follow-up questions fill the Question box when clicked
 - [ ] Ask "Should I buy NVDA?": the fixed refusal shows ("I can only help with questions about this platform…"), never the model's text
 - [ ] As auditor, the turn's LLM Exchange (task `assistant_answer`, `assistant_answer@v1`) is listed on LLM Exchanges with no Client name or email in its prompt, an `assistant.answered` or `assistant.refused` Audit Event references it, and Verify chain passes
@@ -73,7 +73,16 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] On a Portfolio with a Recommendation (e.g. C003 after approving the demo house view's equity Insight and running an analysis), the drawer offers "Portfolio C003" and "Recommendation N" to switch between; with the Recommendation chosen, ask "Which Report passage drove the tilt?": the Answer cites the passage with a Report chip that opens it
 - [ ] Click a Trade Line's spark button: the drawer switches to "Recommendation N, Trade Line k" and "Why this one?" is answered about that line; clicking it again goes back to "Recommendation N"
 - [ ] As auditor, that turn's Exchange prompt shows the Report passages after the JSON, between `<<<REPORT_PASSAGE …>>>` and `<<<END_REPORT_PASSAGE>>>` fences under an "untrusted data" heading, and no Client name or email anywhere
-- [ ] Roles without `insight:read` (e.g. investment_committee) get no Insights or Report passages in a Recommendation prompt; they reach no Recommendation screen until the Approvals context (sme-assistant ticket 07), so `tests/test_assistant.py` covers it until then
+- [ ] Roles without `insight:read` (e.g. investment_committee) get no Insights or Report passages in a Recommendation prompt; they reach no Recommendation screen, so `tests/test_assistant.py` covers it
+
+## Assistant (Approvals, Audit, LLM Exchanges, Governance, Config and Health screens)
+
+- [ ] The drawer opens, closes and persists across navigation: open it on `/queue`, move through Approvals, Audit, Governance, LLM Exchanges, Config and Health (as the roles that see them); it stays open, its header follows each screen ("Approvals", "Audit", "Governance", "LLM Exchanges", "Config", "Health"), the turns stay, and closing then reopening keeps them
+- [ ] As investment_committee, after the Advisor accepts C003 (high-impact): on `/approvals` ask "What is waiting on me?"; the Answer names C003's Recommendation and its status. Click the item's spark button: the header reads "Approvals, Recommendation N"; click again to clear it
+- [ ] As auditor on `/audit`, search for Portfolio C003 and ask "What happened to this Portfolio?": the turn's Exchange prompt holds only C003's events, newest first (at most `APP_ASSISTANT_CONTEXT_ROWS`, with a "showing N of M" note when cut). A row's spark button makes the header "Audit, Event N"
+- [ ] As auditor on `/llm-exchanges`, open an Exchange: the header reads "LLM Exchange N"; ask "What did the model see?": the new turn's Exchange prompt holds the opened Exchange's system text, prompt and reply fenced between `<<<LLM_EXCHANGE ...>>>` and `<<<END_LLM_EXCHANGE>>>`. Closing the Exchange returns the header to "LLM Exchanges", and the prompt then carries no Exchange body
+- [ ] As platform_owner on `/governance`, ask "Which model and prompt versions are in use?": the Answer matches the model card
+- [ ] As platform_owner on `/config` and `/health`, ask "How does an Analysis Run work?": the Answer explains it from the platform brief, and the turn's Exchange prompt holds no config values or health figures
 
 ## Approvals
 

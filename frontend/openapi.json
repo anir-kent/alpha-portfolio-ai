@@ -5391,7 +5391,13 @@
             "enum": [
               "queue",
               "portfolio",
-              "recommendation"
+              "recommendation",
+              "approvals",
+              "audit",
+              "exchanges",
+              "governance",
+              "config",
+              "health"
             ],
             "title": "Kind"
           },

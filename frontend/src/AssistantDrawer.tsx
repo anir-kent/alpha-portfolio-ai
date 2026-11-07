@@ -64,6 +64,12 @@ const SCREEN_ROUTES: Record<Screen["kind"], (ids: Screen["entity_ids"]) => strin
   portfolio: (ids) => `/portfolios/${encodeURIComponent(ids.portfolio_id ?? "")}`,
   // The Recommendation is shown on its Portfolio's screen.
   recommendation: (ids) => `/portfolios/${encodeURIComponent(ids.portfolio_id ?? "")}`,
+  approvals: () => "/approvals",
+  audit: () => "/audit",
+  exchanges: () => "/llm-exchanges",
+  governance: () => "/governance",
+  config: () => "/config",
+  health: () => "/health",
 };
 
 /** One Claim with its citation chips: a Report citation opens the quoted passage, an engine figure goes to the screen

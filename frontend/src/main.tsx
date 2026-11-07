@@ -5,7 +5,7 @@ import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 import { api } from "./api/client";
 import { ApprovalsPage } from "./ApprovalsPage";
 import { AssistantDrawer } from "./AssistantDrawer";
-import { AssistantScreenProvider } from "./assistantScreen";
+import { AssistantScreenProvider, usePublishScreen } from "./assistantScreen";
 import { AuditPage } from "./AuditPage";
 import { LineagePage } from "./LineagePage";
 import { ExchangesPage } from "./ExchangesPage";
@@ -351,6 +351,12 @@ function Shell({ username, role, permissions }: { username: string; role: string
             {permissions.includes("llm:read") && (
               <Route path="/llm-exchanges" element={<ExchangesPage permissions={permissions} />} />
             )}
+            {permissions.includes("config:read") && (
+              <Route path="/config" element={<PlatformScreen kind="config" label="Config" />} />
+            )}
+            {permissions.includes("health:read") && (
+              <Route path="/health" element={<PlatformScreen kind="health" label="Health" />} />
+            )}
             <Route
               path="*"
               element={<p className="text-ink-2">Select a section. Screens arrive in later tickets.</p>}
@@ -369,6 +375,17 @@ function Shell({ username, role, permissions }: { username: string; role: string
         />
       )}
     </div>
+  );
+}
+
+/** Config and Health have no screens yet; the route still tells the Assistant where the user is, and on these screens
+ * it answers "how does the platform work" Questions from the platform brief. */
+function PlatformScreen({ kind, label }: { kind: "config" | "health"; label: string }) {
+  usePublishScreen({ kind, entity_ids: {}, selected_item: null }, label);
+  return (
+    <p className="text-ink-2">
+      The {label} screen arrives in a later ticket. The Assistant can explain how the platform works.
+    </p>
   );
 }
 

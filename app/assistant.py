@@ -19,6 +19,7 @@ from app.grounding import CheckSubject, Claim, ClaimResult
 from app.llm import LlmClient, LlmError, LlmRequest, LlmResponse, exchange_ref
 from app.market_data import MarketData
 from app.screen_context import ScreenIdentity
+from app.settings import Settings
 from app.timeutil import as_utc
 
 OUT_OF_SCOPE_REFUSAL = (
@@ -171,11 +172,10 @@ def ask(
     session: SessionRow,
     question: str,
     screen: ScreenIdentity,
-    history_pairs: int,
-    context_rows: int,
+    settings: Settings,
 ) -> Turn:
     """Afterwards the turn is stored in the session's Conversation and its Audit Event is in the chain."""
-    context = screen_context.build(db, market, user, screen, row_budget=context_rows)
+    context = screen_context.build(db, market, user, screen, settings)
     outcome: Outcome
     answer: Answer | None = None
     model: str | None = None
@@ -185,7 +185,7 @@ def ask(
     if context is None:  # nothing readable: refuse without calling the model or saying whether the entity exists
         outcome = "refused"
     else:
-        request = _prompt(context, _history(db, session, history_pairs), question)
+        request = _prompt(context, _history(db, session, settings.assistant_history_pairs), question)
         try:
             called = llm.complete(request)
             model = called.model

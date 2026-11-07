@@ -2,7 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "./api/client";
-import { usePublishScreen } from "./assistantScreen";
+import { AskButton, usePublishScreen } from "./assistantScreen";
 import { RunAnalysisModal, useRunProgress, type RunSnapshot } from "./RunAnalysisModal";
 import {
   Citations,
@@ -356,16 +356,11 @@ export function QueuePage() {
                 return (
                   <tr key={r.portfolio_id}>
                     <td>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        aria-pressed={selectedRow === r.portfolio_id}
-                        title="Ask the Assistant about this Portfolio"
-                        onClick={() => setSelected(selectedRow === r.portfolio_id ? null : r.portfolio_id)}
-                      >
-                        <Icon name="spark" size={12} />
-                        <span className="sr-only">Ask about {r.portfolio_id}</span>
-                      </button>
+                      <AskButton
+                        pressed={selectedRow === r.portfolio_id}
+                        onToggle={() => setSelected(selectedRow === r.portfolio_id ? null : r.portfolio_id)}
+                        what={r.portfolio_id}
+                      />
                     </td>
                     <td className="whitespace-nowrap">
                       <Link className="font-semibold text-brand hover:underline" to={`/portfolios/${r.portfolio_id}`}>

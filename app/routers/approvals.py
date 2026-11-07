@@ -73,12 +73,8 @@ def _flagged(rec: RecommendationRow, market: MarketData) -> list[FlaggedRuleOut]
     return out
 
 
-@router.get("/approvals", response_model=ApprovalsOut, operation_id="listApprovals")
-def pending_approvals(
-    user: User = Depends(require("approvals:read")),
-    db: Session = Depends(get_db),
-    market: MarketData = Depends(get_market),
-):
+def approvals_view(db: Session, market: MarketData, user: User) -> ApprovalsOut:
+    """What waits on the steps `user` decides, oldest first. Shared with the Assistant's Approvals Screen Context."""
     perms = PERMISSIONS[user.role]
     steps = [s for p, s in _STEP_FOR_PERMISSION.items() if p in perms]
     cfg = get_config(db)
@@ -107,3 +103,12 @@ def pending_approvals(
             )
         )
     return ApprovalsOut(items=items)
+
+
+@router.get("/approvals", response_model=ApprovalsOut, operation_id="listApprovals")
+def pending_approvals(
+    user: User = Depends(require("approvals:read")),
+    db: Session = Depends(get_db),
+    market: MarketData = Depends(get_market),
+):
+    return approvals_view(db, market, user)

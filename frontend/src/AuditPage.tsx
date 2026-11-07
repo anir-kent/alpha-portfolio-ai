@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "./api/client";
 import type { operations } from "./api/schema";
+import { AskButton, usePublishScreen } from "./assistantScreen";
 import { Empty, ErrorLine, Icon, PageHeader, Panel, Pill } from "./ui";
 
 type EventType = NonNullable<operations["searchAuditEvents"]["parameters"]["query"]>["type"];
@@ -135,6 +136,21 @@ export function AuditPage() {
     },
   });
   const set = (k: keyof Filters) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
+  // The Assistant sees the events this search selects (the server reruns it) and, when one is picked, that event.
+  const [selected, setSelected] = useState<number | null>(null);
+  const liveSelection = results.data?.items.some((e) => e.id === selected) ? selected : null;
+  usePublishScreen(
+    {
+      kind: "audit",
+      entity_ids: Object.fromEntries(
+        Object.entries({ ...applied, date_from: toIso(applied.date_from), date_to: toIso(applied.date_to) }).filter(
+          (entry): entry is [string, string] => !!entry[1],
+        ),
+      ),
+      selected_item: liveSelection === null ? null : String(liveSelection),
+    },
+    liveSelection === null ? "Audit" : `Audit, Event ${liveSelection}`,
+  );
 
   return (
     <div>
@@ -203,6 +219,9 @@ export function AuditPage() {
           <table className="grid-table">
             <thead>
               <tr>
+                <th>
+                  <span className="sr-only">Ask the Assistant</span>
+                </th>
                 <th className="num">#</th>
                 <th>Time (UTC)</th>
                 <th>Type</th>
@@ -225,6 +244,13 @@ export function AuditPage() {
                       boxShadow: denied ? "inset 3px 0 var(--color-neg)" : override ? "inset 3px 0 #d99a2b" : undefined,
                     }}
                   >
+                    <td>
+                      <AskButton
+                        pressed={liveSelection === e.id}
+                        onToggle={() => setSelected(liveSelection === e.id ? null : e.id)}
+                        what={`Audit Event ${e.id}`}
+                      />
+                    </td>
                     <td className="num">
                       {e.id}
                       {e.recommendation_id && (

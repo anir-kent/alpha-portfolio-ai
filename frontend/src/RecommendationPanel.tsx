@@ -3,7 +3,7 @@ import { useId, useState } from "react";
 import { api } from "./api/client";
 import type { components } from "./api/schema";
 import { ExchangeDrawer } from "./ExchangeDrawer";
-import { usePublishScreen } from "./assistantScreen";
+import { AskButton, usePublishScreen } from "./assistantScreen";
 import { Citations, DeltaBar, Drawer, Empty, Icon, Pill, RULE_TONE, money, pp, type Tone } from "./ui";
 
 type Detail = components["schemas"]["PortfolioDetail"];
@@ -60,16 +60,11 @@ function Lines({
         {rec.trade_lines.map((line, i) => (
           <tr key={`${line.account_id}-${line.symbol}`}>
             <td>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                aria-pressed={selected === i + 1}
-                title="Ask the Assistant about this Trade Line"
-                onClick={() => onSelect(selected === i + 1 ? null : i + 1)}
-              >
-                <Icon name="spark" size={12} />
-                <span className="sr-only">Ask about Trade Line {i + 1}</span>
-              </button>
+              <AskButton
+                pressed={selected === i + 1}
+                onToggle={() => onSelect(selected === i + 1 ? null : i + 1)}
+                what={`Trade Line ${i + 1}`}
+              />
             </td>
             <td>
               <Pill tone={line.side === "sell" ? "neg" : "pos"}>{line.side}</Pill>

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api/client";
+import { usePublishScreen } from "./assistantScreen";
 import { Empty, ErrorLine, Icon, PageHeader, Panel, Pill, ScoreDial } from "./ui";
 
 const pct = (v: number | null) => (v === null ? "n/a" : `${(v * 100).toFixed(1)}%`);
@@ -18,8 +19,11 @@ function Kpi({ label, value, sub, tone }: { label: string; value: string; sub?: 
   );
 }
 
+const GOVERNANCE_SCREEN = { kind: "governance", entity_ids: {}, selected_item: null } as const;
+
 export function GovernancePage({ canRunFixtures }: { canRunFixtures: boolean }) {
   const qc = useQueryClient();
+  usePublishScreen(GOVERNANCE_SCREEN, "Governance");
   const gov = useQuery({
     queryKey: ["governance"],
     queryFn: async () => {
