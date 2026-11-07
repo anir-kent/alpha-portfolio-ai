@@ -4,11 +4,11 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The Queue Screen Context holds the prioritised Portfolios with drift and priority figures, at most 25 rows (configurable) by the Queue's own sort, with a "showing 25 of N" note when cut
-- [ ] The Recommendation Screen Context holds Trade Lines, Suitability outcomes, Research Tilts, linked Insights with their Report passages, and grounded Claims
-- [ ] Report passages are fenced as untrusted data in the prompt; an adversarial passage doesn't override an out-of-scope verdict
-- [ ] A selected-item id is included only if it belongs to the screen's entity; a foreign item gets the Out-of-Scope Refusal
-- [ ] Sections the role can't read are absent from the prompt; no Client names or emails appear
-- [ ] The Queue and Recommendation screens publish their screen identity and selected item to the drawer
+- [x] The Queue Screen Context holds the prioritised Portfolios with drift and priority figures, at most 25 rows (configurable) by the Queue's own sort, with a "showing 25 of N" note when cut
+- [x] The Recommendation Screen Context holds Trade Lines, Suitability outcomes, Research Tilts, linked Insights with their Report passages, and grounded Claims
+- [x] Report passages are fenced as untrusted data in the prompt; an adversarial passage doesn't override an out-of-scope verdict
+- [x] A selected-item id is included only if it belongs to the screen's entity; a foreign item gets the Out-of-Scope Refusal
+- [x] Sections the role can't read are absent from the prompt; no Client names or emails appear
+- [x] The Queue and Recommendation screens publish their screen identity and selected item to the drawer

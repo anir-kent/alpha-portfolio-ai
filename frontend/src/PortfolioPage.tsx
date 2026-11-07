@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { api } from "./api/client";
 import { RecommendationPanel } from "./RecommendationPanel";
+import { usePublishScreen } from "./assistantScreen";
 import type { components } from "./api/schema";
 import { DeltaBar, DRIFT_TONE, Empty, ErrorLine, Icon, PageHeader, Panel, Pill, RULE_TONE, money, pct, pp } from "./ui";
 
@@ -231,6 +232,10 @@ export function PortfolioPage({ canDecide = false }: { canDecide?: boolean }) {
       return data;
     },
   });
+  usePublishScreen(
+    id ? { kind: "portfolio", entity_ids: { portfolio_id: id }, selected_item: null } : null,
+    `Portfolio ${id}`,
+  );
   if (q.isError) return <ErrorLine>{q.error.message}</ErrorLine>;
   if (!q.data) return <Empty>Loading…</Empty>;
   const p = q.data;

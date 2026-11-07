@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "./api/client";
+import { usePublishScreen } from "./assistantScreen";
 import { RunAnalysisModal, useRunProgress, type RunSnapshot } from "./RunAnalysisModal";
 import {
   Citations,
@@ -182,6 +183,21 @@ export function QueuePage() {
   const onRunClick = () => (running ? setModalOpen(true) : run.mutate()); // while a run is in flight, open it
   const set = (patch: Partial<QueueParams>) => setFilters((f) => ({ ...f, ...patch }));
   const items = queue.data?.items ?? [];
+  // The selected row points the Assistant at one Portfolio; the server builds the Queue with the same filters and sort.
+  const [selected, setSelected] = useState<string | null>(null);
+  const selectedRow = items.some((r) => r.portfolio_id === selected) ? selected : null;
+  usePublishScreen(
+    {
+      kind: "queue",
+      entity_ids: Object.fromEntries(
+        Object.entries(filters)
+          .filter(([, v]) => v !== undefined && v !== null && v !== "")
+          .map(([k, v]) => [k, String(v)]),
+      ),
+      selected_item: selectedRow,
+    },
+    selectedRow ? `Queue, Portfolio ${selectedRow}` : "Queue",
+  );
 
   return (
     <section aria-label="Priority queue">
@@ -322,6 +338,9 @@ export function QueuePage() {
           <table className="grid-table">
             <thead>
               <tr>
+                <th>
+                  <span className="sr-only">Ask the Assistant</span>
+                </th>
                 <th>Client</th>
                 <th>Risk Profile</th>
                 <th className="num">Priority</th>
@@ -336,6 +355,18 @@ export function QueuePage() {
                 const worst = [...r.asset_class_drift].sort((a, b) => b.drift_pp - a.drift_pp)[0];
                 return (
                   <tr key={r.portfolio_id}>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        aria-pressed={selectedRow === r.portfolio_id}
+                        title="Ask the Assistant about this Portfolio"
+                        onClick={() => setSelected(selectedRow === r.portfolio_id ? null : r.portfolio_id)}
+                      >
+                        <Icon name="spark" size={12} />
+                        <span className="sr-only">Ask about {r.portfolio_id}</span>
+                      </button>
+                    </td>
                     <td className="whitespace-nowrap">
                       <Link className="font-semibold text-brand hover:underline" to={`/portfolios/${r.portfolio_id}`}>
                         {r.client_name ?? "Hidden"}

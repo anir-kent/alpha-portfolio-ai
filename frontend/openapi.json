@@ -5388,7 +5388,11 @@
         "properties": {
           "kind": {
             "type": "string",
-            "const": "portfolio",
+            "enum": [
+              "queue",
+              "portfolio",
+              "recommendation"
+            ],
             "title": "Kind"
           },
           "entity_ids": {

@@ -5,6 +5,7 @@ import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 import { api } from "./api/client";
 import { ApprovalsPage } from "./ApprovalsPage";
 import { AssistantDrawer } from "./AssistantDrawer";
+import { AssistantScreenProvider } from "./assistantScreen";
 import { AuditPage } from "./AuditPage";
 import { LineagePage } from "./LineagePage";
 import { ExchangesPage } from "./ExchangesPage";
@@ -378,7 +379,13 @@ function App() {
     queryFn: async () => (await api.GET("/api/auth/me")).data ?? null,
   });
   if (me.isLoading) return null;
-  return me.data ? <Shell {...me.data} /> : <Login />;
+  return me.data ? (
+    <AssistantScreenProvider>
+      <Shell {...me.data} />
+    </AssistantScreenProvider>
+  ) : (
+    <Login />
+  );
 }
 
 createRoot(document.getElementById("root")!).render(

@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useEffect, useState } from "react";
 import Markdown from "react-markdown";
-import { Link, useMatch } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { api } from "./api/client";
 import type { components } from "./api/schema";
+import { usePublishedScreens, type Published, type Screen } from "./assistantScreen";
 import { CitationChip, Icon, Pill } from "./ui";
 
 type Turn = components["schemas"]["Turn"];
-type Screen = components["schemas"]["ScreenIdentity"];
 type Conversation = components["schemas"]["Conversation"];
 type ClaimResult = components["schemas"]["ClaimResult"];
 
@@ -27,16 +27,26 @@ function sameScreen(a: Screen, b: Screen): boolean {
   );
 }
 
-/** The screen identity the current route publishes to the Assistant, and how the drawer names it. Null off a supported screen. */
-function useCurrentScreen(): { screen: Screen; label: string } | null {
-  const portfolio = useMatch("/portfolios/:id");
-  const id = portfolio?.params.id;
-  if (id)
-    return {
-      screen: { kind: "portfolio", entity_ids: { portfolio_id: id }, selected_item: null },
-      label: `Portfolio ${id}`,
-    };
-  return null;
+/** The context the drawer asks against, among those the screens on display publish. A newly selected item (a Queue
+ * row, a Trade Line) takes over, since selecting is how the user says what the Question is about; otherwise the
+ * user's own pick, else the broadest. Null off a screen that publishes none. */
+function useCurrentScreen(): {
+  current: Published | null;
+  offered: Published[];
+  choose: (kind: Screen["kind"]) => void;
+} {
+  const offered = usePublishedScreens();
+  const [chosen, setChosen] = useState<Screen["kind"] | null>(null);
+  // Adjusted while rendering (not in an effect): only a change of selection moves the pick.
+  const selection = offered.map((p) => `${p.screen.kind}:${p.screen.selected_item ?? ""}`).join("|");
+  const [seenSelection, setSeenSelection] = useState(selection);
+  if (selection !== seenSelection) {
+    setSeenSelection(selection);
+    const selected = offered.filter((p) => p.screen.selected_item).at(-1);
+    if (selected) setChosen(selected.screen.kind);
+  }
+  const current = offered.find((p) => p.screen.kind === chosen) ?? offered[0] ?? null;
+  return { current, offered, choose: setChosen };
 }
 
 /** Model-written Markdown. Raw HTML in it is dropped, never rendered. */
@@ -50,7 +60,10 @@ function AnswerMarkdown({ text }: { text: string }) {
 
 /** The route of the screen each kind of Screen Context is built from, so an engine figure chip can go back to it. */
 const SCREEN_ROUTES: Record<Screen["kind"], (ids: Screen["entity_ids"]) => string> = {
+  queue: () => "/queue",
   portfolio: (ids) => `/portfolios/${encodeURIComponent(ids.portfolio_id ?? "")}`,
+  // The Recommendation is shown on its Portfolio's screen.
+  recommendation: (ids) => `/portfolios/${encodeURIComponent(ids.portfolio_id ?? "")}`,
 };
 
 /** One Claim with its citation chips: a Report citation opens the quoted passage, an engine figure goes to the screen
@@ -160,7 +173,7 @@ function TurnView({
 
 /** The Assistant: a collapsible, non-modal panel in the app shell that stays open across navigation. Read-only. */
 export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const current = useCurrentScreen();
+  const { current, offered, choose } = useCurrentScreen();
   const [question, setQuestion] = useState("");
   const qc = useQueryClient();
   // The server keeps the Conversation for the login session, so a reload restores it from here. 204 means none yet.
@@ -217,6 +230,20 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
           <Icon name="close" />
         </button>
       </div>
+      {offered.length > 1 && (
+        <div className="seg mx-4 mt-2.5 w-fit" role="group" aria-label="Ask about">
+          {offered.map((p) => (
+            <button
+              key={p.screen.kind}
+              type="button"
+              aria-pressed={p.screen.kind === current?.screen.kind}
+              onClick={() => choose(p.screen.kind)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-4">
         {conversation.isError && <p className="callout callout-neg mb-3">{conversation.error.message}</p>}
         {turns.length === 0 && !ask.isPending && !conversation.isPending && (
@@ -256,7 +283,7 @@ export function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () 
             className="field min-h-[4.5rem]"
             value={question}
             disabled={!current}
-            placeholder={current ? `Ask about ${current.label}` : "Open a Portfolio to ask about it"}
+            placeholder={current ? `Ask about ${current.label}` : "Open the Queue or a Portfolio to ask about it"}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {

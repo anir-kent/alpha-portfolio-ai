@@ -172,9 +172,10 @@ def ask(
     question: str,
     screen: ScreenIdentity,
     history_pairs: int,
+    context_rows: int,
 ) -> Turn:
     """Afterwards the turn is stored in the session's Conversation and its Audit Event is in the chain."""
-    context = screen_context.build(db, market, user, screen)
+    context = screen_context.build(db, market, user, screen, row_budget=context_rows)
     outcome: Outcome
     answer: Answer | None = None
     model: str | None = None

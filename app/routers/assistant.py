@@ -37,8 +37,18 @@ def ask(
     market: MarketData = Depends(get_market),
 ):
     session = _session(db, request)
-    pairs = request.app.state.settings.assistant_history_pairs
-    return assistant.ask(db, llm, market, user, session, body.question.strip(), body.screen, pairs)
+    settings = request.app.state.settings
+    return assistant.ask(
+        db,
+        llm,
+        market,
+        user,
+        session,
+        body.question.strip(),
+        body.screen,
+        settings.assistant_history_pairs,
+        settings.assistant_context_rows,
+    )
 
 
 @router.get(

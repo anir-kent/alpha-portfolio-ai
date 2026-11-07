@@ -206,18 +206,25 @@ _SORTS = {
 }
 
 
-@router.get("/queue", response_model=Queue, operation_id="getQueue")
-def queue(
-    user: User = Depends(require("queue:read")),
-    db: Session = Depends(get_db),
-    label: Label | None = None,
-    risk_profile: str | None = None,
-    review_due_from: str | None = Query(None, description="ISO date, inclusive"),
-    review_due_to: str | None = Query(None, description="ISO date, inclusive"),
-    sla_breached: bool | None = None,
-    sort: Literal["score", "review_due", "risk_profile", "label"] = "score",
-    order: Literal["asc", "desc"] | None = None,
-):
+QueueSort = Literal["score", "review_due", "risk_profile", "label"]
+
+
+class QueueFilters(BaseModel):
+    """What the Queue screen filters and sorts by. The Assistant's Queue Screen Context is built with the same ones."""
+
+    label: Label | None = None
+    risk_profile: str | None = None
+    review_due_from: str | None = None
+    review_due_to: str | None = None
+    sla_breached: bool | None = None
+    sort: QueueSort = "score"
+    order: Literal["asc", "desc"] | None = None
+
+
+def queue_view(db: Session, user: User, f: QueueFilters) -> Queue:
+    """The Queue as `user` sees it: the latest completed run's priority results, filtered and in the screen's order."""
+    label, risk_profile, sla_breached, sort, order = f.label, f.risk_profile, f.sla_breached, f.sort, f.order
+    review_due_from, review_due_to = f.review_due_from, f.review_due_to
     run = db.scalar(select(AnalysisRunRow).where(AnalysisRunRow.completed).order_by(AnalysisRunRow.id.desc()).limit(1))
     if run is None:
         return Queue(run_id=None, as_of=None, items=[])
@@ -264,3 +271,27 @@ def queue(
         for r, c in db.execute(q)
     ]
     return Queue(run_id=run.id, as_of=run.as_of, items=items)
+
+
+@router.get("/queue", response_model=Queue, operation_id="getQueue")
+def queue(
+    user: User = Depends(require("queue:read")),
+    db: Session = Depends(get_db),
+    label: Label | None = None,
+    risk_profile: str | None = None,
+    review_due_from: str | None = Query(None, description="ISO date, inclusive"),
+    review_due_to: str | None = Query(None, description="ISO date, inclusive"),
+    sla_breached: bool | None = None,
+    sort: QueueSort = "score",
+    order: Literal["asc", "desc"] | None = None,
+) -> Queue:
+    filters = QueueFilters(
+        label=label,
+        risk_profile=risk_profile,
+        review_due_from=review_due_from,
+        review_due_to=review_due_to,
+        sla_breached=sla_breached,
+        sort=sort,
+        order=order,
+    )
+    return queue_view(db, user, filters)

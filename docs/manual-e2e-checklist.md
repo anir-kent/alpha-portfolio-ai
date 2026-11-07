@@ -54,16 +54,26 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 ## Assistant (Portfolio screen)
 
 - [ ] The Assistant button shows next to the status strip for every role; it opens the drawer (`aria-expanded` true), the close button or Escape hides it and focus returns to the Assistant button, it stays open while moving between screens, and closing then reopening keeps the turns
-- [ ] On `/portfolios/C001` the drawer header reads "Portfolio C001"; off a Portfolio it reads "No context on this screen" and the Question box is disabled
+- [ ] On `/portfolios/C001` the drawer header reads "Portfolio C001"; off the Queue and a Portfolio it reads "No context on this screen" and the Question box is disabled
 - [ ] Ask "Which asset class drives the drift?" on C001: "Thinking…" shows, then the Answer renders as Markdown (bold, lists) with no raw HTML; follow-up questions fill the Question box when clicked
 - [ ] Ask "Should I buy NVDA?": the fixed refusal shows ("I can only help with questions about this platform…"), never the model's text
 - [ ] As auditor, the turn's LLM Exchange (task `assistant_answer`, `assistant_answer@v1`) is listed on LLM Exchanges with no Client name or email in its prompt, an `assistant.answered` or `assistant.refused` Audit Event references it, and Verify chain passes
 - [ ] Ask two Questions on C001, then reload the page: reopening the drawer shows both turns in order
 - [ ] Ask on C001, open `/portfolios/C002` and ask again: a "Context changed · Portfolio C002" divider separates the turns; the earlier turn still reads as asked on C001; a follow-up ("and why?") gets an Answer that uses the earlier turn (its Exchange prompt has a CONVERSATION SO FAR block with text only, no earlier Screen Context)
 - [ ] Switch role (logout) and log back in: the drawer is empty, and the first Question is turn 1 of a new Conversation
-- [ ] Ask "How far has C001 drifted?" on C001: the Answer lists its Claims with engine figure chips (e.g. `portfolio_drift_pp`); clicking one goes to `/portfolios/C001`. Report citation chips (`<report id> p.<page>`) open the quoted passage under the chip when clicked; a live model can only cite one once a Screen Context carries Report passages (the Recommendation context, sme-assistant ticket 06), until then `tests/test_assistant.py` covers it
+- [ ] Ask "How far has C001 drifted?" on C001: the Answer lists its Claims with engine figure chips (e.g. `portfolio_drift_pp`); clicking one goes to `/portfolios/C001`. Report citation chips (`<report id> p.<page>`) open the quoted passage under the chip when clicked; a live model cites one from the Recommendation context (below)
 - [ ] A Claim that failed grounding (e.g. a number the Screen Context doesn't hold) shows a red "ungrounded" marker in place with its reason below it, and the Claim stays in the Answer; as auditor, the turn's LLM Exchange shows the grounding verdict and a `claim_ungrounded` Audit Event names the `assistant_turn` subject
 - [ ] Retry works: with the model unreachable (e.g. `APP_LLM_MODE=live` and a bad `APP_LLM_BASE_URL`, or a non-Suggested Question in recorded mode), ask on C001: the turn shows "The Assistant couldn't answer, try again." with no error detail and a Retry button. Fix the model, move to `/portfolios/C002` and click Retry: a new turn asks the same Question against C001 (a divider marks the context change back), the failed turn stays above it, and whatever is typed in the Question box is kept. As auditor, the failed turn has an `assistant.failed` Audit Event with `reason` `llm_error` that references the error LLM Exchange, and Verify chain passes
+
+## Assistant (Queue and Recommendation screens)
+
+- [ ] On `/queue` the drawer header reads "Queue"; ask "Why is C003 ranked above C005?": the Answer explains it from the priority components, and its engine chips (e.g. `queue.C003.score`) go to `/queue`
+- [ ] Change the Queue's sort or filter and ask again: as auditor, the turn's Exchange prompt lists the rows in that order and filter; with `APP_ASSISTANT_CONTEXT_ROWS=10` it holds 10 rows and the note "showing 10 of 25", and the Answer says what it couldn't see
+- [ ] Click a row's spark button on the Queue (`aria-pressed` true): the header reads "Queue, Portfolio C0xx"; click it again to clear it
+- [ ] On a Portfolio with a Recommendation (e.g. C003 after approving the demo house view's equity Insight and running an analysis), the drawer offers "Portfolio C003" and "Recommendation N" to switch between; with the Recommendation chosen, ask "Which Report passage drove the tilt?": the Answer cites the passage with a Report chip that opens it
+- [ ] Click a Trade Line's spark button: the drawer switches to "Recommendation N, Trade Line k" and "Why this one?" is answered about that line; clicking it again goes back to "Recommendation N"
+- [ ] As auditor, that turn's Exchange prompt shows the Report passages after the JSON, between `<<<REPORT_PASSAGE …>>>` and `<<<END_REPORT_PASSAGE>>>` fences under an "untrusted data" heading, and no Client name or email anywhere
+- [ ] Roles without `insight:read` (e.g. investment_committee) get no Insights or Report passages in a Recommendation prompt; they reach no Recommendation screen until the Approvals context (sme-assistant ticket 07), so `tests/test_assistant.py` covers it until then
 
 ## Approvals
 

@@ -3,6 +3,7 @@ import { useId, useState } from "react";
 import { api } from "./api/client";
 import type { components } from "./api/schema";
 import { ExchangeDrawer } from "./ExchangeDrawer";
+import { usePublishScreen } from "./assistantScreen";
 import { Citations, DeltaBar, Drawer, Empty, Icon, Pill, RULE_TONE, money, pp, type Tone } from "./ui";
 
 type Detail = components["schemas"]["PortfolioDetail"];
@@ -30,11 +31,23 @@ const STATUS_TONE: Record<Rec["status"], Tone> = {
   superseded: "mute",
 };
 
-function Lines({ rec }: { rec: Rec }) {
+/** The Trade Lines. Selecting one (numbered from 1, as the Assistant names them) points the Assistant at that line. */
+function Lines({
+  rec,
+  selected,
+  onSelect,
+}: {
+  rec: Rec;
+  selected: number | null;
+  onSelect: (line: number | null) => void;
+}) {
   return (
     <table className="grid-table">
       <thead>
         <tr>
+          <th>
+            <span className="sr-only">Ask the Assistant</span>
+          </th>
           <th>Side</th>
           <th>Instrument</th>
           <th>Account</th>
@@ -44,25 +57,37 @@ function Lines({ rec }: { rec: Rec }) {
         </tr>
       </thead>
       <tbody>
-        {rec.trade_lines.map((l) => (
-          <tr key={`${l.account_id}-${l.symbol}`}>
+        {rec.trade_lines.map((line, i) => (
+          <tr key={`${line.account_id}-${line.symbol}`}>
             <td>
-              <Pill tone={l.side === "sell" ? "neg" : "pos"}>{l.side}</Pill>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                aria-pressed={selected === i + 1}
+                title="Ask the Assistant about this Trade Line"
+                onClick={() => onSelect(selected === i + 1 ? null : i + 1)}
+              >
+                <Icon name="spark" size={12} />
+                <span className="sr-only">Ask about Trade Line {i + 1}</span>
+              </button>
             </td>
             <td>
-              <span className="mono font-semibold">{l.symbol}</span> <span className="text-ink-3">{l.name}</span>
+              <Pill tone={line.side === "sell" ? "neg" : "pos"}>{line.side}</Pill>
             </td>
-            <td className="mono">{l.account_id}</td>
-            <td className="num">{l.quantity}</td>
-            <td className="num">{money(l.amount)}</td>
+            <td>
+              <span className="mono font-semibold">{line.symbol}</span> <span className="text-ink-3">{line.name}</span>
+            </td>
+            <td className="mono">{line.account_id}</td>
+            <td className="num">{line.quantity}</td>
+            <td className="num">{money(line.amount)}</td>
             <td className="num">
               <span className="inline-flex items-center gap-2">
                 <DeltaBar
-                  value={l.side === "sell" ? -l.pct_of_portfolio : l.pct_of_portfolio}
+                  value={line.side === "sell" ? -line.pct_of_portfolio : line.pct_of_portfolio}
                   max={Math.max(5, ...rec.trade_lines.map((x) => x.pct_of_portfolio))}
                   width="5.5rem"
                 />
-                {l.pct_of_portfolio.toFixed(2)}%
+                {line.pct_of_portfolio.toFixed(2)}%
               </span>
             </td>
           </tr>
@@ -515,6 +540,19 @@ export function RecommendationPanel({ p, canDecide }: { p: Detail; canDecide: bo
   const rec = p.recommendation;
   const accounts = [...new Set(p.holdings.map((h) => h.account_id))].sort();
   const [newBreaches, setNewBreaches] = useState<Rule[]>([]);
+  // Kept per version: a Trade Line number means nothing on another version's lines.
+  const [selected, setSelected] = useState<{ recId: number; line: number } | null>(null);
+  const line = rec && selected?.recId === rec.id ? selected.line : null;
+  usePublishScreen(
+    rec
+      ? {
+          kind: "recommendation",
+          entity_ids: { recommendation_id: String(rec.id), portfolio_id: rec.portfolio_id },
+          selected_item: line ? `trade_line:${line}` : null,
+        }
+      : null,
+    rec ? `Recommendation ${rec.id}${line ? `, Trade Line ${line}` : ""}` : "",
+  );
   return (
     <div className="space-y-3">
       <p className="callout callout-info">
@@ -572,7 +610,7 @@ export function RecommendationPanel({ p, canDecide }: { p: Detail; canDecide: bo
             </p>
           )}
           <div className="panel overflow-hidden">
-            <Lines rec={rec} />
+            <Lines rec={rec} selected={line} onSelect={(n) => setSelected(n ? { recId: rec.id, line: n } : null)} />
           </div>
           <PostTradeRules rec={rec} />
           {rec.research && <ResearchSection research={rec.research} />}
