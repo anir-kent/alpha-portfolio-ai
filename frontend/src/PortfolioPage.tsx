@@ -4,7 +4,23 @@ import { api } from "./api/client";
 import { RecommendationPanel } from "./RecommendationPanel";
 import { usePublishScreen } from "./assistantScreen";
 import type { components } from "./api/schema";
-import { DeltaBar, DRIFT_TONE, Empty, ErrorLine, Icon, PageHeader, Panel, Pill, RULE_TONE, money, pct, pp } from "./ui";
+import { CONFIDENCE, DIRECTION, SUBJECT_KIND, SeedBadge, type Insight } from "./research";
+import {
+  CitationChip,
+  DeltaBar,
+  DRIFT_TONE,
+  Empty,
+  ErrorLine,
+  Icon,
+  PageHeader,
+  Panel,
+  Pill,
+  RULE_TONE,
+  minuteUtc,
+  money,
+  pct,
+  pp,
+} from "./ui";
 
 type Detail = components["schemas"]["PortfolioDetail"];
 type Suitability = NonNullable<Detail["suitability"]>;
@@ -220,6 +236,86 @@ function LookThrough({ rows }: { rows: Detail["sector_exposure"] }) {
   );
 }
 
+/** Approved Insights on a sector or Asset Class this Portfolio holds, newest first. The API lists approved Insights only,
+ * so an Insight awaiting review or rejected by the Research Analyst can never show here. */
+function ApprovedResearch({ p }: { p: Detail }) {
+  const q = useQuery({
+    queryKey: ["insights", "approved"],
+    queryFn: async () => {
+      // A network failure throws rather than returning an error; both read the same to the Advisor.
+      const res = await api.GET("/api/insights").catch(() => null);
+      if (!res?.data) throw new Error("Could not load approved research");
+      return res.data.items;
+    },
+  });
+  const sectors = new Set(p.sector_exposure.filter((s) => s.weight_pct > 0).map((s) => s.sector));
+  const classes = new Set(p.holdings.map((h) => h.asset_class));
+  const held = (insight: Insight) => (insight.subject_kind === "sector" ? sectors : classes).has(insight.subject);
+  const rows = q.data?.filter(held).sort((a, b) => b.id - a.id);
+  return (
+    <Panel
+      title={rows ? `Approved research (${rows.length})` : "Approved research"}
+      label="Approved research"
+      aside="Approved Insights on what this Portfolio holds"
+      flush={!!rows?.length}
+    >
+      {q.isError ? (
+        <ErrorLine>{q.error.message}</ErrorLine>
+      ) : !rows ? (
+        <Empty>Loading approved research…</Empty>
+      ) : rows.length === 0 ? (
+        <Empty>No approved Insight covers a sector or Asset Class this Portfolio holds.</Empty>
+      ) : (
+        <table className="grid-table">
+          <thead>
+            <tr>
+              <th>Subject</th>
+              <th>View</th>
+              <th>Source</th>
+              <th>Approved</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((insight) => (
+              <tr key={insight.id}>
+                <td>
+                  {insight.subject} <span className="text-ink-3">{SUBJECT_KIND[insight.subject_kind]}</span>{" "}
+                  <span className="mono text-ink-3">#{insight.id}</span>
+                </td>
+                <td>
+                  <span className="inline-flex flex-wrap gap-1">
+                    <Pill tone={DIRECTION[insight.direction].tone}>{DIRECTION[insight.direction].text}</Pill>
+                    <Pill tone={CONFIDENCE[insight.confidence].tone}>{CONFIDENCE[insight.confidence].text}</Pill>
+                  </span>
+                </td>
+                <td>
+                  <CitationChip
+                    kind="report"
+                    label={`${insight.report_id} p.${insight.page}`}
+                    quote={insight.passage}
+                  />
+                </td>
+                <td>
+                  {insight.human_verified ? (
+                    <SeedBadge what="Insight" />
+                  ) : (
+                    <span className="text-ink-2">
+                      {insight.decided_by}
+                      {insight.decided_at && (
+                        <span className="mono text-ink-3"> {minuteUtc(insight.decided_at)} UTC</span>
+                      )}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Panel>
+  );
+}
+
 export function PortfolioPage({ canDecide = false }: { canDecide?: boolean }) {
   const { id } = useParams();
   const q = useQuery({
@@ -280,6 +376,7 @@ export function PortfolioPage({ canDecide = false }: { canDecide?: boolean }) {
           <Panel title="Recommendation" label="Recommendation">
             <RecommendationPanel p={p} canDecide={canDecide} />
           </Panel>
+          <ApprovedResearch p={p} />
           <LookThrough rows={p.sector_exposure} />
           <Panel title={`Holdings (${p.holdings.length})`} flush>
             <table className="grid-table">

@@ -10,6 +10,8 @@ export const money = (n: number) =>
 export const signed = (n: number, d = 1) => `${n > 0 ? "+" : ""}${n.toFixed(d)}`;
 export const pp = (n: number) => `${signed(n)} pp`;
 export const pct = (n: number, d = 1) => `${n.toFixed(d)}%`;
+/** "2026-11-07T05:57:46.854027Z" -> "2026-11-07 05:57": a server timestamp at minute precision, still UTC. */
+export const minuteUtc = (iso: string) => iso.slice(0, 16).replace("T", " ");
 
 /* ---------- semantic pills ---------- */
 export type Tone = "pos" | "warn" | "neg" | "info" | "ai" | "mute";
@@ -316,6 +318,7 @@ const PATHS: Record<string, string> = {
   governance: "M3 13V7m5 6V3m5 10V9",
   config: "M3 5h10M3 11h10M6 3v4M10 9v4",
   health: "M2 8h3l2-4 2 8 2-4h3",
+  research: "M4 1.5h5.5L12.5 4.5v10h-8.5zM9.5 1.5v3h3M6.5 8h4M6.5 10.5h4",
   chevron: "M6 3l5 5-5 5",
   close: "M3 3l10 10M13 3L3 13",
   lock: "M4.5 7V5a3.5 3.5 0 017 0v2M3.5 7h9v6.5h-9z",
@@ -412,4 +415,33 @@ export function Drawer({ title, onClose, children }: { title: string; onClose: (
     </>,
     document.body,
   );
+}
+
+/** Enabled controls a user can Tab to; anything taken out of the tab order (tabindex -1, e.g. a hidden file input) is not. */
+const FOCUSABLE = [
+  "button:not([disabled])",
+  "[href]",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]",
+]
+  .map((s) => `${s}:not([tabindex='-1'])`)
+  .join(", ");
+
+/** A dialog's Tab handler: Tab and Shift+Tab cycle through the dialog's enabled controls and never leave it. With none
+ * enabled (e.g. while it saves), focus stays on the dialog itself. */
+export function trapTab(e: { key: string; shiftKey: boolean; preventDefault: () => void }, dialog: HTMLElement | null) {
+  if (e.key !== "Tab" || !dialog) return;
+  const focusable = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)];
+  if (focusable.length === 0) return e.preventDefault();
+  const first = focusable[0],
+    last = focusable[focusable.length - 1];
+  if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
 }

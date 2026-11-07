@@ -2,6 +2,18 @@
 
 Advisor-assist platform; it never executes trades. Vocabulary: `GLOSSARY.md`. Decisions: `docs/adr/`.
 
+## Working UI roles
+
+`cd frontend && npm run dev` serves the UI at <http://localhost:5173>; the username is the role name. Navigation follows each role's permissions, and the server enforces every action. The Config and Health nav items, shown to roles that can read them, still lead to a placeholder.
+
+- **Advisor** and **Relationship Manager**: Queue, Portfolio drill-down (with the approved research on what it holds) and Recommendations. The Relationship Manager sees client fields masked.
+- **Compliance Officer**: Approvals and LLM Exchanges. **Investment Committee**: Approvals.
+- **Research Analyst**: the Research screen. It opens on To review (every Insight awaiting review, grouped by Report), with Upload Report and the Reports library; each Insight is approved or rejected beside its cited page, by mouse or keyboard. Only approved Insights reach the Advisor.
+- **Auditor**: Audit, Lineage, Governance and LLM Exchanges.
+- **Platform Owner**: Governance and LLM Exchanges; config and health are API only (`/docs`). **Portfolio Manager**: API only (its only nav item is the Config placeholder).
+
+Walkthrough: `docs/manual-e2e-guide.md`, with the tick list in `docs/manual-e2e-checklist.md`.
+
 ## Data stance
 
 **Market data is real; Clients are synthetic** (ADR-0003). No real client data is used anywhere.
