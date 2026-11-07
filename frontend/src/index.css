@@ -18,7 +18,7 @@
 
   --color-ink: #0e1626;
   --color-ink-2: #3f4d66;
-  --color-ink-3: #5f6e85;
+  --color-ink-3: #56647b; /* 4.6:1 or better on canvas and sunken fills (WCAG AA) */
 
   --color-brand: #2a5bdc;
   --color-brand-dim: #1f48b8;

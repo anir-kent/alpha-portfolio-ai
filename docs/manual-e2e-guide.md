@@ -57,7 +57,7 @@ cd frontend && npm run dev                                  # Terminal 2 -> http
    - a single Portfolio Drift number with its definition;
    - risk profile, horizon, liquidity needs and restrictions;
    - look-through sector exposure that includes tech held via ETFs;
-   - relevant approved insights with report-page citations;
+   - an **Approved research** panel: the approved Insights on what the Portfolio holds, with report-page citations;
    - the **proposed vs allowed Research Tilt**, bounded to +-2 pp by default.
 2. Log in as `relationship_manager` and open the same client. Sensitive client fields should be masked, while the `advisor` role sees them.
 
@@ -124,11 +124,41 @@ Log in as `auditor`.
 1. As `advisor`, run analysis again. Open recommendations on the same portfolio should become **Superseded**.
 2. Confirm that C005 still produces no action.
 
-## Act 11: API-only roles (stories 47-55)
+## Act 11: Research Analyst reviews a house view, and the Advisor sees the result (`.scratch/research-analyst-ui/spec.md`)
+
+The Analyst's whole job runs in the UI: land on To review, upload a house view, review its Insights, and watch the outcome reach the Advisor. The tick list, in run order, is the Research Analyst section of the checklist.
+
+**Setup.** Start from a fresh seed (Section 0), and start the API with the committed extraction recordings, so the demo house view replays its extraction instead of calling an LLM:
+
+```bash
+APP_LLM_MODE=recorded APP_LLM_RECORDINGS_DIR=tests/fixtures/llm \
+  uv run uvicorn app.main:create_app --factory --port 8000
+```
+
+`tests/fixtures/house_view_demo.txt` then always lands with 3 Insights awaiting review: Information Technology (sector, positive, page 1), Utilities (sector, negative, page 1) and equity (Asset Class, positive, page 2). Any other new text has no recording, so its extraction fails, which is how the failure path is checked. The run uploads the demo house view four times; each copy is a separate Report with its own ID.
+
+1. **Land.** Log in as `research_analyst`. You land on **Research → To review** (`/research`). On a fresh database it shows "All caught up" with Upload Report and Browse Reports, and the badge reads 0. The **Reports** tab lists the 5 seeded Reports, each marked "Human-verified seed". Open one to see the review layout read-only: the Insight list on the left, and on the right the selected Insight with its cited page, the passage highlighted.
+2. **Access.** As `advisor` or `auditor` there is no Research item in the nav, and `/research` shows the placeholder.
+3. **Upload failures first.** In **Upload Report**, try a `.png` (refused in the dialog, nothing sent), a 21 MB file (refused, nothing sent), an empty `.txt` (the server's 422 shows inline), then any new `.txt` (it uploads, its extraction fails, and its detail offers **Upload again**).
+4. **Copy 1 on Report detail.** Upload the demo house view titled "Demo house view, copy 1". The dialog shows "Extracting Insights from your Report…" and lands on the new Report with 3 Insights awaiting review. Note its ID. With the mouse:
+   - **Approve** Information Technology. The selection moves to Utilities.
+   - **Reject…** Utilities. The dialog will not submit without a note, so write why (e.g. "Valuation call only; not a view we act on").
+   - Expand "Approval note (optional)" on equity, write a note and **Approve**. The detail says "This Report is fully reviewed", and each Insight shows its read-only record: outcome, reviewer `research_analyst`, time and note.
+5. **Copies 2 and 3 on To review.** Upload two more copies. To review groups them by Report, newest first, and the badge reads 6. Review a few with the mouse, then run the 409 race: open one Insight in two sessions (normal and incognito window), approve in one, then act in the other, which shows "Already reviewed by someone else…" and moves on. Finish the rest from the keyboard: `j`/`↓` and `k`/`↑` move, `a` approves, `r` opens Reject (Escape closes it). The last review shows "All caught up".
+6. **Copy 4 stays awaiting review.** Upload a fourth copy and leave it alone. Note its ID.
+7. **Downstream: the Advisor's Portfolio.** Log in as `advisor` and open C001 from the Queue. The **Approved research** panel lists the approved Insights on sectors and Asset Classes that C001 holds, newest first, each with its report-page citation (click it to read the quote) and its reviewer.
+   - Match rows by Report ID, not position: copies 2 and 3 are newer, so whatever was approved there sits above copy 1.
+   - Copy 1's Information Technology and equity Insights are listed, cited to copy 1's ID, with reviewer `research_analyst`.
+   - No row cites copy 1's ID for Utilities: the rejected Insight is absent, although C001 holds Utilities (see the look-through table).
+   - Nothing from copy 4 appears, although C001 holds both sectors and equity. The panel reads from the approved-only Insight listing, so an Insight that is rejected or still awaiting review cannot reach any Advisor screen.
+8. **Close the loop.** As `research_analyst`, approve copy 4's Information Technology. As `advisor`, reload C001. It now tops the panel; copy 4's other two are still absent.
+
+In live LLM mode, rerunning analysis after step 4 also lets the Research Tilt and the rationale draw on the new approved Insights, with citations to the new Report. That depends on the model, so the deterministic check is the panel.
+
+## Act 12: API-only roles (stories 47-55)
 
 These have no UI, so use `curl`, or `/docs` at http://localhost:8000/docs.
 
-- `research_analyst`: uploading and Insight Reviews now have a UI: Research opens on **To review**, every Insight awaiting review across Reports, grouped by Report ("All caught up" on a fresh database); **Upload Report** is in the header; **Approve** (optional note) or **Reject…** (required note) sit at the top of each Insight awaiting review, on To review and on a Report's detail alike, and the whole review works from the keyboard: `j`/`↓` and `k`/`↑` move between Insights, `a` approves, `r` opens Reject, Escape closes it (see the Research Analyst section of the checklist). The 409 race needs two browser sessions on the same Insight. Start the API with `APP_LLM_RECORDINGS_DIR=tests/fixtures/llm` so the demo house view (`tests/fixtures/house_view_demo.txt`) replays its committed extraction and lands with 3 Insights **pending**; any other new text has no recording and shows the failed extraction with **Upload again**. Pending Insights do not affect any tilt until approved.
 - `platform_owner`: `GET /api/health` and `PATCH /api/config`. Lower the tilt bound or the high-impact threshold, rerun analysis, and see the effect.
 - `portfolio_manager`: read-only access to portfolios and config.
 

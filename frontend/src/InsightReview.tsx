@@ -55,6 +55,8 @@ function useRecordReview({
       onReviewed(insight);
       qc.setQueryData<ReportList>(["reports"], (list) => (list ? withInsight(list, insight) : list));
       void qc.invalidateQueries({ queryKey: ["reports"] });
+      // An Insight Review changes which Insights are approved, which the Portfolio page lists.
+      void qc.invalidateQueries({ queryKey: ["insights", "approved"] });
     },
     onError: (e) => {
       if (e instanceof AlreadyReviewed) void qc.invalidateQueries({ queryKey: ["reports"] });
