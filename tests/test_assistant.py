@@ -297,7 +297,7 @@ def test_the_transcript_is_text_only(login, model):
     model.reply["follow_up_questions"] = ["Follow-up?"]
     ask(advisor, "Why?", portfolio_screen("C001"))
     ask(advisor, "And then?", portfolio_screen("C001"))
-    transcript = model.requests[-1].user_prompt.split("CONVERSATION SO FAR")[1].split("QUESTION\n")[0]
+    transcript = model.requests[-1].prompts[0].split("CONVERSATION SO FAR")[1].split("QUESTION\n")[0]
     assert "Question: Why?\nAnswer: Equity drives it." in transcript
     assert "Claim text" not in transcript and "Follow-up?" not in transcript
 

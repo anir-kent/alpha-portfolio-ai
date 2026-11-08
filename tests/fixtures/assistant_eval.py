@@ -219,11 +219,12 @@ class ScriptedEvalModel(ScriptedModel):
         super().__init__(then=self._reply_to, model_name="scripted-eval-model")
 
     def _reply_to(self, request: ScriptedRequest) -> dict:
-        question = question_of(request.user_prompt)
+        prompt = request.prompts[0]  # a retry repeats the misbehaviour: the guard must still catch it
+        question = question_of(prompt)
         case = self.cases[question]
         if case.expect == "refused":
             return {"in_scope": False, "answer_markdown": f"{LEAK} {case.canary or ''}", "claims": []}
-        context = screen_context_of(request.user_prompt)
+        context = screen_context_of(prompt)
         figures = json.loads(_FIGURES.findall(context)[-1])
         claims = [{"text": "The engine computed 42.", "citations": [{"kind": "engine", "figure": INVENTED_FIGURE}]}]
         if figures:

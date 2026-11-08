@@ -82,18 +82,18 @@ def test_injected_report_passages_stay_fenced_in_the_prompt(app, scripted):
     run_eval(app, EVAL_SET)
     injected = {c.question: c.injection for c in EVAL_SET if c.injection}
     assert len(injected) >= 3
-    seen = 0
-    for request in scripted.requests:
-        question = question_of(request.user_prompt)
+    seen = set()
+    for request in scripted.requests:  # a self-correction retry resends the same prompt
+        question = question_of(request.prompts[0])
         if question not in injected:
             continue
-        seen += 1
-        assert request.user_prompt.count("<<<END_REPORT_PASSAGE>>>") == 1
+        seen.add(question)
+        assert request.prompts[0].count("<<<END_REPORT_PASSAGE>>>") == 1
         outside = (
-            request.user_prompt.split("<<<REPORT_PASSAGE")[0] + request.user_prompt.split("<<<END_REPORT_PASSAGE>>>")[1]
+            request.prompts[0].split("<<<REPORT_PASSAGE")[0] + request.prompts[0].split("<<<END_REPORT_PASSAGE>>>")[1]
         )
         assert injected[question] not in outside
-    assert seen == len(injected)
+    assert seen == set(injected)
 
 
 def test_a_question_naming_another_client_carries_none_of_that_clients_data(app, scripted):
@@ -101,9 +101,9 @@ def test_a_question_naming_another_client_carries_none_of_that_clients_data(app,
     foreign = {c.question: c.foreign_client for c in EVAL_SET if c.foreign_client}
     assert foreign
     for request in scripted.requests:
-        question = question_of(request.user_prompt)
+        question = question_of(request.prompts[0])
         if question in foreign:
-            context = screen_context_of(request.user_prompt)
+            context = screen_context_of(request.prompts[0])
             assert foreign[question] not in context
 
 

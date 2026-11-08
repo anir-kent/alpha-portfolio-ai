@@ -6340,7 +6340,8 @@
             "type": "string",
             "enum": [
               "model_request",
-              "tool_call"
+              "tool_call",
+              "self_correction"
             ],
             "title": "Kind"
           },
@@ -6379,6 +6380,17 @@
               }
             ],
             "title": "Result Summary"
+          },
+          "issue_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Count"
           }
         },
         "type": "object",

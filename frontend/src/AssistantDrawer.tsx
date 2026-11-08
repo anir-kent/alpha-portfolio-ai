@@ -265,6 +265,10 @@ function TurnView({
               <li key={index}>
                 {step.kind === "model_request" ? (
                   "Model request"
+                ) : step.kind === "self_correction" ? (
+                  <span className="font-medium text-ink">
+                    Self-correction · {step.issue_count} grounding issue{step.issue_count === 1 ? "" : "s"} sent back
+                  </span>
                 ) : (
                   <>
                     <span className="font-medium text-ink">{step.name}</span>

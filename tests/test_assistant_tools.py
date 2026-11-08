@@ -212,7 +212,7 @@ def run_tools(app, role, calls):
         user = db.scalars(select(User).where(User.username == role)).one()
         deps = AssistantDeps(user, db, app.state.market, app.state.settings, {}, [])
         with ThreadPoolExecutor(1) as worker:  # as the app runs it: in a worker thread, outside any event loop
-            worker.submit(run_agent, script, request, deps).result()
+            worker.submit(run_agent, script, request, deps, lambda deps, reply: []).result()
     return script.requests[1].tool_returns
 
 

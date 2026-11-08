@@ -6,12 +6,13 @@ from dataclasses import dataclass, field
 from typing import Literal, cast
 
 from pydantic import BaseModel
-from pydantic_ai import Agent, NativeOutput, RunContext, StructuredDict, UsageLimits
+from pydantic_ai import Agent, ModelRetry, NativeOutput, RunContext, StructuredDict, UsageLimits
 from pydantic_ai.models import Model
 from sqlalchemy.orm import Session
 
 from app import screen_context
 from app.db import LlmExchangeRow, User
+from app.grounding import ClaimResult
 from app.llm import LlmRequest, wire_schema
 from app.market_data import MarketData
 from app.routers.analysis import QueueFilters
@@ -23,10 +24,11 @@ NOT_PERMITTED = "not found or not permitted for your role"
 
 
 class TrajectoryStep(BaseModel):
-    kind: Literal["model_request", "tool_call"]
+    kind: Literal["model_request", "tool_call", "self_correction"]
     name: str | None = None
     arguments: dict[str, str] | None = None
     result_summary: str | None = None
+    issue_count: int | None = None  # a self-correction: the grounding issues the rejected draft was told about
 
 
 class Trajectory(BaseModel):
@@ -45,14 +47,18 @@ class AssistantDeps:
     settings: Settings
     figures: dict[str, float]
     exchanges: list[LlmExchangeRow]
-    tool_steps: list[tuple[int, TrajectoryStep]] = field(default_factory=list)
+    steps: list[tuple[int, TrajectoryStep]] = field(default_factory=list)  # each after the model request it followed
+
+    def add_step(self, step: TrajectoryStep) -> None:
+        """`step` follows the latest model request in the summary."""
+        self.steps.append((len(self.exchanges), step))
 
     def summary(self) -> Trajectory:
         steps = []
         input_tokens = output_tokens = 0
         for n, row in enumerate(self.exchanges, start=1):
             steps.append(TrajectoryStep(kind="model_request"))
-            steps.extend(step for after, step in self.tool_steps if after == n)
+            steps.extend(step for after, step in self.steps if after == n)
             usage = json.loads(row.usage_json or "{}")
             input_tokens += usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0
             output_tokens += usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0
@@ -67,8 +73,7 @@ class AssistantDeps:
 
 def _record(deps: AssistantDeps, name: str, arguments: dict[str, str], summary: str) -> None:
     """A tool call's step, placed after the model request that made it."""
-    step = TrajectoryStep(kind="tool_call", name=name, arguments=arguments, result_summary=summary)
-    deps.tool_steps.append((len(deps.exchanges), step))
+    deps.add_step(TrajectoryStep(kind="tool_call", name=name, arguments=arguments, result_summary=summary))
 
 
 def _arguments(filters: BaseModel | None) -> dict[str, str]:
@@ -105,7 +110,7 @@ def _result(
 
 def _next_lookup_prefix(deps: AssistantDeps) -> str:
     """Filtered views differ in their totals, so each such lookup names its figures by its place in the turn."""
-    return f"lookup.{len(deps.tool_steps) + 1}."
+    return f"lookup.{sum(step.kind == 'tool_call' for _, step in deps.steps) + 1}."
 
 
 def _counted(screen: str, total: int, shown: int, noun: str) -> str:
@@ -210,8 +215,27 @@ ASSISTANT_TOOLS = (
 )
 
 
-def build_agent(model: Model, request: LlmRequest) -> Agent[AssistantDeps, dict]:
-    """All registered tools run on the caller's event loop, retaining its database session and capture binding."""
+class PiiExposed(Exception):
+    """A candidate reply named a Client. The run ends here: the draft is never coached, retried, stored or shown."""
+
+
+# Checks one candidate reply against the guardrails: raises PiiExposed, else returns its ungrounded Claims.
+Review = Callable[[AssistantDeps, dict], list[ClaimResult]]
+
+
+def _retry_message(failing: list[ClaimResult]) -> str:
+    """What the model is told about a rejected draft: each failing Claim and its issues."""
+    lines = [f'- Claim {r.index} "{r.text}": ' + "; ".join(f"{i.code}: {i.message}" for i in r.issues) for r in failing]
+    return (
+        "These Claims are not grounded. Fix or remove each one: cite only figures named in the Screen Context or a "
+        "lookup, with the number as the figure shows it, and quote Reports verbatim.\n" + "\n".join(lines)
+    )
+
+
+def build_agent(model: Model, request: LlmRequest, review: Review) -> Agent[AssistantDeps, dict]:
+    """All registered tools run on the caller's event loop, retaining its database session and capture binding. A run's
+    output has passed `review`, or is the second draft and keeps its ungrounded Claims for the caller to flag; a draft
+    exposing PII ends the run with PiiExposed."""
     agent = Agent(
         model,
         deps_type=AssistantDeps,
@@ -221,16 +245,27 @@ def build_agent(model: Model, request: LlmRequest) -> Agent[AssistantDeps, dict]
             template=False,
             strict=False,
         ),
-        retries=0,
+        retries={"tools": 0, "output": 1},
     )
     for tool in ASSISTANT_TOOLS:
         agent.tool(retries=0, sequential=True)(tool)
+
+    @agent.output_validator
+    async def self_correct(ctx: RunContext[AssistantDeps], reply: dict) -> dict:
+        """`reply` is accepted, or the model is sent its failing Claims once and the step is in the summary."""
+        failing = review(ctx.deps, reply)
+        if failing and not ctx.last_attempt:
+            issues = sum(len(r.issues) for r in failing)
+            ctx.deps.add_step(TrajectoryStep(kind="self_correction", issue_count=issues))
+            raise ModelRetry(_retry_message(failing))
+        return reply
+
     return agent
 
 
-def run_agent(model: Model, request: LlmRequest, deps: AssistantDeps) -> dict:
+def run_agent(model: Model, request: LlmRequest, deps: AssistantDeps, review: Review) -> dict:
     return (
-        build_agent(model, request)
+        build_agent(model, request, review)
         .run_sync(
             request.user,
             deps=deps,

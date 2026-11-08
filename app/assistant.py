@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import audit, grounding, prompts, screen_context
-from app.assistant_agent import AssistantDeps, Trajectory, run_agent
+from app.assistant_agent import AssistantDeps, PiiExposed, Trajectory, run_agent
 from app.db import AssistantTurnRow, ClientRow, ConversationRow, SessionRow, User
 from app.exchanges import ModelLlm
 from app.grounding import CheckSubject, Claim, ClaimResult
@@ -217,6 +217,22 @@ def _contains_pii(db: Session, reply: AssistantReply) -> bool:
     )
 
 
+def _review(deps: AssistantDeps, content: dict) -> list[ClaimResult]:
+    """The guardrails on one candidate reply: raises PiiExposed when it names a Client, else returns the Claims
+    grounding rejects (a PII hit is never coached). Nothing is stored; `ask` checks and stores only the final Answer. A reply that does not
+    read as an AssistantReply, or is out of scope, passes through for `ask` to handle."""
+    try:
+        reply = AssistantReply.model_validate(content)
+    except ValidationError:
+        return []
+    if not reply.in_scope:
+        return []  # the model's text is discarded, so there is nothing to check
+    if _contains_pii(deps.db, reply):
+        raise PiiExposed
+    results = (grounding.validate_claim(deps.db, claim, i, deps.figures) for i, claim in enumerate(reply.claims))
+    return [r for r in results if not r.grounded]
+
+
 def _prompt(context: screen_context.ScreenContext, history: list[tuple[str, str]], question: str) -> LlmRequest:
     """The four labelled blocks. History is text only: earlier Screen Contexts are never resent."""
     blocks = [
@@ -264,9 +280,11 @@ def ask(
         try:
             captured = llm.trajectory().capturing_model(request, deps.exchanges)
             with tagged(request):
-                content = run_agent(captured, request, deps)
+                content = run_agent(captured, request, deps, _review)
             model = deps.exchanges[-1].model if deps.exchanges else None
             reply = AssistantReply.model_validate(content)
+        except PiiExposed:  # a rejected Answer is never checked, stored or shown
+            outcome, reason = "failed", "pii"
         except LlmError as e:  # includes a call capture could not record: it fails closed, no Answer reaches the user
             outcome, reason = "failed", "replay_miss" if _replay_miss(e) else "llm_error"
         except ValidationError:
@@ -274,12 +292,7 @@ def ask(
         except Exception:
             outcome, reason = "failed", "llm_error"
         else:
-            if not reply.in_scope:
-                outcome = "refused"  # the model's text is discarded, so there is nothing to check
-            elif _contains_pii(db, reply):  # before grounding: a rejected Answer is never checked, stored or shown
-                outcome, reason = "failed", "pii"
-            else:
-                outcome = "answered"
+            outcome = "answered" if reply.in_scope else "refused"
 
     conv = _conversation(db, user, session)
     seq = (

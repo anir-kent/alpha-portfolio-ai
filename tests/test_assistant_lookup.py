@@ -28,13 +28,17 @@ def test_cross_screen_lookup_grounds_figures_and_preserves_the_trajectory(app, l
             "citations": [{"kind": "engine", "figure": "portfolio.C001.total_value"}],
         },
     ]
-    script = serve(app, ScriptedModel(call("look_up_portfolio", portfolio_id="C001"), reply, answer("Next answer")))
+    # The invented figure is ungrounded again after the self-correction retry, so it is kept, flagged.
+    script = serve(
+        app, ScriptedModel(call("look_up_portfolio", portfolio_id="C001"), reply, reply, answer("Next answer"))
+    )
     turn = ask(advisor, "Look up Portfolio C001", QUEUE).json()
     assert turn["outcome"] == "answered", turn
     assert [c["grounded"] for c in turn["answer"]["claims"]] == [True, False]
     trajectory = turn["trajectory"]
-    assert trajectory["requests_used"] == 2 and trajectory["request_limit"] >= 2
-    assert [s["kind"] for s in trajectory["steps"]] == ["model_request", "tool_call", "model_request"]
+    assert trajectory["requests_used"] == 3 and trajectory["request_limit"] >= 3
+    kinds = ["model_request", "tool_call", "model_request", "self_correction", "model_request"]
+    assert [s["kind"] for s in trajectory["steps"]] == kinds
     tool = trajectory["steps"][1]
     assert tool["name"] == "look_up_portfolio" and tool["arguments"] == {"portfolio_id": "C001"}
     assert "C001" in tool["result_summary"] and "holdings" in tool["result_summary"]
@@ -44,7 +48,7 @@ def test_cross_screen_lookup_grounds_figures_and_preserves_the_trajectory(app, l
     assert isinstance(result, str) and '"portfolio_id":"C001"' in result
     assert advisor.get("/api/assistant/conversation").json()["turns"][0]["trajectory"] == trajectory
     event = events(app, "assistant.answered")[-1]
-    assert len(event["exchanges"]) == 2
+    assert len(event["exchanges"]) == 3
     assert event["exchanges"][-1]["exchange_id"] == turn["exchange_id"]
     auditor = login("auditor")
     exchange = auditor.get(f"/api/llm/exchanges/{turn['exchange_id']}").json()
@@ -101,7 +105,7 @@ def test_all_registered_assistant_tools_are_coroutines():
 
     prompt = prompts.ASSISTANT_ANSWER
     request = LlmRequest(prompt.name, prompt.label, prompt.system, "Question", prompts.ASSISTANT_REPLY_SCHEMA)
-    agent = build_agent(ScriptedModel(), request)
+    agent = build_agent(ScriptedModel(), request, lambda deps, reply: [])
     tools = [
         tool for toolset in agent.toolsets if isinstance(toolset, FunctionToolset) for tool in toolset.tools.values()
     ]
@@ -174,7 +178,7 @@ def test_lookup_keeps_screen_figures_and_other_portfolios_distinct(app, login, m
         },
         {"text": f"Screen total value is {second}.", "citations": [{"kind": "engine", "figure": "total_value"}]},
     ]
-    serve(app, ScriptedModel(call("look_up_portfolio", portfolio_id="C002"), reply))
+    serve(app, ScriptedModel(call("look_up_portfolio", portfolio_id="C002"), reply, reply))
     turn = ask(advisor, "Compare these Portfolios", portfolio_screen("C001")).json()
     assert [c["grounded"] for c in turn["answer"]["claims"]] == [True, True, False]
 

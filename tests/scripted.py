@@ -83,8 +83,9 @@ class ScriptedRequest:
         return self.info.function_tools
 
     @property
-    def user_prompt(self) -> str:
-        """The text of the latest user prompt sent."""
+    def prompts(self) -> list[str]:
+        """The text of every user prompt sent, oldest first: the first is the step's own, and any after it is retry
+        feedback on a rejected reply."""
         prompts = [
             part.content
             for message in self.messages
@@ -93,7 +94,12 @@ class ScriptedRequest:
             if isinstance(part, UserPromptPart) and isinstance(part.content, str)
         ]
         assert prompts, "the request carries no text user prompt"
-        return prompts[-1]
+        return prompts
+
+    @property
+    def user_prompt(self) -> str:
+        """The text of the latest user prompt sent."""
+        return self.prompts[-1]
 
     @property
     def tool_returns(self) -> dict[str, object]:
