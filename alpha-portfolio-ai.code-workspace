@@ -29,5 +29,8 @@
 			"path": "./specs"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"git.openRepositoryInParentFolders": "always",
+		"git.autoRepositoryDetection": true
+	}
 }
