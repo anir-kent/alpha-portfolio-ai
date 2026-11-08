@@ -30,7 +30,7 @@ One row per exported PDF. The commit SHA is the one stamped on that export's cov
 | Version | Date | Commit | Status | Change |
 | --- | --- | --- | --- | --- |
 | 0.0 | 2026-11-07 | (unreleased) | Draft | Skeleton and document check |
-| 0.1 | 2026-11-08 | (this export) | Draft / Under ARB Review | First ARB baseline; reviewer fixes and model-of-record eval verified. |
+| 0.1 | 2026-11-08 | 120cfff717621d4a527f8571348b5ef5899118d4 | Draft / Under ARB Review | First ARB baseline; reviewer fixes and model-of-record eval verified. |
 
 ## Contents
 
