@@ -4,8 +4,8 @@
 
 **Blocked by:** 04, 05, 06, 07, 08, 09, 10
 
-**Status:** ready-for-agent
+**Status:** complete
 
-- [ ] Executive Summary ≤ 2 pages in the PDF layout
-- [ ] Excalidraw source and exported image committed; image renders in Markdown and PDF
-- [ ] Summary claims trace to body sections; `check` green
+- [x] Executive Summary ≤ 2 pages in the PDF layout
+- [x] Excalidraw source and exported image committed; image renders in Markdown and PDF
+- [x] Summary claims trace to body sections; `check` green
