@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"answer_markdown\": \"Two of the seven Suitability Rules flag Portfolio C004, and the overall suitability status is **breach**.\\n\\n- **SR-05 Client Restrictions: breach.** The Client has an instrument Restriction on XOM, and the Portfolio holds XOM (Exxon Mobil Corp, in account C004-TX). The engine message reads \\\"XOM 6.0%: restricted Instrument held\\\".\\n- **SR-04 Minimum cash reserve: warning.** Cash is 5.0% of the Portfolio. The engine message compares that with a 2% floor and the Client's 8.9% liquidity needs. Cash is above the floor but below the liquidity needs figure, which is the likely reason for the warning. The message does not state the trigger explicitly.\\n\\nThe other five rules pass: Maximum equity share (SR-01), Single-position limit (SR-02), Sector concentration (SR-03), Horizon check (SR-06) and Taxable-gain warning (SR-07). Drift is not the cause. Every Asset Class is within the tolerance band.\\n\\nThe Assistant is read-only. Any follow-up on the XOM breach belongs in the Recommendation and Decision workflow.\", \"claims\": [{\"asset\": null, \"citations\": [{\"figure\": \"holding.XOM.weight_pct\", \"kind\": \"engine\"}], \"text\": \"SR-05 Client Restrictions is a breach because the Portfolio holds XOM, an Instrument the Client is restricted from holding.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.cash.actual_pct\", \"kind\": \"engine\"}, {\"figure\": \"client.liquidity_needs_pct\", \"kind\": \"engine\"}], \"text\": \"SR-04 Minimum cash reserve is a warning: cash is 5.0% of the Portfolio against liquidity needs of 8.9%.\"}], \"follow_up_questions\": [\"How large is the XOM position in this Portfolio?\", \"How does cash compare with its Target Allocation?\", \"Is any Asset Class drifting toward the tolerance band?\"], \"in_scope\": true}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer",
+  "usage": {}
+}

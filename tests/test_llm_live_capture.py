@@ -12,31 +12,16 @@ from sqlalchemy import select, text
 from app.db import AuditEventRow
 from app.exchanges import ModelLlm, endpoint_host
 from app.pydantic_llm import build_live_model
+from tests.chat_completions import completion
 from tests.conftest import SEED_PASSWORD
 from tests.test_ai_recommendations import ai  # noqa: F401  (fixture)
 from tests.test_assistant import unwritable_store
 from tests.test_llm_exchanges import extraction_event, upload
 from tests.test_queue import seeded  # noqa: F401  (fixture)
 
+pytestmark = pytest.mark.usefixtures("allow_model_requests")  # a live Model, over a mock transport
+
 API_KEY = "sk-live-secret-do-not-store"
-REPLY_TEXT = '{"insights": []}'
-
-
-def completion(content=REPLY_TEXT, **extra) -> httpx.Response:
-    """A chat-completions reply as OpenRouter sends it (pydantic-ai's OpenRouter model requires `provider`)."""
-    return httpx.Response(
-        200,
-        json={
-            "id": "gen-1",
-            "object": "chat.completion",
-            "created": 1,
-            "model": "anthropic/claude-sonnet-5.5",
-            "provider": "Anthropic",
-            "usage": {"prompt_tokens": 321, "completion_tokens": 45, "total_tokens": 366},
-            "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": content}}],
-            **extra,
-        },
-    )
 
 
 @pytest.fixture

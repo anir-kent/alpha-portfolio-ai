@@ -365,11 +365,13 @@ def test_openai_compatible_llm_surfaces_provider_errors():
 
 
 @pytest.mark.skipif(not os.environ.get("LLM_LIVE"), reason="live smoke test: set LLM_LIVE=1 and APP_LLM_API_KEY")
-def test_live_smoke_extraction():
-    from app.llm import build_llm
+def test_live_smoke_extraction(tmp_path, allow_model_requests):
+    from app.db import make_session_factory
+    from app.exchanges import build_llm
     from app.reports import extract_pages, extraction_request
     from app.settings import Settings
 
     s = Settings(llm_mode="live")
     _, pages = extract_pages("v.txt", (FIXTURES / "house_view_demo.txt").read_bytes())
-    assert build_llm(s).complete(extraction_request(pages)).content["insights"]
+    store = make_session_factory(f"sqlite:///{tmp_path / 'smoke.db'}")
+    assert build_llm(s, store).complete(extraction_request(pages)).content["insights"]

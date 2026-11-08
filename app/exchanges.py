@@ -1,9 +1,11 @@
 """LLM Exchange capture (ADR-0004 as amended by ADR-0010).
 
 Two step-facing clients share one store, so every call site is captured without change:
-- `CapturingLlm` wraps the hand-written `LlmClient` (still the default until the pydantic-ai layer replaces it).
-- `ModelLlm` runs the call on pydantic-ai over an injected Model, wrapped in `CapturingModel`, which stores one Exchange
-  per model request. For a live Model those are the bytes its recording transport saw on the wire.
+- `ModelLlm`, what `build_llm` serves: the call runs on pydantic-ai over the live or replay Model, wrapped in
+  `CapturingModel`, which stores one Exchange per model request. For a live Model those are the bytes its recording
+  transport saw on the wire; a replay is captured at the model boundary and labelled `recorded`.
+- `CapturingLlm` wraps a hand-written `LlmClient` (test doubles that stub `complete`, until they move to scripted
+  Models).
 Each stores an immutable Exchange as soon as the reply or error is in and before the caller writes its Audit Event, and
 hands the Exchange id and hash back on the response or error so the event can reference them. If the Exchange cannot be
 stored the call fails closed with the existing `LlmError`: no model output exists without a record.
@@ -24,6 +26,7 @@ from datetime import UTC, datetime
 from typing import Self
 from urllib.parse import urlparse
 
+import httpx
 from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models import Model, ModelRequestParameters
@@ -34,7 +37,15 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.audit import format_ts
 from app.db import LlmExchangeRow
 from app.llm import LlmClient, LlmError, LlmRequest, LlmResponse, parse_json_reply
-from app.pydantic_llm import WireExchange, run_single_call, wire_capture
+from app.pydantic_llm import (
+    RecordingModel,
+    ReplayModel,
+    WireExchange,
+    build_live_model,
+    run_single_call,
+    tagged,
+    wire_capture,
+)
 
 
 def _canonical(value) -> str:
@@ -192,9 +203,18 @@ class CapturingLlm(_Capture):
 
 
 def _failure_message(error: Exception, sent: WireExchange | None) -> str:
+    """What failed, in the provider's terms where the wire shows them: the HTTP status and reply text for any non-2xx
+    reply (a redirect included), or the transport error behind pydantic-ai's own (a timeout, a reset connection)."""
+    if isinstance(error, LlmError):  # already says what failed (a replay miss)
+        return str(error)
+    if sent is not None and sent.status_code is not None and not 200 <= sent.status_code < 300:
+        return f"LLM call failed: HTTP {sent.status_code}: {(sent.reply_text() or '')[:500]}"
     if isinstance(error, ModelHTTPError):
-        body = (sent.reply_text() if sent else None) or str(error.body or "")
-        return f"LLM call failed: HTTP {error.status_code}: {body[:500]}"
+        return f"LLM call failed: HTTP {error.status_code}: {str(error.body or '')[:500]}"
+    cause: BaseException | None = error
+    while cause is not None and not isinstance(cause, httpx.HTTPError):
+        cause = cause.__cause__ or cause.__context__
+    error = cause if isinstance(cause, httpx.HTTPError) else error
     return f"LLM call failed: {type(error).__name__}: {error}"
 
 
@@ -220,15 +240,17 @@ class CapturingModel(WrapperModel):
         model_request_parameters: ModelRequestParameters,
     ) -> ModelResponse:
         started = time.perf_counter()
-        with wire_capture() as wire:
+        with tagged(self._llm_request), wire_capture() as wire:
             try:
                 response = await super().request(messages, model_settings, model_request_parameters)
             except Exception as e:
                 message = wire.redact(_failure_message(e, wire.last())) or ""
                 raise self._failed(wire.detail(started), message) from e
         detail = wire.detail(started)
+        if response.text is None:
+            raise self._failed(detail, "LLM call failed: the reply's message content was not text")
         try:
-            content = parse_json_reply(response.text or "")
+            content = parse_json_reply(response.text)
         except LlmError as e:
             raise self._failed({**detail, "raw_reply": detail["raw_reply"] or response.text}, str(e)) from e
         try:
@@ -288,3 +310,25 @@ class ModelLlm(_Capture):
 
 def endpoint_host(settings) -> str | None:
     return urlparse(settings.llm_base_url).hostname if settings.llm_mode == "live" else None
+
+
+def build_model(settings, transport: httpx.AsyncBaseTransport | httpx.BaseTransport | None = None) -> Model:
+    """The pydantic-ai Model `settings` select: the replay Model over the recordings directory in recorded mode, or the
+    live Model (over `transport`, the network when omitted), recording each request when `llm_record` is set."""
+    if settings.llm_mode == "recorded":
+        return ReplayModel(settings.llm_recordings_dir, model_name=settings.llm_model)
+    if settings.llm_mode == "live":
+        if not settings.llm_api_key:
+            raise RuntimeError("APP_LLM_API_KEY must be set when APP_LLM_MODE=live")
+        live = build_live_model(settings, transport)
+        return RecordingModel(live, settings.llm_recordings_dir) if settings.llm_record else live
+    raise RuntimeError(f"Unknown APP_LLM_MODE: {settings.llm_mode}")
+
+
+def build_llm(
+    settings, session_factory: sessionmaker, transport: httpx.AsyncBaseTransport | httpx.BaseTransport | None = None
+) -> ModelLlm:
+    """The step-facing LLM the app serves: the Model `settings` select, wrapped in capture (ADR-0004, ADR-0010)."""
+    return ModelLlm(
+        build_model(settings, transport), session_factory, mode=settings.llm_mode, endpoint_host=endpoint_host(settings)
+    )

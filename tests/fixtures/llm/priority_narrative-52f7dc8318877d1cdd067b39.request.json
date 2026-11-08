@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"claims\": [{\"asset\": null, \"citations\": [{\"figure\": \"priority_score\", \"kind\": \"engine\"}, {\"figure\": \"component.drift.points\", \"kind\": \"engine\"}, {\"figure\": \"component.risk.points\", \"kind\": \"engine\"}], \"text\": \"Priority score is 62.38, with drift contributing 13.88 points and risk contributing 28.5 points.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.bond.actual_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.bond.target_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.bond.drift_pp\", \"kind\": \"engine\"}], \"text\": \"Bonds sit at 21.53% against a 25.0% target, a drift of 3.47 percentage points, the largest across asset classes.\"}, {\"asset\": \"Utilities\", \"citations\": [{\"figure\": \"exposure.sector.Utilities\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 3, \"quote\": \"Valuation levels are not attractive.\", \"report_id\": \"RPT-FID-Q2-2026\"}], \"text\": \"Utilities make up 28.37% of the portfolio, while research says valuation levels are not attractive.\"}, {\"asset\": \"Industrials\", \"citations\": [{\"figure\": \"exposure.sector.Industrials\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 1, \"quote\": \"We favour Industrials. Order backlogs are at multi-year highs\", \"report_id\": \"RPT-HV-HARBOR-Q4-2026\"}], \"text\": \"Industrials exposure is 10.32%, and research favours the sector given multi-year-high order backlogs.\"}]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative",
+  "usage": {}
+}

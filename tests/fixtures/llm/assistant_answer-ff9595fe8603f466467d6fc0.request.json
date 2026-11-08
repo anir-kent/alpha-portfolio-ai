@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"answer_markdown\": \"The engine clips every Research Tilt to a configured bound, which is currently **2.0 percentage points**. Only approved Insights can influence a tilt. The language model only explains and proposes. The engine owns the numbers and the clipping, and a human still accepts, modifies or rejects each Recommendation. Nothing is executed from the platform.\", \"claims\": [{\"asset\": null, \"citations\": [{\"figure\": \"model_card.tilt_bound_pp\", \"kind\": \"engine\"}], \"text\": \"Research Tilts are clipped by the engine to the configured bound, which is 2.0 percentage points.\"}], \"follow_up_questions\": [\"Which controls keep ungrounded claims out of memos?\", \"What limits apply to the Assistant?\", \"Which prompt versions are currently in use?\"], \"in_scope\": true}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer",
+  "usage": {}
+}

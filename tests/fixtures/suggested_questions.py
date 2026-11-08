@@ -1,8 +1,10 @@
 """The seeded demo data, and the script that records every LLM reply the demo replays (sme-assistant spec: Replay
-mode; ai-portfolio-rebalancing ticket 15). Re-record with `uv run python -m tests.fixtures.suggested_questions` after any
-change to a prompt, a Screen Context builder, the platform brief, the seeded data or the walkthrough; it needs
-`APP_LLM_API_KEY` (and the live endpoint and model settings, which must match RECORDED_MODEL and RECORDED_BASE_URL) in
-the environment or `.env`.
+mode; ai-portfolio-rebalancing ticket 15; ADR-0010: one recording per model request). Re-record with
+`uv run python -m tests.fixtures.regenerate` (every committed recording) or `uv run python -m
+tests.fixtures.suggested_questions` (these only) after any change to a prompt, a Screen Context builder, the platform
+brief, the seeded data or the walkthrough; it needs `APP_LLM_API_KEY` (and the live endpoint and model settings, which
+must match RECORDED_MODEL and RECORDED_BASE_URL) in the environment or `.env`. `--offline` never goes live;
+`--migrate` first answers a missing request from its old-format recording (the one-off move to per-request recordings).
 
 The script seeds a fresh database exactly as the replay tests do and runs one Analysis Run, whose AI steps (priority
 narratives, Research Tilts, rationale and memo) replay what is recorded and go live, with recording on, for anything
@@ -14,26 +16,30 @@ timestamps, and each turn adds an event), so their Suggested Questions do not re
 re-recorded here: its recordings are keyed to the demo house view, not to the seed.
 """
 
+import contextlib
+import json
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
+from pydantic_ai.models import Model, ModelRequestParameters
+from pydantic_ai.settings import ModelSettings
 
-from app.exchanges import CapturingLlm
-from app.llm import (
-    LlmClient,
-    LlmRequest,
-    LlmResponse,
-    OpenAICompatibleLlm,
-    RecordedLlm,
-    RecordingMissing,
-    recording_key,
-)
+from app.llm import RecordedLlm, RecordingMissing
 from app.main import create_app
 from app.market_data import MarketData
 from app.prompts import ASSISTANT_ANSWER, PRIORITY_NARRATIVE, RECOMMENDATION_NARRATIVE, RESEARCH_TILT
+from app.pydantic_llm import (
+    ReplayModel,
+    build_live_model,
+    current_request,
+    recording_key,
+    recording_path,
+    write_recording,
+)
 from app.rbac import ROLES
 from app.research_seed import seed_research
 from app.screen_context import SUGGESTED_QUESTIONS
@@ -116,47 +122,85 @@ def demo_screens(app) -> list[dict]:
     return screens
 
 
-class ReplayOrLive:
-    """Replays whatever is recorded; a call to a recorded task with no recording goes live and is recorded. Every
-    other task only replays."""
+class ReplayOrRecord(Model):
+    """Replays whatever is recorded. A request of a recorded task with no recording is answered by `live` and, with
+    `record` on, saved as its recording; every other task only replays. With `migrate` on, such a request is answered
+    by its old-format recording first, if it has one: the one-off move to per-request recordings, which ticket 06
+    deletes. It is off by default, so a regeneration after any change goes live rather than reusing an old reply.
+    `used` names the recordings of recorded tasks that were asked for."""
 
-    def __init__(self, live: OpenAICompatibleLlm):
-        self.recorded = RecordedLlm(RECORDINGS)
+    def __init__(self, live: Model | None, *, record: bool = True, migrate: bool = False):
+        self.replay = ReplayModel(RECORDINGS, model_name=RECORDED_MODEL)
+        super().__init__(profile=self.replay.profile)
         self.live = live
-        self.model = live.model
+        self.record = record
+        self.legacy = RecordedLlm(RECORDINGS) if migrate else None
         self.used: set[str] = set()
 
-    def complete(self, request: LlmRequest) -> LlmResponse:
+    @property
+    def model_name(self) -> str:
+        return self.live.model_name if self.live else RECORDED_MODEL
+
+    @property
+    def system(self) -> str:
+        return "replay-or-record"
+
+    async def request(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+        model_request_parameters: ModelRequestParameters,
+    ) -> ModelResponse:
+        request = current_request()
+        key = recording_key(request, messages, model_request_parameters)
+        if request.task in RECORDED_TASKS:
+            self.used.add(recording_path(RECORDINGS, request, key).name)
         try:
-            return self.recorded.complete(request)
+            return await self.replay.request(messages, model_settings, model_request_parameters)
         except RecordingMissing:
             if request.task not in RECORDED_TASKS:
                 raise
-            return self.live.complete(request)
-        finally:
-            if request.task in RECORDED_TASKS:
-                self.used.add(recording_key(request))
+            response = await self._unrecorded(request, messages, model_settings, model_request_parameters)
+        if self.record:
+            write_recording(RECORDINGS, request, key, response)
+        return response
+
+    async def _unrecorded(self, request, messages, model_settings, model_request_parameters) -> ModelResponse:
+        if self.legacy is not None:
+            with contextlib.suppress(RecordingMissing):
+                old = self.legacy.complete(request)
+                return ModelResponse(parts=[TextPart(json.dumps(old.content))], model_name=old.model)
+        if self.live is None:
+            raise RecordingMissing(f"No recorded response for {request.task} ({request.prompt_version}), and offline")
+        return await self.live.request(messages, model_settings, model_request_parameters)
 
 
-def record() -> int:
+def live_model() -> Model | None:
+    """The live Model of the environment's settings, or None (with the reason printed) when it cannot record."""
     env = Settings()
     if not env.llm_api_key:
-        print("APP_LLM_API_KEY must be set to record", file=sys.stderr)
-        return 1
+        print("APP_LLM_API_KEY must be set to go live", file=sys.stderr)
+        return None
     if (env.llm_model, env.llm_base_url) != (RECORDED_MODEL, RECORDED_BASE_URL):
         print(
             f"record against {RECORDED_MODEL} at {RECORDED_BASE_URL}, or change RECORDED_MODEL and RECORDED_BASE_URL",
             file=sys.stderr,
         )
+        return None
+    return build_live_model(env.model_copy(update={"llm_mode": "live"}))
+
+
+def record(*, offline: bool = False, migrate: bool = False) -> int:
+    """Records every request the demo makes that has no recording, and removes the recordings it no longer makes.
+    `offline`: nothing goes live, so a request with no recording fails. `migrate`: answer a missing request from its
+    old-format recording first (see `ReplayOrRecord`)."""
+    live = None if offline else live_model()
+    if live is None and not offline:
         return 1
-    live = OpenAICompatibleLlm(
-        base_url=env.llm_base_url, api_key=env.llm_api_key, model=env.llm_model, record_dir=RECORDINGS
-    )
-    client = ReplayOrLive(live)
+    client = ReplayOrRecord(live, migrate=migrate)
     with tempfile.TemporaryDirectory() as tmp:
         app = create_app(lift_question_limits(replay_settings(Path(tmp))))
-        inner: LlmClient = client
-        app.state.llm = CapturingLlm(inner, app.state.session_factory, mode="recorded")
+        app.state.llm.model = client
         seed_demo(app, RECORDING_RUN_TIMEOUT)
         failures = []
         for screen in demo_screens(app):
@@ -173,10 +217,7 @@ def record() -> int:
     for check in broken:
         print(f"walkthrough FAIL {check.act}: {check.claim} [{check.evidence}]")
     stale = [
-        p
-        for task in RECORDED_TASKS
-        for p in RECORDINGS.glob(f"{task}-*.json")
-        if p.stem.split("-")[-1] not in client.used
+        p for task in RECORDED_TASKS for p in RECORDINGS.glob(f"{task}-*.request.json") if p.name not in client.used
     ]
     for path in stale:
         path.unlink()
@@ -188,4 +229,4 @@ def record() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(record())
+    sys.exit(record(offline="--offline" in sys.argv[1:], migrate="--migrate" in sys.argv[1:]))

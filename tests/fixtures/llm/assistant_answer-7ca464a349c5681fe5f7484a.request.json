@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"answer_markdown\": \"An Analysis Run is started on demand and values every Portfolio at a fixed market-data snapshot. A deterministic engine then computes, for each Portfolio:\\n\\n- **Drift by Asset Class**: how far each Asset Class (equity, bond, cash) sits from its Target Allocation, in percentage points.\\n- **Portfolio Drift**: the overall drift figure for the Portfolio.\\n- **Suitability Rule results**: each is pass, warning or breach.\\n- **Priority score**: this orders the Queue.\\n\\nDrift is judged against the tolerance band of the Client's Risk Profile. A Portfolio outside tolerance gets a draft Recommendation, made of Trade Lines that bring it back toward target and optionally tilted by approved research Insights. The engine owns every number. Language models only explain engine figures and cite Report passages.\\n\\nThis screen (Config) does not include any figures, so I have described the process only.\", \"claims\": [], \"follow_up_questions\": [\"How is drift judged against a Risk Profile's tolerance band?\", \"What happens to a Recommendation after it is drafted?\", \"What is recorded as an Audit Event or LLM Exchange?\"], \"in_scope\": true}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer",
+  "usage": {}
+}

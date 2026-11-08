@@ -58,7 +58,7 @@ def test_a_role_with_llm_read_also_gets_the_exchange_id_that_opens_the_exchange(
 
 
 def test_a_failed_step_shows_failed_with_its_transport_error_and_the_rule_based_result_stands(app, captured):
-    app.state.llm = CapturingLlm(captured.stub.delegate, app.state.session_factory, mode="recorded")  # no recordings
+    app.state.llm = captured.stub.delegate  # the app's own replay path, which has no tilt or memo recordings
     rec = captured.run()
     got = steps(rec)
     assert {s["outcome"] for s in got.values()} == {"failed"}

@@ -89,8 +89,8 @@ The Audit Event types the chain accepts:
 
 | Mode | Behaviour | Used for |
 | --- | --- | --- |
-| `recorded` (default) | Replays the reply stored under the call's key in `APP_LLM_RECORDINGS_DIR`. No network. A missing recording is an error, never a guess. | Tests, CI and the offline demo, against the committed recordings |
-| `live` | Calls `APP_LLM_BASE_URL` with `APP_LLM_MODEL` (OpenRouter and `anthropic/claude-sonnet-5.5` by default). Refuses to start without `APP_LLM_API_KEY`. With `APP_LLM_RECORD=true`, saves each reply in the format recorded mode replays. | Real model runs, making new recordings, the live eval |
+| `recorded` (default) | Replays each model request's reply stored under its key (task, prompt version, reply schema, tool definitions, messages so far) in `APP_LLM_RECORDINGS_DIR`. No network. A missing recording is an error, never a guess. | Tests, CI and the offline demo, against the committed recordings |
+| `live` | Calls `APP_LLM_BASE_URL` with `APP_LLM_MODEL` (OpenRouter and `anthropic/claude-sonnet-5.5` by default). Refuses to start without `APP_LLM_API_KEY`. With `APP_LLM_RECORD=true`, saves each model request's reply in the format recorded mode replays. | Real model runs, making new recordings, the live eval |
 
 - **Recording key.** A SHA-256 over the task, prompt version, system text, reply schema and user prompt. Any change to the prompt or its inputs misses the recording, so a replay is always byte-exact.
 - **Capture in both modes.** Every call, replayed or live, successful or failed, is stored as an LLM Exchange before the caller continues. If capture fails, the call fails ([ADR-0004](../adr/0004-llm-exchanges-stored-separately-anchored-in-audit-chain.md)). The mode is recorded on each Exchange.

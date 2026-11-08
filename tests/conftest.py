@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from pydantic_ai.models import override_allow_model_requests
 
 from app.main import create_app
 from tests.fixtures.suggested_questions import SEED_PASSWORD, replay_settings
@@ -14,6 +15,20 @@ ROLES = [
     "auditor",
     "platform_owner",
 ]
+
+
+@pytest.fixture(autouse=True, scope="session")
+def no_model_requests():
+    """No test reaches a real model: pydantic-ai refuses any provider-backed model request. Replay and scripted Models
+    are unaffected; a test of the live adapter over a mock transport opts back in with `allow_model_requests`."""
+    with override_allow_model_requests(False):
+        yield
+
+
+@pytest.fixture
+def allow_model_requests():
+    with override_allow_model_requests(True):
+        yield
 
 
 @pytest.fixture

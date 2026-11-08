@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"answer_markdown\": \"No single asset class drives the drift here. Bond and equity are tied, and both are tiny.\\n\\n- **Bond**: 0.03 pp drift, slightly over target (signed +0.03).\\n- **Equity**: 0.03 pp drift, slightly under target (signed -0.03).\\n- **Cash**: 0.0 pp drift.\\n\\nThe Portfolio Drift is 0.03 pp. That is far inside the moderate Risk Profile's tolerance band, which warns at 3.0 pp and breaches at 5.0 pp. The two offsetting 0.03 pp gaps are effectively rounding noise, so no Recommendation is needed on drift grounds.\", \"claims\": [{\"asset\": null, \"citations\": [{\"figure\": \"drift.bond.drift_pp\", \"kind\": \"engine\"}, {\"figure\": \"drift.equity.drift_pp\", \"kind\": \"engine\"}], \"text\": \"Bond and equity each show a drift of 0.03 percentage points, so they are tied as the largest contributors.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.bond.signed_pp\", \"kind\": \"engine\"}, {\"figure\": \"drift.equity.signed_pp\", \"kind\": \"engine\"}], \"text\": \"Bond is slightly over target (signed 0.03) and equity slightly under target (signed -0.03).\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.cash.drift_pp\", \"kind\": \"engine\"}], \"text\": \"Cash has a drift of 0.0 percentage points.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"portfolio_drift_pp\", \"kind\": \"engine\"}, {\"figure\": \"tolerance_band.warn\", \"kind\": \"engine\"}], \"text\": \"Portfolio Drift is 0.03 percentage points, well inside the 3.0 warning line of the tolerance band.\"}], \"follow_up_questions\": [\"Are all Suitability Rules passing for this Portfolio?\", \"What is the tolerance band for a moderate Risk Profile?\", \"Which Holdings make up the equity allocation?\"], \"in_scope\": true}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer",
+  "usage": {}
+}

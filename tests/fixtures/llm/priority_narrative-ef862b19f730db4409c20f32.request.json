@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"claims\": [{\"asset\": null, \"citations\": [{\"figure\": \"priority_score\", \"kind\": \"engine\"}, {\"figure\": \"component.drift.points\", \"kind\": \"engine\"}], \"text\": \"The priority score is 55.55, driven mainly by drift, which contributes 11.55 points.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.equity.actual_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.equity.target_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.equity.drift_pp\", \"kind\": \"engine\"}], \"text\": \"Equity sits at 87.89% against an 85.0% target, a drift of 2.89 percentage points.\"}, {\"asset\": \"Energy\", \"citations\": [{\"figure\": \"exposure.sector.Energy\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 3, \"quote\": \"Indicators suggest negative risk-reward.\", \"report_id\": \"RPT-FID-Q2-2026\"}], \"text\": \"Energy is 25.65% of the portfolio, and the research flags negative risk-reward for the sector.\"}, {\"asset\": \"Information Technology\", \"citations\": [{\"figure\": \"exposure.sector.Information Technology\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 3, \"quote\": \"Solid fundamentals and compelling valuations after a sell-off.\", \"report_id\": \"RPT-FID-Q2-2026\"}], \"text\": \"Information Technology is 24.39% of the portfolio, and the research cites solid fundamentals after a sell-off.\"}]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative",
+  "usage": {}
+}

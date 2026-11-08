@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"claims\": [{\"asset\": null, \"citations\": [{\"figure\": \"priority_score\", \"kind\": \"engine\"}, {\"figure\": \"component.risk.points\", \"kind\": \"engine\"}, {\"figure\": \"component.drift.points\", \"kind\": \"engine\"}, {\"figure\": \"component.opportunity.points\", \"kind\": \"engine\"}], \"text\": \"Priority score is 41.26, built mainly from risk (12.75 points) and drift (8.5 points), with opportunity adding 20.0 points.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.bond.drift_pp\", \"kind\": \"engine\"}, {\"figure\": \"drift.bond.target_pct\", \"kind\": \"engine\"}], \"text\": \"Fixed income is 2.13 pp above its 45.0% target, the largest allocation drift in the portfolio.\"}, {\"asset\": \"Energy\", \"citations\": [{\"figure\": \"exposure.sector.Energy\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 3, \"quote\": \"Indicators suggest negative risk-reward.\", \"report_id\": \"RPT-FID-Q2-2026\"}], \"text\": \"Energy is 15.82% of the portfolio, while the research view on it is negative (low confidence).\"}, {\"asset\": \"Industrials\", \"citations\": [{\"figure\": \"exposure.sector.Industrials\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 1, \"quote\": \"We favour Industrials. Order backlogs are at multi-year highs\", \"report_id\": \"RPT-HV-HARBOR-Q4-2026\"}], \"text\": \"Industrials is only 4.5% of the portfolio, and a high-confidence research view favours the sector.\"}]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative",
+  "usage": {}
+}

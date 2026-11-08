@@ -33,7 +33,7 @@ sequenceDiagram
   participant R as AnalysisRuns + ProgressRegistry<br/>(process memory)
   participant W as Run thread<br/>(run_analysis)
   participant DB as SQLite: business rows
-  participant LLM as CapturingLlm → endpoint<br/>or recordings
+  participant LLM as ModelLlm (capture) → live<br/>or replay Model
   participant EX as LLM Exchanges
   participant AU as Audit chain
 
@@ -197,7 +197,7 @@ sequenceDiagram
   participant API as API: reports router
   participant S as Research and Insights service
   participant DB as SQLite: business rows
-  participant LLM as CapturingLlm → endpoint<br/>or recordings
+  participant LLM as ModelLlm (capture) → live<br/>or replay Model
   participant EX as LLM Exchanges
   participant AU as Audit chain
   participant G as Grounding validator
@@ -263,7 +263,7 @@ sequenceDiagram
   participant AS as Assistant service
   participant SC as Screen Context builder
   participant DB as SQLite: business rows
-  participant LLM as CapturingLlm → endpoint<br/>or recordings
+  participant LLM as ModelLlm (capture) → live<br/>or replay Model
   participant EX as LLM Exchanges
   participant G as Grounding validator
   participant AU as Audit chain

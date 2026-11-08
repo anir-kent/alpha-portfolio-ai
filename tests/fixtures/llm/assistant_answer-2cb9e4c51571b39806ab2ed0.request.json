@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"answer_markdown\": \"**Equity** is the largest contributor, but the drift is negligible.\\n\\n- Equity is 69.98% against a 70.0% target. It is underweight by 0.02 pp, which is also the Portfolio Drift of 0.02 pp.\\n- Bond is 0.01 pp from target (25.01% vs 25.0%) and cash is 0.0 pp from target.\\n- The tolerance band for the growth Risk Profile is 4.0 pp (warning) and 6.0 pp (breach), so every Asset Class is well inside tolerance and no drift-based rebalancing is triggered.\\n\\nThe Portfolio's overall suitability status is a breach. That comes from the single-position limit and sector concentration rules, not from Asset Class drift.\", \"claims\": [{\"asset\": null, \"citations\": [{\"figure\": \"drift.equity.drift_pp\", \"kind\": \"engine\"}, {\"figure\": \"portfolio_drift_pp\", \"kind\": \"engine\"}], \"text\": \"Equity has the largest Asset Class drift at 0.02 pp, which equals the Portfolio Drift of 0.02 pp.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.equity.signed_pp\", \"kind\": \"engine\"}], \"text\": \"Equity is underweight against target, with a signed drift of -0.02 pp.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.bond.drift_pp\", \"kind\": \"engine\"}], \"text\": \"Bond drifts by 0.01 pp.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.cash.drift_pp\", \"kind\": \"engine\"}], \"text\": \"Cash drifts by 0.0 pp.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"tolerance_band.warn\", \"kind\": \"engine\"}, {\"figure\": \"tolerance_band.breach\", \"kind\": \"engine\"}], \"text\": \"The tolerance band warns at 4.0 pp and breaches at 6.0 pp.\"}], \"follow_up_questions\": [\"Why is the suitability status a breach?\", \"Which holdings breach the single-position limit?\", \"How is the Portfolio Drift calculated?\"], \"in_scope\": true}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer",
+  "usage": {}
+}

@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"answer_markdown\": \"The governance model card lists these current prompt versions:\\n\\n- `insight_extraction@v1`\\n- `research_tilt@v1`\\n- `recommendation_narrative@v1`\\n- `priority_narrative@v1`\\n- `assistant_answer@v3`\\n\\nThe Assistant itself (this answer) runs on `assistant_answer@v3`. The model card shows LLM mode as `recorded`.\", \"claims\": [], \"follow_up_questions\": [\"What does the Assistant's scope policy say?\", \"What is the research tilt bound?\", \"What limits apply to Assistant questions?\"], \"in_scope\": true}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer",
+  "usage": {}
+}

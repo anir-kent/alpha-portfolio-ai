@@ -20,7 +20,7 @@ An LLM Exchange is still one model request and its reply. An Audit Event now anc
 - **Make the pipeline steps agentic too**: rejected. Their inputs are fixed by Insight Review status and engine figures, and they run inside the Analysis Run's write transaction (ADR-0009). Tools would add variable calls and lock time and no capability.
 - **Multi-agent (planner and workers, delegation)**: rejected. No question needs it. It multiplies trajectories and authorization surfaces, and one bounded agent is easier to explain to an Auditor.
 - **Write tools or actions**: rejected. The Assistant never acts (glossary). Human decisions stay in Insight Review and Decisions.
-- **Capture from pydantic-ai hooks or message history**: rejected for live calls. These are parsed objects, not the wire bytes ADR-0004 promises. Hooks are used only to tag each Exchange with its task and prompt version.
+- **Capture from pydantic-ai hooks or message history**: rejected for live calls. These are parsed objects, not the wire bytes ADR-0004 promises. Capture only tags each model request with its task and prompt version (a context variable the replay and recording Models read to key recordings).
 - **Whole-Trajectory replay keyed on the first request**: rejected. A changed tool result would replay a stale continuation. Each model request is replayed by a hash of the task, prompt version, schema, tool definitions and the full message list so far.
 - **Tool Output mode (pydantic-ai's default)**: rejected for the single-call steps, which would gain a tool they do not use. Native structured output keeps the wire shape ADR-0007 described.
 - **Logfire or OpenTelemetry instrumentation**: rejected. The glass box is the single observability record; a second one could disagree with it.

@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"answer_markdown\": \"**Cash** drives the Portfolio Drift, with **bond** almost as large on the other side.\\n\\n- Cash is 40.01% against a 15.0% target, a drift of 25.01 pp (over target). This is the largest drift and equals the Portfolio Drift of 25.01 pp.\\n- Bond is 40.01% against a 65.0% target, a drift of 24.99 pp (under target).\\n- Equity is on target, with a drift of 0.01 pp.\\n\\nBoth cash and bond are far beyond the 4.0 pp breach tolerance for a conservative Risk Profile, so both are in breach. The two drifts are nearly mirror images: the cash excess (mostly SGOV) corresponds to the bond shortfall.\", \"claims\": [{\"asset\": null, \"citations\": [{\"figure\": \"drift.cash.actual_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.cash.target_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.cash.drift_pp\", \"kind\": \"engine\"}, {\"figure\": \"portfolio_drift_pp\", \"kind\": \"engine\"}], \"text\": \"Cash has the largest drift: 40.01% actual against a 15.0% target, a drift of 25.01 pp, which equals the Portfolio Drift of 25.01 pp.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.bond.actual_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.bond.target_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.bond.drift_pp\", \"kind\": \"engine\"}], \"text\": \"Bond is under target: 40.01% actual against a 65.0% target, a drift of 24.99 pp.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.equity.drift_pp\", \"kind\": \"engine\"}], \"text\": \"Equity is essentially on target, with a drift of 0.01 pp.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"tolerance_band.breach\", \"kind\": \"engine\"}], \"text\": \"The breach tolerance is 4.0 pp, which the cash and bond drifts both exceed.\"}], \"follow_up_questions\": [\"Which holdings make up the cash and bond weights?\", \"Does this Portfolio pass its Suitability Rules?\", \"How is the tolerance band applied to drift?\"], \"in_scope\": true}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer",
+  "usage": {}
+}

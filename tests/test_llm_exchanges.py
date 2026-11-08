@@ -10,6 +10,7 @@ from sqlalchemy import select, text
 
 from app import audit
 from app.db import AuditEventRow
+from tests.chat_completions import completion
 from tests.conftest import ROLES
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -110,7 +111,7 @@ GOOD_REPLY = '```json\n{"insights": []}\n```'
 
 
 @pytest.fixture
-def live_app(tmp_path):
+def live_app(tmp_path, allow_model_requests):
     """Returns a builder: live-mode app whose provider is `handler`, plus the requests the provider saw."""
     import httpx
 
@@ -139,16 +140,7 @@ def live_app(tmp_path):
 
 
 def provider_ok(request):
-    import httpx
-
-    return httpx.Response(
-        200,
-        json={
-            "model": "claude-sonnet-5-5",
-            "usage": {"prompt_tokens": 321, "completion_tokens": 45, "total_tokens": 366},
-            "choices": [{"message": {"content": GOOD_REPLY}}],
-        },
-    )
+    return completion(GOOD_REPLY)
 
 
 def as_role(app, role):
@@ -171,7 +163,7 @@ def test_live_exchange_stores_what_crossed_the_wire(live_app):
     sent = json.loads(seen[0].content)["messages"]
     assert ex["messages"] == sent
     assert ex["messages"][0]["content"].startswith(ex["system_text"] + "\n\nJSON schema of the reply:\n")
-    assert ex["raw_reply"] == GOOD_REPLY
+    assert json.loads(ex["raw_reply"])["choices"][0]["message"]["content"] == GOOD_REPLY  # the reply body as received
     assert ex["usage"] == {"prompt_tokens": 321, "completion_tokens": 45, "total_tokens": 366}
     assert isinstance(ex["latency_ms"], int) and ex["latency_ms"] >= 0
     assert (ex["mode"], ex["outcome"], ex["endpoint_host"], ex["telemetry"]) == ("live", "ok", "gw.example", "measured")
@@ -220,15 +212,15 @@ def test_provider_timeout_is_an_error_exchange_with_the_failure_text(live_app):
 
 
 def test_reply_that_is_not_json_is_an_error_exchange_that_keeps_the_raw_text(live_app):
-    import httpx
 
     prose = "Sure! Here are the insights you asked for, in prose."
     app, _ = live_app(
-        lambda r: httpx.Response(200, json={"usage": {"total_tokens": 9}, "choices": [{"message": {"content": prose}}]})
+        lambda r: completion(prose, usage={"prompt_tokens": 5, "completion_tokens": 4, "total_tokens": 9})
     )
     ex = exchange_for(app, upload(as_role(app, "research_analyst")).json())
     assert ex["outcome"] == "error" and "not valid JSON" in ex["error"]
-    assert ex["raw_reply"] == prose and ex["usage"] == {"total_tokens": 9}
+    assert json.loads(ex["raw_reply"])["choices"][0]["message"]["content"] == prose  # the reply as received
+    assert ex["usage"] == {"prompt_tokens": 5, "completion_tokens": 4, "total_tokens": 9}
     assert ex["parsed_content"] is None
 
 
@@ -255,9 +247,8 @@ def test_api_key_and_headers_never_appear_in_any_exchange_or_response(live_app):
 
 
 def test_reply_with_no_text_content_is_an_error_exchange_not_a_server_error(live_app):
-    import httpx
 
-    app, _ = live_app(lambda r: httpx.Response(200, json={"choices": [{"message": {"content": None}}]}))
+    app, _ = live_app(lambda r: completion(None))
     report = upload(as_role(app, "research_analyst"))
     assert report.status_code == 201 and report.json()["extraction_status"] == "failed"
     ex = exchange_for(app, report.json())

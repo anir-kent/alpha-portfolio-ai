@@ -31,13 +31,19 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.db import InsightRow, RecommendationTiltRow
-from app.exchanges import CapturingLlm
 from app.governance import AssistantEval, EvalCaseResult, EvalCategory, EvalExpectation
-from app.llm import LlmClient, LlmRequest, LlmResponse, OpenAICompatibleLlm
+from app.llm import LlmRequest, LlmResponse
 from app.main import create_app
 from app.prompts import ASSISTANT_ANSWER
 from app.settings import Settings
-from tests.fixtures.suggested_questions import ReplayOrLive, lift_question_limits, login, replay_settings, seed_demo
+from tests.fixtures.suggested_questions import (
+    ReplayOrRecord,
+    lift_question_limits,
+    live_model,
+    login,
+    replay_settings,
+    seed_demo,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 ASK = "/api/assistant/questions"
@@ -379,17 +385,15 @@ def _pct(rate: float | None) -> str:
 def main() -> int:
     import tempfile
 
-    env = Settings()
-    if not env.llm_api_key:
-        print("APP_LLM_API_KEY must be set to run the live eval", file=sys.stderr)
+    live = live_model()
+    if live is None:
         return 1
-    live = OpenAICompatibleLlm(base_url=env.llm_base_url, api_key=env.llm_api_key, model=env.llm_model)
     with tempfile.TemporaryDirectory() as tmp:
         app = create_app(lift_question_limits(replay_settings(Path(tmp))))
-        inner: LlmClient = ReplayOrLive(live)
-        app.state.llm = CapturingLlm(inner, app.state.session_factory, mode="recorded")
+        # The Analysis Run's AI steps replay; the eval's own Questions go live, and nothing is recorded.
+        app.state.llm.model = ReplayOrRecord(live, record=False)
         seed_demo(app)
-        report = run_eval(app, EVAL_SET, model=env.llm_model)
+        report = run_eval(app, EVAL_SET, model=live.model_name)
     for r in report.results:
         status = "pass" if r.passed else "FAIL"
         print(f"{status} {r.id:24} {r.category:12} {r.outcome:9} {'; '.join(r.problems)}")

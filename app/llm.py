@@ -1,11 +1,11 @@
 """The single LLM interface (spec: OpenAI-compatible, gateway-ready; OpenRouter in front of an Anthropic model).
 
-Callers only ever see `LlmClient.complete`. Two implementations sit behind it:
-- `RecordedLlm` replays committed responses (tests, demos; no network). A miss is an error, never a guess.
-- `OpenAICompatibleLlm` speaks the OpenAI chat-completions protocol, so pointing `llm_base_url` at OpenRouter (the
-  default), Anthropic's compatibility endpoint or a LiteLLM/AI gateway is a config change. With `record_dir` set, live responses are saved
-  in the format `RecordedLlm` replays.
-Every response carries the model and prompt version so the caller can log both to the audit chain.
+Callers only ever see `LlmClient.complete`, its request and response, and its errors. What the app serves behind it is
+`app.exchanges.build_llm`: pydantic-ai over the live or replay Model, wrapped in capture (ADR-0010). Every response
+carries the model and prompt version so the caller can log both to the audit chain.
+
+The hand-written client below (`OpenAICompatibleLlm`, `RecordedLlm` and the per-call recording format they share) is
+no longer on the default path. It stays only until ticket 06 deletes it; nothing new should use it.
 """
 
 import hashlib
@@ -258,20 +258,3 @@ class OpenAICompatibleLlm:
         if self.record_dir:
             write_recording(self.record_dir, request, response)
         return response
-
-
-def build_llm(settings, transport: httpx.BaseTransport | None = None) -> LlmClient:
-    if settings.llm_mode == "recorded":
-        return RecordedLlm(settings.llm_recordings_dir)
-    if settings.llm_mode == "live":
-        if not settings.llm_api_key:
-            raise RuntimeError("APP_LLM_API_KEY must be set when APP_LLM_MODE=live")
-        return OpenAICompatibleLlm(
-            base_url=settings.llm_base_url,
-            api_key=settings.llm_api_key,
-            model=settings.llm_model,
-            record_dir=settings.llm_recordings_dir if settings.llm_record else None,
-            transport=transport,
-            temperature=settings.llm_temperature,
-        )
-    raise RuntimeError(f"Unknown APP_LLM_MODE: {settings.llm_mode}")

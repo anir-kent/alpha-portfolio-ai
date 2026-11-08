@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"answer_markdown\": \"No Restrictions are recorded for Portfolio C005: the restrictions list on screen is empty. The Client Restrictions rule (SR-05) accordingly passes with the message \\\"No Restriction is violated\\\".\", \"claims\": [], \"follow_up_questions\": [\"Which Suitability Rules apply to this Portfolio?\", \"How far is each Asset Class from its Target Allocation?\", \"What is the tolerance band for this Risk Profile?\"], \"in_scope\": true}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v3",
+  "task": "assistant_answer",
+  "usage": {}
+}
