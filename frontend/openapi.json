@@ -6298,6 +6298,95 @@
         ],
         "title": "TradeLineOut"
       },
+      "Trajectory": {
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/TrajectoryStep"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "requests_used": {
+            "type": "integer",
+            "title": "Requests Used"
+          },
+          "request_limit": {
+            "type": "integer",
+            "title": "Request Limit"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "title": "Output Tokens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "steps",
+          "requests_used",
+          "request_limit",
+          "input_tokens",
+          "output_tokens"
+        ],
+        "title": "Trajectory"
+      },
+      "TrajectoryStep": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "model_request",
+              "tool_call"
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "arguments": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arguments"
+          },
+          "result_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "TrajectoryStep"
+      },
       "Turn": {
         "properties": {
           "seq": {
@@ -6373,6 +6462,16 @@
               }
             ],
             "title": "Exchange Hash"
+          },
+          "trajectory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Trajectory"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "grounding_check_id": {
             "anyOf": [

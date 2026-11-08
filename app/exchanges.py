@@ -26,7 +26,7 @@ from urllib.parse import urlparse
 
 import httpx
 from pydantic_ai.exceptions import ModelHTTPError
-from pydantic_ai.messages import ModelMessage, ModelResponse
+from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ModelResponse
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
@@ -186,11 +186,20 @@ class CapturingModel(WrapperModel):
     boundary. A reply that is not a JSON object is an error Exchange that keeps the raw reply; a reply a step later
     rejects is still `ok`, since the outcome is transport-level. A failed save fails the request (fail closed)."""
 
-    def __init__(self, wrapped: Model, capture: _Capture, request: LlmRequest, stored: list[LlmExchangeRow]):
+    def __init__(
+        self,
+        wrapped: Model,
+        capture: _Capture,
+        request: LlmRequest,
+        stored: list[LlmExchangeRow],
+        *,
+        capture_model_boundary: bool = False,
+    ):
         super().__init__(wrapped)
         self._capture = capture
         self._llm_request = request
         self._stored = stored
+        self._capture_model_boundary = capture_model_boundary
 
     async def request(
         self,
@@ -204,8 +213,24 @@ class CapturingModel(WrapperModel):
                 response = await super().request(messages, model_settings, model_request_parameters)
             except Exception as e:
                 message = wire.redact(_failure_message(e, wire.last())) or ""
-                raise self._failed(wire.detail(started), message) from e
+                detail = wire.detail(started)
+                if self._capture_model_boundary and wire.last() is None:
+                    detail["messages"] = ModelMessagesTypeAdapter.dump_python(messages, mode="json", exclude_none=True)
+                raise self._failed(detail, message) from e
         detail = wire.detail(started)
+        if self._capture_model_boundary and wire.last() is None:
+            detail = {
+                "messages": ModelMessagesTypeAdapter.dump_python(messages, mode="json", exclude_none=True),
+                "raw_reply": response.text or ModelMessagesTypeAdapter.dump_json([response]).decode(),
+                "usage": dataclasses.asdict(response.usage),
+                "latency_ms": None,  # replay/scripted requests have no provider latency
+            }
+        if response.tool_calls:
+            try:
+                self._store(detail, model=response.model_name or self.wrapped.model_name)
+            except Exception as e:
+                raise LlmError(f"LLM exchange could not be recorded: {e}") from e
+            return response
         if response.text is None:
             raise self._failed(detail, "LLM call failed: the reply's message content was not text")
         try:
@@ -241,6 +266,10 @@ class ModelLlm(_Capture):
     def __init__(self, model: Model, session_factory: sessionmaker, *, mode: str, endpoint_host: str | None = None):
         super().__init__(session_factory, mode=mode, endpoint_host=endpoint_host)
         self.model = model
+
+    def capturing_model(self, request: LlmRequest, stored: list[LlmExchangeRow]) -> CapturingModel:
+        """Capture every model request of an Agent run in this view's Trajectory."""
+        return CapturingModel(self.model, self, request, stored, capture_model_boundary=True)
 
     def complete(self, request: LlmRequest) -> LlmResponse:
         stored: list[LlmExchangeRow] = []

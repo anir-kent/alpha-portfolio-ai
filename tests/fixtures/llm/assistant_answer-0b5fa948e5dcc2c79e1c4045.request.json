@@ -1,0 +1,15 @@
+{
+  "model": "scripted-assistant-fixture-v4",
+  "parts": [
+    {
+      "content": "{\"in_scope\": true, \"answer_markdown\": \"What does the LLM Exchanges screen show?\\n\\nThe LLM Exchanges screen shows each captured model request, its prompt version, transport outcome and reply. Auditors can inspect the request and tool results and verify the audit anchors.\", \"claims\": [], \"follow_up_questions\": [\"Which screen shows the supporting figures?\"]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v4",
+  "task": "assistant_answer",
+  "usage": {
+    "input_tokens": 275,
+    "output_tokens": 50
+  }
+}

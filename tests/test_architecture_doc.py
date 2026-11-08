@@ -93,11 +93,11 @@ SOURCE_CHANGES = {  # region -> (a change to its source in code, a row only the 
             prompts,
             "ALL",
             tuple(
-                prompts.Prompt(prompt.name, "v4", prompt.system) if prompt.name == "assistant_answer" else prompt
+                prompts.Prompt(prompt.name, "v-next", prompt.system) if prompt.name == "assistant_answer" else prompt
                 for prompt in prompts.ALL
             ),
         ),
-        "| `assistant_answer` | `v4` | `assistant_answer@v4` |",
+        "| `assistant_answer` | `v-next` | `assistant_answer@v-next` |",
     ),
     "audit-event-types": (
         lambda mp: mp.setattr(audit, "EVENT_TYPES", (*audit.EVENT_TYPES, "chain_sealed")),

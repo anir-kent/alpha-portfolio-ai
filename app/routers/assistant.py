@@ -8,7 +8,7 @@ from app import assistant, screen_context
 from app.assistant import Conversation, Turn
 from app.db import SessionRow, User
 from app.deps import find_session, get_db, get_llm, get_market, require
-from app.llm import LlmClient
+from app.exchanges import ModelLlm
 from app.market_data import MarketData
 from app.screen_context import ScreenIdentity, ScreenKind
 
@@ -48,7 +48,7 @@ def ask(
     request: Request,
     user: User = Depends(require("assistant:use")),
     db: Session = Depends(get_db),
-    llm: LlmClient = Depends(get_llm),
+    llm: ModelLlm = Depends(get_llm),
     market: MarketData = Depends(get_market),
 ):
     session = _session(db, request)

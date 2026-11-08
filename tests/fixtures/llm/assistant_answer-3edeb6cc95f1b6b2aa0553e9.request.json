@@ -1,0 +1,15 @@
+{
+  "model": "scripted-assistant-fixture-v4",
+  "parts": [
+    {
+      "content": "{\"in_scope\": true, \"answer_markdown\": \"Which asset class drives this Portfolio's drift?\\n\\ncash has the largest absolute Asset-Class Drift on this Portfolio.\\n\\n- drift.cash.actual_pct: 40.01.\\n- drift.cash.drift_pp: 25.01.\\n- drift.cash.signed_pp: 25.01.\\n- drift.cash.target_pct: 15.0.\", \"claims\": [{\"text\": \"drift.cash.actual_pct: 40.01.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.cash.actual_pct\"}]}, {\"text\": \"drift.cash.drift_pp: 25.01.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.cash.drift_pp\"}]}, {\"text\": \"drift.cash.signed_pp: 25.01.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.cash.signed_pp\"}]}, {\"text\": \"drift.cash.target_pct: 15.0.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.cash.target_pct\"}]}], \"follow_up_questions\": [\"Which screen shows the supporting figures?\"]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v4",
+  "task": "assistant_answer",
+  "usage": {
+    "input_tokens": 820,
+    "output_tokens": 118
+  }
+}

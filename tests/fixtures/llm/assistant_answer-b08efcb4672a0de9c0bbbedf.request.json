@@ -1,0 +1,15 @@
+{
+  "model": "scripted-assistant-fixture-v4",
+  "parts": [
+    {
+      "content": "{\"in_scope\": true, \"answer_markdown\": \"Which Restrictions apply to this Portfolio?\\n\\nApplicable Restrictions: [{\\\"kind\\\": \\\"instrument\\\", \\\"value\\\": \\\"XOM\\\"}]\", \"claims\": [], \"follow_up_questions\": [\"Which screen shows the supporting figures?\"]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v4",
+  "task": "assistant_answer",
+  "usage": {
+    "input_tokens": 968,
+    "output_tokens": 31
+  }
+}

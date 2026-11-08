@@ -1,0 +1,15 @@
+{
+  "model": "scripted-assistant-fixture-v4",
+  "parts": [
+    {
+      "content": "{\"in_scope\": true, \"answer_markdown\": \"Why is the top Portfolio ranked above the second one?\\n\\nRanking follows the weighted priority score. Compare the leading Portfolios and their components:\\n\\n- queue.C003.score: 93.33.\\n- queue.C003.drift.points: 40.0.\\n- queue.C002.score: 90.0.\\n- queue.C002.drift.points: 40.0.\", \"claims\": [{\"text\": \"queue.C003.score: 93.33.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"queue.C003.score\"}]}, {\"text\": \"queue.C003.drift.points: 40.0.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"queue.C003.drift.points\"}]}, {\"text\": \"queue.C002.score: 90.0.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"queue.C002.score\"}]}, {\"text\": \"queue.C002.drift.points: 40.0.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"queue.C002.drift.points\"}]}], \"follow_up_questions\": [\"Which screen shows the supporting figures?\"]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v4",
+  "task": "assistant_answer",
+  "usage": {
+    "input_tokens": 7931,
+    "output_tokens": 130
+  }
+}

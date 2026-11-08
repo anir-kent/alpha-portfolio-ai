@@ -79,7 +79,7 @@ def _cut(rows: list, row_budget: int, total: int) -> tuple[list, dict]:
 QUEUE_SUGGESTED = (
     "Why is the top Portfolio ranked above the second one?",
     "Which priority component contributes most to the scores on this Queue?",
-    "Which Portfolios have breached their review SLA?",
+    "What are the holdings and drift of Portfolio C001?",
 )
 
 
@@ -143,7 +143,9 @@ PORTFOLIO_SUGGESTED = (
 )
 
 
-def _portfolio(db: Session, market: MarketData, user: User, screen: ScreenIdentity) -> ScreenContext | None:
+def _portfolio(
+    db: Session, market: MarketData, user: User, screen: ScreenIdentity, *, figure_prefix: str = ""
+) -> ScreenContext | None:
     from app.routers.portfolios import portfolio_detail  # local: the router imports the analysis routers
 
     portfolio_id = screen.entity_ids.get("portfolio_id")
@@ -154,7 +156,7 @@ def _portfolio(db: Session, market: MarketData, user: User, screen: ScreenIdenti
         return None
     client = detail.client
     drift = detail.drift
-    figures = _portfolio_figures(detail)
+    figures = {figure_prefix + key: value for key, value in _portfolio_figures(detail).items()}
     context = {
         "screen": "portfolio",
         "portfolio_id": detail.portfolio_id,
@@ -656,16 +658,17 @@ def label(screen: ScreenIdentity) -> str:
 
 
 def build(
-    db: Session, market: MarketData, user: User, screen: ScreenIdentity, settings: Settings
+    db: Session, market: MarketData, user: User, screen: ScreenIdentity, settings: Settings, *, figure_prefix: str = ""
 ) -> ScreenContext | None:
     """The Screen Context `user` may see for `screen`, or None when the screen names nothing the user can read, or a
-    selected item that is not part of it (the caller refuses without revealing whether it exists)."""
+    selected item that is not part of it (the caller refuses without revealing whether it exists).
+    Portfolio lookups use `figure_prefix` to preserve distinct sources alongside the current screen."""
     rows = settings.assistant_context_rows
     match screen.kind:
         case "queue":
             return _queue(db, user, screen, rows)
         case "portfolio":
-            return _portfolio(db, market, user, screen)
+            return _portfolio(db, market, user, screen, figure_prefix=figure_prefix)
         case "recommendation":
             return _recommendation(db, user, screen)
         case "approvals":

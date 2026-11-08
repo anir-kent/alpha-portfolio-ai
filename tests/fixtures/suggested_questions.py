@@ -3,7 +3,8 @@ mode; ai-portfolio-rebalancing ticket 15; ADR-0010: one recording per model requ
 `uv run python -m tests.fixtures.regenerate` (every committed recording) or `uv run python -m
 tests.fixtures.suggested_questions` (these only) after any change to a prompt, a Screen Context builder, the platform
 brief, the seeded data or the walkthrough; it needs `APP_LLM_API_KEY` (and the live endpoint and model settings, which
-must match RECORDED_MODEL and RECORDED_BASE_URL) in the environment or `.env`. `--offline` never goes live.
+must match RECORDED_MODEL and RECORDED_BASE_URL) in the environment or `.env`. `--offline` never goes live. `--scripted-assistant` authors explicitly labelled scripted Assistant fixtures
+without any provider calls; it does not replace a live model eval.
 
 The script seeds a fresh database exactly as the replay tests do and runs one Analysis Run, whose AI steps (priority
 narratives, Research Tilts, rationale and memo) replay what is recorded and go live, with recording on, for anything
@@ -179,10 +180,18 @@ def live_model() -> Model | None:
     return build_live_model(env.model_copy(update={"llm_mode": "live"}))
 
 
-def record(*, offline: bool = False) -> int:
+def record(*, offline: bool = False, scripted_assistant: bool = False) -> int:
     """Records every request the demo makes that has no recording, and removes the recordings it no longer makes.
     `offline`: nothing goes live, so a request with no recording fails."""
-    live = None if offline else live_model()
+    live: Model | None
+    if scripted_assistant:
+        from tests.fixtures.scripted_suggested_questions import ScriptedSuggestedModel
+        from tests.scripted import ByTask
+
+        # Explicitly offline: pipeline steps must already replay; only Assistant fixtures are authored here.
+        live = ByTask(ReplayModel(RECORDINGS, model_name=RECORDED_MODEL), assistant_answer=ScriptedSuggestedModel())
+    else:
+        live = None if offline else live_model()
     if live is None and not offline:
         return 1
     client = ReplayOrRecord(live)
@@ -217,4 +226,4 @@ def record(*, offline: bool = False) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(record(offline="--offline" in sys.argv[1:]))
+    sys.exit(record(offline="--offline" in sys.argv[1:], scripted_assistant="--scripted-assistant" in sys.argv[1:]))

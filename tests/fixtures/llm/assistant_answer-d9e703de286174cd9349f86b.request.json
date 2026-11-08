@@ -1,0 +1,19 @@
+{
+  "model": "scripted-assistant-fixture-v4",
+  "parts": [
+    {
+      "args": {
+        "portfolio_id": "C001"
+      },
+      "part_kind": "tool-call",
+      "tool_call_id": "pyd_ai_3a1288fc2a8c4dafa121cbf6360e6ac3",
+      "tool_name": "look_up_portfolio"
+    }
+  ],
+  "prompt_version": "assistant_answer@v4",
+  "task": "assistant_answer",
+  "usage": {
+    "input_tokens": 7930,
+    "output_tokens": 5
+  }
+}
