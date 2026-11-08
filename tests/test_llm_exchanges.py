@@ -366,7 +366,17 @@ def test_governance_reports_capture_health(app, login):
         db.commit()
     r = login("auditor").get("/api/governance")
     assert r.status_code == 200
-    assert r.json()["capture_health"] == {"total": 3, "live": 1, "recorded": 2, "errors": 1, "unreferenced": 1}
+    assert r.json()["capture_health"] == {
+        "total": 3,
+        "live": 1,
+        "recorded": 2,
+        "errors": 1,
+        "unreferenced": 1,
+        "trajectories": 3,  # each a Trajectory of one
+        "assistant_turns": 0,
+        "assistant_turns_with_lookups": 0,
+        "lookup_share": None,
+    }
 
 
 def test_capture_health_is_all_zero_on_an_empty_database(login):
@@ -376,4 +386,8 @@ def test_capture_health_is_all_zero_on_an_empty_database(login):
         "recorded": 0,
         "errors": 0,
         "unreferenced": 0,
+        "trajectories": 0,
+        "assistant_turns": 0,
+        "assistant_turns_with_lookups": 0,
+        "lookup_share": None,
     }

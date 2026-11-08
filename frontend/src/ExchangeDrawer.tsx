@@ -12,9 +12,50 @@ const TABS = ["Prompt", "Schema", "Reply", "Metadata", "Used by"] as const;
 type Tab = (typeof TABS)[number];
 
 /** The Exchange as recorded, hash included. The Audit Events and verdicts that reference it are context, not part of the record. */
-export function exchangeRecord(d: Detail): Omit<Detail, "used_by" | "grounding"> {
-  const { used_by: _usedBy, grounding: _grounding, ...record } = d;
+export function exchangeRecord(d: Detail): Omit<Detail, "used_by" | "grounding" | "trajectory_exchange_ids"> {
+  const { used_by: _usedBy, grounding: _grounding, trajectory_exchange_ids: _steps, ...record } = d;
   return record;
+}
+
+/** Where this Exchange sits in its LLM Trajectory: its 1-based step, the step count and its neighbours' ids. */
+function trajectoryStep(d: Detail): { step: number; of: number; previous: number | null; next: number | null } {
+  const ids = d.trajectory_exchange_ids;
+  const i = Math.max(0, ids.indexOf(d.id));
+  return { step: i + 1, of: ids.length, previous: ids[i - 1] ?? null, next: ids[i + 1] ?? null };
+}
+
+function TrajectoryNav({ d, onNavigate }: { d: Detail; onNavigate: (id: number) => void }) {
+  const t = trajectoryStep(d);
+  if (t.of <= 1) return null;
+  return (
+    <nav aria-label="LLM Trajectory" className="flex items-center gap-2 rounded-xl border border-line px-2 py-1.5">
+      <span className="text-ink-2">
+        Step{" "}
+        <span className="mono">
+          {t.step} of {t.of}
+        </span>{" "}
+        in this Trajectory
+      </span>
+      <button
+        type="button"
+        className="btn btn-sm ml-auto"
+        disabled={t.previous === null}
+        onClick={() => t.previous !== null && onNavigate(t.previous)}
+        aria-label={t.previous === null ? "Previous step" : `Previous step, LLM Exchange ${t.previous}`}
+      >
+        ← Previous
+      </button>
+      <button
+        type="button"
+        className="btn btn-sm"
+        disabled={t.next === null}
+        onClick={() => t.next !== null && onNavigate(t.next)}
+        aria-label={t.next === null ? "Next step" : `Next step, LLM Exchange ${t.next}`}
+      >
+        Next →
+      </button>
+    </nav>
+  );
 }
 
 /** Save one Exchange as pretty-printed JSON, exactly the fields the API returned. */
@@ -126,6 +167,16 @@ function Body({ d, tab, canLineage }: { d: Detail; tab: Tab; canLineage: boolean
           <Block label="System text">{d.system_text}</Block>
           <h3 className="font-semibold">User prompt</h3>
           <Block label="User prompt">{d.user_prompt}</Block>
+          {d.messages !== null && (
+            <>
+              <h3 className="font-semibold">Request messages</h3>
+              <p className="text-ink-2">
+                Everything sent with this request, verbatim, including the tool calls earlier steps made and the results
+                the model was given.
+              </p>
+              <Block label="Request messages">{JSON.stringify(d.messages, null, 2)}</Block>
+            </>
+          )}
         </>
       );
     case "Schema":
@@ -177,6 +228,8 @@ function Body({ d, tab, canLineage }: { d: Detail; tab: Tab; canLineage: boolean
           </Field>
           <Field label="Tokens in">{replayed ? "n/a (replayed)" : (t.input?.toLocaleString("en-US") ?? "—")}</Field>
           <Field label="Tokens out">{replayed ? "n/a (replayed)" : (t.output?.toLocaleString("en-US") ?? "—")}</Field>
+          <Field label="Trajectory">{d.trajectory_id ?? "— (a Trajectory of one)"}</Field>
+          <Field label="Position">{d.trajectory_position ?? 0}</Field>
           <Field label="Hash">{d.hash}</Field>
         </dl>
       );
@@ -229,8 +282,19 @@ function Body({ d, tab, canLineage }: { d: Detail; tab: Tab; canLineage: boolean
   }
 }
 
-/** Everything recorded about one LLM Exchange. The same drawer opens from the feed and from the lineage graph. */
-export function ExchangeDrawer({ id, canLineage, onClose }: { id: number; canLineage: boolean; onClose: () => void }) {
+/** Everything recorded about one LLM Exchange. The same drawer opens from the feed and from the lineage graph.
+ * `onNavigate` opens another Exchange of the same Trajectory in its place. */
+export function ExchangeDrawer({
+  id,
+  canLineage,
+  onClose,
+  onNavigate,
+}: {
+  id: number;
+  canLineage: boolean;
+  onClose: () => void;
+  onNavigate: (id: number) => void;
+}) {
   const [tab, setTab] = useState<Tab>("Prompt");
   const q = useQuery({
     queryKey: ["llm-exchange", id],
@@ -270,6 +334,7 @@ export function ExchangeDrawer({ id, canLineage, onClose }: { id: number; canLin
               Download JSON
             </button>
           </div>
+          <TrajectoryNav d={d} onNavigate={onNavigate} />
           <div role="tablist" aria-label="Exchange sections" className="seg">
             {TABS.map((t) => (
               <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>

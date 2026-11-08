@@ -1146,6 +1146,41 @@
             }
           },
           {
+            "name": "trajectory_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trajectory Id"
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "trajectory",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`trajectory`: page by LLM Trajectory, newest first, so `total`, `limit` and `offset` count Trajectories and each one's matching Exchanges come together in position order.",
+              "title": "Group"
+            },
+            "description": "`trajectory`: page by LLM Trajectory, newest first, so `total`, `limit` and `offset` count Trajectories and each one's matching Exchanges come together in position order."
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -2519,6 +2554,29 @@
           "unreferenced": {
             "type": "integer",
             "title": "Unreferenced"
+          },
+          "trajectories": {
+            "type": "integer",
+            "title": "Trajectories"
+          },
+          "assistant_turns": {
+            "type": "integer",
+            "title": "Assistant Turns"
+          },
+          "assistant_turns_with_lookups": {
+            "type": "integer",
+            "title": "Assistant Turns With Lookups"
+          },
+          "lookup_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lookup Share"
           }
         },
         "type": "object",
@@ -2527,7 +2585,11 @@
           "live",
           "recorded",
           "errors",
-          "unreferenced"
+          "unreferenced",
+          "trajectories",
+          "assistant_turns",
+          "assistant_turns_with_lookups",
+          "lookup_share"
         ],
         "title": "CaptureHealth"
       },
@@ -3501,6 +3563,13 @@
             },
             "type": "array",
             "title": "Grounding"
+          },
+          "trajectory_exchange_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Trajectory Exchange Ids"
           }
         },
         "type": "object",
@@ -3527,7 +3596,8 @@
           "trajectory_position",
           "hash",
           "used_by",
-          "grounding"
+          "grounding",
+          "trajectory_exchange_ids"
         ],
         "title": "ExchangeDetail"
       },
@@ -3661,6 +3731,10 @@
             ],
             "title": "Trajectory Position"
           },
+          "trajectory_length": {
+            "type": "integer",
+            "title": "Trajectory Length"
+          },
           "hash": {
             "type": "string",
             "title": "Hash"
@@ -3703,6 +3777,7 @@
           "error",
           "trajectory_id",
           "trajectory_position",
+          "trajectory_length",
           "hash",
           "recommendation_id",
           "portfolio_id"

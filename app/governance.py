@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app import audit, config_service, grounding, prompts
 from app.db import (
+    AssistantTurnRow,
     AuditEventRow,
     FixtureRunRow,
     GroundingResultRow,
@@ -78,6 +79,10 @@ class CaptureHealth(BaseModel):
     recorded: int  # replayed from recordings
     errors: int  # Exchanges whose call failed at the transport level
     unreferenced: int  # Exchanges no Audit Event points at: a step failed to anchor its call, or an event was removed
+    trajectories: int  # LLM Trajectories stored; a row written before Trajectories counts as a Trajectory of one
+    assistant_turns: int  # every Question asked, whatever its outcome
+    assistant_turns_with_lookups: int  # turns whose Trajectory made at least one tool call
+    lookup_share: float | None  # with_lookups / turns; None until a Question has been asked
 
 
 def capture_health(db: Session) -> CaptureHealth:
@@ -95,8 +100,28 @@ def capture_health(db: Session) -> CaptureHealth:
     ):
         referenced.update(exchange_id for exchange_id, _ in audit.exchange_references(raw))
     stored = set(db.scalars(select(LlmExchangeRow.id)))
+    trajectories, legacy = db.execute(
+        select(
+            func.count(func.distinct(LlmExchangeRow.trajectory_id)),
+            func.count().filter(LlmExchangeRow.trajectory_id.is_(None)),
+        )
+    ).one()
+    from app.assistant_agent import Trajectory  # local: the Assistant imports Screen Context, which imports this module
+
+    turns = with_lookups = 0
+    for (summary,) in db.execute(select(AssistantTurnRow.trajectory_json)):  # None: refused before the model was asked
+        turns += 1
+        with_lookups += summary is not None and Trajectory.model_validate_json(summary).made_lookups()
     return CaptureHealth(
-        total=total, live=live, recorded=recorded, errors=errors, unreferenced=len(stored - referenced)
+        total=total,
+        live=live,
+        recorded=recorded,
+        errors=errors,
+        unreferenced=len(stored - referenced),
+        trajectories=trajectories + legacy,
+        assistant_turns=turns,
+        assistant_turns_with_lookups=with_lookups,
+        lookup_share=with_lookups / turns if turns else None,
     )
 
 

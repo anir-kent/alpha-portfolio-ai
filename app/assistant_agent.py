@@ -37,6 +37,10 @@ class Trajectory(BaseModel):
     input_tokens: int
     output_tokens: int
 
+    def made_lookups(self) -> bool:
+        """Whether the turn's model called at least one tool."""
+        return any(step.kind == "tool_call" for step in self.steps)
+
 
 @dataclass
 class AssistantDeps:

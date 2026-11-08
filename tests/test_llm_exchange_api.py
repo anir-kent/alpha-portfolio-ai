@@ -247,7 +247,16 @@ def test_stream_without_a_resume_header_pushes_only_exchanges_that_complete_whil
 
 
 @pytest.mark.parametrize("role", ROLES)
-@pytest.mark.parametrize("path", ["/api/llm/exchanges", "/api/llm/exchanges/1", "/api/llm/exchanges/stream"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/llm/exchanges",
+        "/api/llm/exchanges?group=trajectory",
+        "/api/llm/exchanges?trajectory_id=abc",
+        "/api/llm/exchanges/1",
+        "/api/llm/exchanges/stream",
+    ],
+)
 def test_every_exchange_endpoint_is_gated_on_llm_read_and_refusals_are_audited(app, login, role, path):
     add_exchange(app, ts="2026-01-01T00:00:00.000000Z")
     app.state.settings.llm_stream_max_seconds = 0.1
@@ -259,7 +268,8 @@ def test_every_exchange_endpoint_is_gated_on_llm_read_and_refusals_are_audited(a
     with app.state.session_factory() as db:
         denied = db.scalars(select(AuditEventRow).where(AuditEventRow.type == "access_denied")).all()
     assert any(
-        json.loads(d.payload_json) == {"permission": "llm:read", "method": "GET", "path": path} and d.actor_role == role
+        json.loads(d.payload_json) == {"permission": "llm:read", "method": "GET", "path": path.split("?")[0]}
+        and d.actor_role == role
         for d in denied
     )
 
@@ -346,3 +356,85 @@ def test_stream_opens_with_its_cursor_so_a_client_that_saw_nothing_still_resumes
     app.state.settings.llm_stream_max_seconds = 0.2
     r = login("auditor").get("/api/llm/exchanges/stream")
     assert r.text.startswith(f"id: {last}\n\n")
+
+
+# --- Trajectories (ADR-0010) ---------------------------------------------------------------------------------------
+
+
+def trajectory(app, *users: str) -> list[int]:
+    """One LLM Trajectory of `len(users)` requests through capture over a scripted Model; returns its Exchange ids. A
+    request whose text is "fail" fails as an unreachable provider does and is stored as an error Exchange."""
+    import httpx
+
+    from app.exchanges import ModelLlm
+    from app.llm import LlmError, LlmRequest, LlmResponse
+    from tests.scripted import ScriptedModel
+
+    def echo(request):
+        return (
+            httpx.ConnectError("provider unavailable")
+            if request.user_prompt == "fail"
+            else {"echo": request.user_prompt}
+        )
+
+    steps = ModelLlm(ScriptedModel(then=echo), app.state.session_factory, mode="recorded").trajectory()
+    ids = []
+    for user in users:
+        outcome: LlmResponse | LlmError
+        try:
+            outcome = steps.complete(
+                LlmRequest("assistant_answer", "assistant_answer@v5", "system", user, {"type": "object"})
+            )
+        except LlmError as e:
+            outcome = e
+        assert outcome.exchange_id is not None
+        ids.append(outcome.exchange_id)
+    return ids
+
+
+def test_grouped_list_pages_by_trajectory_with_its_steps_in_position_order(app, login):
+    single = add_exchange(app, ts="2026-01-01T00:00:00.000000Z")
+    first = trajectory(app, "look up", "answer")
+    second = trajectory(app, "look up", "look up again", "answer")
+    auditor = login("auditor")
+
+    body = auditor.get("/api/llm/exchanges", params={"group": "trajectory", "limit": 1}).json()
+    assert body["total"] == 3  # Trajectories, not Exchanges
+    assert [x["id"] for x in body["items"]] == second  # newest Trajectory first, its steps in position order
+    assert [x["trajectory_position"] for x in body["items"]] == [0, 1, 2]
+    assert {x["trajectory_length"] for x in body["items"]} == {3}
+
+    rest = auditor.get("/api/llm/exchanges", params={"group": "trajectory", "limit": 5, "offset": 1}).json()
+    assert [x["id"] for x in rest["items"]] == [*first, single]
+    assert rest["items"][-1]["trajectory_id"] is None and rest["items"][-1]["trajectory_length"] == 1
+
+
+def test_a_trajectory_filter_returns_just_that_trajectory_and_the_other_filters_still_apply(app, login):
+    add_exchange(app, ts="2026-01-01T00:00:00.000000Z")
+    ids = trajectory(app, "look up", "answer")
+    trajectory(app, "another")
+    auditor = login("auditor")
+    tid = auditor.get(f"/api/llm/exchanges/{ids[0]}").json()["trajectory_id"]
+
+    body = auditor.get("/api/llm/exchanges", params={"trajectory_id": tid}).json()
+    assert body["total"] == 2 and sorted(x["id"] for x in body["items"]) == ids
+    assert auditor.get("/api/llm/exchanges", params={"trajectory_id": tid, "outcome": "error"}).json()["total"] == 0
+    grouped = auditor.get("/api/llm/exchanges", params={"group": "trajectory", "task": "insight_extraction"}).json()
+    assert grouped["total"] == 1 and grouped["items"][0]["trajectory_length"] == 1
+
+
+def test_a_filter_that_matches_part_of_a_trajectory_shows_that_part_with_the_full_length(app, login):
+    ids = trajectory(app, "look up", "fail")
+    trajectory(app, "answer")
+    body = login("auditor").get("/api/llm/exchanges", params={"group": "trajectory", "outcome": "error"}).json()
+    assert body["total"] == 1
+    assert [(x["id"], x["trajectory_position"], x["trajectory_length"]) for x in body["items"]] == [(ids[1], 1, 2)]
+
+
+def test_the_drawer_detail_names_the_trajectory_steps_so_an_auditor_can_walk_them(app, login):
+    single = add_exchange(app, ts="2026-01-01T00:00:00.000000Z")
+    ids = trajectory(app, "look up", "look up again", "answer")
+    auditor = login("auditor")
+    middle = auditor.get(f"/api/llm/exchanges/{ids[1]}").json()
+    assert middle["trajectory_position"] == 1 and middle["trajectory_exchange_ids"] == ids
+    assert auditor.get(f"/api/llm/exchanges/{single}").json()["trajectory_exchange_ids"] == [single]

@@ -247,7 +247,9 @@ export function LineagePage({ canViewExchange = false }: { canViewExchange?: boo
           )}
         </Panel>
       )}
-      {exchangeId !== null && <ExchangeDrawer id={exchangeId} canLineage onClose={() => setExchangeId(null)} />}
+      {exchangeId !== null && (
+        <ExchangeDrawer id={exchangeId} canLineage onClose={() => setExchangeId(null)} onNavigate={setExchangeId} />
+      )}
     </div>
   );
 }

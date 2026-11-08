@@ -20,7 +20,13 @@ type Filters = {
 type StreamState = "idle" | "connecting" | "live" | "reconnecting" | "unavailable";
 
 const EMPTY: Filters = { task: "", prompt_version: "", mode: "", outcome: "", date_from: "", date_to: "" };
-const TASKS = ["insight_extraction", "research_tilt", "recommendation_narrative", "priority_narrative"];
+const TASKS = [
+  "insight_extraction",
+  "research_tilt",
+  "recommendation_narrative",
+  "priority_narrative",
+  "assistant_answer",
+];
 const PAGE = 50;
 const STREAM_URL = "/api/llm/exchanges/stream";
 
@@ -55,6 +61,31 @@ export function mergeRows(live: Exchange[], fetched: Exchange[]): Exchange[] {
   for (const x of live) byId.set(x.id, x);
   for (const x of fetched) byId.set(x.id, x);
   return [...byId.values()].sort((a, b) => b.id - a.id);
+}
+
+/** One LLM Trajectory as listed: its loaded steps in position order, and how many steps it holds in all (more than are
+ * loaded when a filter matched only some of them). A row written before Trajectories is a Trajectory of one. */
+type TrajectoryGroup = { key: string; steps: Exchange[]; length: number };
+
+/** Rows grouped by Trajectory, newest Trajectory first, each one's steps in position order. */
+function groupByTrajectory(rows: Exchange[]): TrajectoryGroup[] {
+  const byKey = new Map<string, Exchange[]>();
+  for (const x of rows) {
+    const key = x.trajectory_id ?? `exchange-${x.id}`;
+    byKey.set(key, [...(byKey.get(key) ?? []), x]);
+  }
+  const newest = (g: TrajectoryGroup) => Math.max(...g.steps.map((x) => x.id));
+  return [...byKey.entries()]
+    .map(([key, steps]) => {
+      steps.sort((a, b) => (a.trajectory_position ?? 0) - (b.trajectory_position ?? 0) || a.id - b.id);
+      // A streamed step can arrive before the rest of its Trajectory is stored: its position still says it is not alone.
+      const length = Math.max(
+        steps.length,
+        ...steps.map((x) => Math.max(x.trajectory_length, (x.trajectory_position ?? 0) + 1)),
+      );
+      return { key, steps, length };
+    })
+    .sort((a, b) => newest(b) - newest(a));
 }
 
 function useLiveTail(
@@ -149,6 +180,185 @@ function Linked({ x, canLineage, canPortfolio }: { x: Exchange; canLineage: bool
   );
 }
 
+type RowLinks = { canLineage: boolean; canPortfolio: boolean };
+
+function Latency({ x }: { x: Exchange }) {
+  if (x.telemetry === "not_available_replayed") return <Figure value={undefined} replayed />;
+  return x.latency_ms === null ? <>—</> : <>{x.latency_ms.toLocaleString("en-US")} ms</>;
+}
+
+function ModePill({ mode }: { mode: Exchange["mode"] }) {
+  return (
+    <Pill
+      tone={mode === "live" ? "pos" : "warn"}
+      title={mode === "live" ? "Sent to the live endpoint" : "Replayed from a committed recording"}
+    >
+      {mode}
+    </Pill>
+  );
+}
+
+/** One Exchange: a Trajectory of one, or one step of an expanded Trajectory (`step` set, the row indented). */
+function ExchangeRow({
+  x,
+  step,
+  onOpen,
+  canLineage,
+  canPortfolio,
+}: { x: Exchange; step?: string; onOpen: (id: number) => void } & RowLinks) {
+  const replayed = x.telemetry === "not_available_replayed";
+  const failed = x.outcome === "error";
+  const t = tokenCounts(x.usage);
+  return (
+    <tr
+      style={{ boxShadow: failed ? "inset 3px 0 var(--color-neg)" : undefined }}
+      className={`cursor-pointer ${failed ? "!bg-neg-bg" : ""} ${step ? "bg-sunken" : ""}`}
+      onClick={(e) => {
+        if (!(e.target as HTMLElement).closest("a, button")) onOpen(x.id);
+      }}
+    >
+      <td className="num">
+        {step && <span className="mono mr-2 text-ink-3">step {step}</span>}
+        <button
+          type="button"
+          className="mono text-brand hover:underline"
+          aria-label={step ? `Open Exchange ${x.id}, step ${step}` : `Open Exchange ${x.id}`}
+          onClick={() => onOpen(x.id)}
+        >
+          {x.id}
+        </button>
+      </td>
+      <td className="mono whitespace-nowrap">{x.created_at}</td>
+      <td className="mono">{x.task}</td>
+      <td className="mono">{x.prompt_version}</td>
+      <td className="mono">{x.model ?? "—"}</td>
+      <td>
+        <ModePill mode={x.mode} />
+      </td>
+      <td>
+        {failed ? (
+          <>
+            <Pill tone="neg">
+              <Icon name="alert" size={10} />
+              failed
+            </Pill>
+            <span className="mt-1 block max-w-xs break-words text-[0.8461rem] text-neg">
+              {x.error ?? "No error text recorded"}
+            </span>
+          </>
+        ) : (
+          <Pill tone="pos">ok</Pill>
+        )}
+      </td>
+      <td className="num">
+        <Latency x={x} />
+      </td>
+      <td className="num">
+        <Figure value={t.input} replayed={replayed} />
+      </td>
+      <td className="num">
+        <Figure value={t.output} replayed={replayed} />
+      </td>
+      <td>
+        <Linked x={x} canLineage={canLineage} canPortfolio={canPortfolio} />
+      </td>
+    </tr>
+  );
+}
+
+const sum = (values: (number | undefined)[]) =>
+  values.every((v) => v === undefined) ? undefined : values.reduce<number>((a, v) => a + (v ?? 0), 0);
+
+/** A multi-step Trajectory as one expandable group: a summary row, then its steps in position order when expanded. */
+function TrajectoryRows({
+  g,
+  expanded,
+  onToggle,
+  onOpen,
+  ...links
+}: { g: TrajectoryGroup; expanded: boolean; onToggle: () => void; onOpen: (id: number) => void } & RowLinks) {
+  const first = g.steps[0];
+  const replayed = g.steps.every((x) => x.telemetry === "not_available_replayed");
+  const failedAt = g.steps.find((x) => x.outcome === "error");
+  const tokens = g.steps.map((x) => tokenCounts(x.usage));
+  const latency = sum(g.steps.map((x) => x.latency_ms ?? undefined));
+  const linked = g.steps.find((x) => x.recommendation_id || x.portfolio_id) ?? first;
+  const partial = g.steps.length < g.length;
+  return (
+    <>
+      <tr
+        className={`cursor-pointer ${failedAt ? "!bg-neg-bg" : ""}`}
+        style={{ boxShadow: failedAt ? "inset 3px 0 var(--color-neg)" : "inset 3px 0 var(--color-brand)" }}
+        onClick={(e) => {
+          if (!(e.target as HTMLElement).closest("a, button")) onToggle();
+        }}
+      >
+        <td className="num whitespace-nowrap">
+          <button
+            type="button"
+            className="text-brand hover:underline"
+            aria-expanded={expanded}
+            aria-label={`${expanded ? "Collapse" : "Expand"} Trajectory of ${g.length} steps`}
+            onClick={onToggle}
+          >
+            <span aria-hidden>{expanded ? "▾" : "▸"}</span> <span className="mono">{g.length}</span> steps
+          </button>
+          {partial && (
+            <span className="mono block text-[0.7692rem] text-ink-3" title="The filters match only some steps">
+              {g.steps.length} of {g.length} match
+            </span>
+          )}
+        </td>
+        <td className="mono whitespace-nowrap">{first.created_at}</td>
+        <td className="mono">{first.task}</td>
+        <td className="mono">{first.prompt_version}</td>
+        <td className="mono">{first.model ?? "—"}</td>
+        <td>
+          <ModePill mode={first.mode} />
+        </td>
+        <td>
+          {failedAt ? (
+            <Pill tone="neg">
+              <Icon name="alert" size={10} />
+              failed at step {(failedAt.trajectory_position ?? 0) + 1}
+            </Pill>
+          ) : (
+            <Pill tone="pos">ok</Pill>
+          )}
+        </td>
+        <td className="num">
+          {replayed ? (
+            <Figure value={undefined} replayed />
+          ) : latency === undefined ? (
+            "—"
+          ) : (
+            `${latency.toLocaleString("en-US")} ms`
+          )}
+        </td>
+        <td className="num">
+          <Figure value={sum(tokens.map((t) => t.input))} replayed={replayed} />
+        </td>
+        <td className="num">
+          <Figure value={sum(tokens.map((t) => t.output))} replayed={replayed} />
+        </td>
+        <td>
+          <Linked x={linked} {...links} />
+        </td>
+      </tr>
+      {expanded &&
+        g.steps.map((x) => (
+          <ExchangeRow
+            key={x.id}
+            x={x}
+            step={`${(x.trajectory_position ?? 0) + 1}/${g.length}`}
+            onOpen={onOpen}
+            {...links}
+          />
+        ))}
+    </>
+  );
+}
+
 export function ExchangesPage({ permissions }: { permissions: string[] }) {
   const qc = useQueryClient();
   const [form, setForm] = useState<Filters>(EMPTY);
@@ -157,6 +367,13 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
   const [tail, setTail] = useState(false);
   const [live, setLive] = useState<Exchange[]>([]);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleGroup = (key: string) =>
+    setExpanded((open) => {
+      const next = new Set(open);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   // The open Exchange is the one the Assistant is asked about; the server includes it only for llm:read.
   usePublishScreen(
     { kind: "exchanges", entity_ids: {}, selected_item: openId === null ? null : String(openId) },
@@ -176,6 +393,7 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
             outcome: applied.outcome || undefined,
             date_from: toIso(applied.date_from),
             date_to: toIsoEnd(applied.date_to),
+            group: "trajectory",
             limit,
           },
         },
@@ -200,7 +418,10 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
   };
 
   const rows = useMemo(() => mergeRows(live, list.data?.items ?? []), [live, list.data]);
-  const total = list.data ? Math.max(list.data.total, rows.length) : rows.length;
+  const groups = useMemo(() => groupByTrajectory(rows), [rows]);
+  const fetchedGroups = useMemo(() => groupByTrajectory(list.data?.items ?? []).length, [list.data]);
+  // The list pages by Trajectory, so its total counts Trajectories.
+  const total = list.data ? Math.max(list.data.total, groups.length) : groups.length;
   const pill = STATE_PILL[state];
 
   const set = (k: keyof Filters) => (e: { target: { value: string } }) =>
@@ -218,12 +439,13 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
 
   const canLineage = permissions.includes("audit:read");
   const canPortfolio = permissions.includes("portfolio:read");
+  const links = { canLineage, canPortfolio };
 
   return (
     <div>
       <PageHeader
         title="LLM Exchanges"
-        sub="Every prompt sent to the model and every reply, as recorded. Newest first."
+        sub="Every prompt sent to the model and every reply, as recorded, grouped by LLM Trajectory. Newest first."
         actions={
           <>
             <span role="status" aria-live="polite">
@@ -340,7 +562,8 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
           title="Exchanges"
           aside={
             <>
-              Showing <span className="mono">{rows.length}</span> of <span className="mono">{total}</span>, newest first
+              Showing <span className="mono">{groups.length}</span> of <span className="mono">{total}</span>{" "}
+              Trajectories (<span className="mono">{rows.length}</span> Exchanges), newest first
             </>
           }
           flush
@@ -362,77 +585,20 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((x) => {
-                const replayed = x.telemetry === "not_available_replayed";
-                const failed = x.outcome === "error";
-                const t = tokenCounts(x.usage);
-                return (
-                  <tr
-                    key={x.id}
-                    style={{ boxShadow: failed ? "inset 3px 0 var(--color-neg)" : undefined }}
-                    className={`cursor-pointer ${failed ? "!bg-neg-bg" : ""}`}
-                    onClick={(e) => {
-                      if (!(e.target as HTMLElement).closest("a, button")) setOpenId(x.id);
-                    }}
-                  >
-                    <td className="num">
-                      <button
-                        type="button"
-                        className="mono text-brand hover:underline"
-                        aria-label={`Open Exchange ${x.id}`}
-                        onClick={() => setOpenId(x.id)}
-                      >
-                        {x.id}
-                      </button>
-                    </td>
-                    <td className="mono whitespace-nowrap">{x.created_at}</td>
-                    <td className="mono">{x.task}</td>
-                    <td className="mono">{x.prompt_version}</td>
-                    <td className="mono">{x.model ?? "—"}</td>
-                    <td>
-                      <Pill
-                        tone={x.mode === "live" ? "pos" : "warn"}
-                        title={x.mode === "live" ? "Sent to the live endpoint" : "Replayed from a committed recording"}
-                      >
-                        {x.mode}
-                      </Pill>
-                    </td>
-                    <td>
-                      {failed ? (
-                        <>
-                          <Pill tone="neg">
-                            <Icon name="alert" size={10} />
-                            failed
-                          </Pill>
-                          <span className="mt-1 block max-w-xs break-words text-[0.8461rem] text-neg">
-                            {x.error ?? "No error text recorded"}
-                          </span>
-                        </>
-                      ) : (
-                        <Pill tone="pos">ok</Pill>
-                      )}
-                    </td>
-                    <td className="num">
-                      {replayed ? (
-                        <Figure value={undefined} replayed />
-                      ) : x.latency_ms === null ? (
-                        "—"
-                      ) : (
-                        <>{x.latency_ms.toLocaleString("en-US")} ms</>
-                      )}
-                    </td>
-                    <td className="num">
-                      <Figure value={t.input} replayed={replayed} />
-                    </td>
-                    <td className="num">
-                      <Figure value={t.output} replayed={replayed} />
-                    </td>
-                    <td>
-                      <Linked x={x} canLineage={canLineage} canPortfolio={canPortfolio} />
-                    </td>
-                  </tr>
-                );
-              })}
+              {groups.map((g) =>
+                g.length === 1 && g.steps.length === 1 ? (
+                  <ExchangeRow key={g.key} x={g.steps[0]} onOpen={setOpenId} {...links} />
+                ) : (
+                  <TrajectoryRows
+                    key={g.key}
+                    g={g}
+                    expanded={expanded.has(g.key)}
+                    onToggle={() => toggleGroup(g.key)}
+                    onOpen={setOpenId}
+                    {...links}
+                  />
+                ),
+              )}
             </tbody>
           </table>
           {rows.length === 0 && (
@@ -442,7 +608,7 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
                 : "No Exchanges match these filters."}
             </Empty>
           )}
-          {list.data && list.data.items.length < list.data.total && (
+          {list.data && fetchedGroups < list.data.total && (
             <div className="px-3 py-2">
               <button
                 type="button"
@@ -456,7 +622,9 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
           )}
         </Panel>
       )}
-      {openId !== null && <ExchangeDrawer id={openId} canLineage={canLineage} onClose={() => setOpenId(null)} />}
+      {openId !== null && (
+        <ExchangeDrawer id={openId} canLineage={canLineage} onClose={() => setOpenId(null)} onNavigate={setOpenId} />
+      )}
     </div>
   );
 }

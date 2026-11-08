@@ -135,6 +135,7 @@ Setup: `APP_ASSISTANT_QUESTION_MAX_CHARS=40`, `APP_ASSISTANT_QUESTIONS_PER_CONVE
 - [ ] Lineage: report passage -> insight -> tilt -> recommendation -> decisions
 - [ ] Verify chain reports OK
 - [ ] Governance: model card, prompt log, AI quality panel
+- [ ] Governance capture health shows "Trajectories" (every pipeline call counts as one, each Assistant Answer as one) and "Turns using lookups" as a percentage with "N of M Assistant turns"; after one Question that makes a lookup and one that does not, it reads 50% and "1 of 2"
 - [ ] Adversarial fixtures (fabricated quote, wrong number, uncited call) flagged or blocked
 
 ## LLM Exchanges
@@ -148,6 +149,8 @@ Setup: `APP_ASSISTANT_QUESTION_MAX_CHARS=40`, `APP_ASSISTANT_QUESTIONS_PER_CONVE
 - [ ] Live tail off: rows already shown stay; the list catches up on anything missed
 - [ ] Stop the API while tailing: pill goes to "Reconnecting…"; restart it and the tail resumes with nothing missing or doubled
 - [ ] Tail refused (e.g. session expired) falls back to the list with "Stream unavailable, showing list" and no rows lost
+- [ ] After a cross-screen Question from `/queue` (one lookup, then the Answer), the feed shows that Answer as one row reading "▸ 2 steps" with summed tokens and latency; expanding it shows its Exchanges as "step 1/2" then "step 2/2" in position order, and collapsing hides them. A pipeline call is still a single row with no step marker
+- [ ] "Show more" and the "Showing N of M Trajectories" count page by Trajectory, so no Trajectory is split across pages; with Outcome "Failed", a budget-exhausted or failed Answer still shows as one group, "failed at step k", with "n of m match" when only some steps failed
 
 ### Exchange drawer, download and lineage entry
 
@@ -158,6 +161,8 @@ Setup: `APP_ASSISTANT_QUESTION_MAX_CHARS=40`, `APP_ASSISTANT_QUESTIONS_PER_CONVE
 - [ ] Used by lists the referencing Audit Events and the grounding verdict, and links to the Recommendation's lineage
 - [ ] "Download JSON" saves `llm-exchange-<id>.json` containing the Exchange and its `hash`
 - [ ] A failed Exchange shows the error text and any raw reply that was captured
+- [ ] Open a step of a multi-step Trajectory: the drawer reads "Step k of n in this Trajectory"; Previous is disabled on step 1 and Next on step n, and each opens the neighbouring Exchange in place (the header and the Assistant's "LLM Exchange N" follow). An Exchange that is a Trajectory of one shows no step bar. Metadata shows the Trajectory id and position
+- [ ] On step 2 of a lookup Trajectory, Prompt's "Request messages" shows the step-1 tool call (name and arguments) and the tool result the model was given, verbatim
 - [ ] Lineage page, as a role with `llm:read`: AI nodes show "View LLM Exchange" and open the same drawer; as a role without `llm:read` the button is absent
 
 ### Advisor AI-step summary

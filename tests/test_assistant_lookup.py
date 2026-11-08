@@ -206,3 +206,20 @@ def test_committed_offline_restriction_answer_addresses_the_question(app, login)
     turn = ask(advisor, question, portfolio_screen("C004")).json()
     assert turn["outcome"] == "answered", turn
     assert "Restrictions" in turn["answer"]["markdown"] and "XOM" in turn["answer"]["markdown"]
+
+
+def test_governance_capture_health_counts_trajectories_and_the_share_of_turns_that_used_lookups(app, login, model):
+    auditor = login("auditor")
+    before = auditor.get("/api/governance").json()["capture_health"]
+    assert before["assistant_turns"] == 0 and before["lookup_share"] is None
+
+    serve(app, ScriptedModel(call("look_up_portfolio", portfolio_id="C001"), answer("Looked up."), answer("Direct.")))
+    advisor = login("advisor")
+    assert ask(advisor, "Look up Portfolio C001", QUEUE).json()["outcome"] == "answered"
+    assert ask(advisor, "What is on this screen?", QUEUE).json()["outcome"] == "answered"
+
+    health = auditor.get("/api/governance").json()["capture_health"]
+    assert health["total"] - before["total"] == 3  # two requests for the looked-up turn, one for the other
+    assert health["trajectories"] - before["trajectories"] == 2
+    assert health["assistant_turns"] == 2 and health["assistant_turns_with_lookups"] == 1
+    assert health["lookup_share"] == 0.5

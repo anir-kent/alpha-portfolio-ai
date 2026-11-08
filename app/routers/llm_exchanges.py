@@ -1,13 +1,13 @@
 import json
 import time
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, Select, String, cast, func, select
 from sqlalchemy.orm import Session
 
 from app import audit, grounding
@@ -64,6 +64,8 @@ class GroundingVerdict(BaseModel):
 class ExchangeDetail(ExchangeOut):
     used_by: list[AuditEvent]  # the Audit Events whose payload references this Exchange
     grounding: list[GroundingVerdict]
+    # Every Exchange of this one's Trajectory, in position order: the drawer's "step k of n" and its neighbours.
+    trajectory_exchange_ids: list[int]
 
 
 def _loads(text: str | None):
@@ -112,6 +114,7 @@ class ExchangeSummary(BaseModel):
     error: str | None  # a failed call's message, cut short: a summary for the row, the full text is in the detail
     trajectory_id: str | None  # None for a row written before Trajectories, which is a Trajectory of one
     trajectory_position: int | None
+    trajectory_length: int  # Exchanges in its Trajectory, whether or not the current filters match them all
     hash: str
     recommendation_id: str | None  # from the Audit Event that references this Exchange
     portfolio_id: str | None
@@ -140,7 +143,40 @@ def referencing_events(db: Session, exchange_ids: list[int]) -> dict[int, list[A
 ERROR_SUMMARY_CHARS = 200
 
 
-def exchange_summary(r: LlmExchangeRow, events: list[AuditEventRow]) -> ExchangeSummary:
+# A row written before Trajectories has no `trajectory_id` and is a Trajectory of one, keyed by its own id. The SQL
+# expression and the Python function give the same key.
+def trajectory_key_sql() -> ColumnElement[str]:
+    return func.coalesce(LlmExchangeRow.trajectory_id, "exchange-" + cast(LlmExchangeRow.id, String))
+
+
+def trajectory_key(r: LlmExchangeRow) -> str:
+    return r.trajectory_id or f"exchange-{r.id}"
+
+
+def trajectory_lengths(db: Session, rows: list[LlmExchangeRow]) -> dict[str, int]:
+    """How many Exchanges each row's Trajectory holds, by Trajectory key, whatever filters selected the rows."""
+    ids = {r.trajectory_id for r in rows if r.trajectory_id is not None}
+    counts: Iterable[tuple[str | None, int]] = (
+        db.execute(
+            select(LlmExchangeRow.trajectory_id, func.count())
+            .where(LlmExchangeRow.trajectory_id.in_(ids))
+            .group_by(LlmExchangeRow.trajectory_id)
+        ).tuples()
+        if ids
+        else []
+    )
+    found = {trajectory_id: n for trajectory_id, n in counts if trajectory_id is not None}
+    return {trajectory_key(r): found.get(r.trajectory_id or "", 1) for r in rows}
+
+
+def summaries(db: Session, rows: list[LlmExchangeRow]) -> list[ExchangeSummary]:
+    """Feed rows for `rows`, in the given order, each with its linked scope and its Trajectory's length."""
+    events = referencing_events(db, [r.id for r in rows])
+    lengths = trajectory_lengths(db, rows)
+    return [exchange_summary(r, events.get(r.id, []), lengths[trajectory_key(r)]) for r in rows]
+
+
+def exchange_summary(r: LlmExchangeRow, events: list[AuditEventRow], length: int) -> ExchangeSummary:
     return ExchangeSummary(
         error=None if r.error is None else r.error[:ERROR_SUMMARY_CHARS],
         id=r.id,
@@ -154,6 +190,7 @@ def exchange_summary(r: LlmExchangeRow, events: list[AuditEventRow]) -> Exchange
         usage=_loads(r.usage_json),
         trajectory_id=r.trajectory_id,
         trajectory_position=r.trajectory_position,
+        trajectory_length=length,
         hash=r.hash,
         telemetry="measured" if r.mode == "live" else "not_available_replayed",
         recommendation_id=next((e.recommendation_id for e in events if e.recommendation_id), None),
@@ -174,6 +211,12 @@ def list_exchanges(
     outcome: Literal["ok", "error"] | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    trajectory_id: str | None = None,
+    group: Literal["trajectory"] | None = Query(
+        None,
+        description="`trajectory`: page by LLM Trajectory, newest first, so `total`, `limit` and `offset` count "
+        "Trajectories and each one's matching Exchanges come together in position order.",
+    ),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -184,6 +227,7 @@ def list_exchanges(
         (LlmExchangeRow.prompt_version, prompt_version),
         (LlmExchangeRow.mode, mode),
         (LlmExchangeRow.outcome, outcome),
+        (LlmExchangeRow.trajectory_id, trajectory_id),
     ):
         if value:
             q = q.where(column == value)
@@ -191,10 +235,24 @@ def list_exchanges(
         q = q.where(LlmExchangeRow.created_at >= format_ts(date_from))
     if date_to:
         q = q.where(LlmExchangeRow.created_at <= format_ts(date_to))
-    total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
-    rows = db.scalars(q.order_by(LlmExchangeRow.id.desc()).limit(limit).offset(offset)).all()
-    events = referencing_events(db, [r.id for r in rows])
-    return ExchangePage(items=[exchange_summary(r, events.get(r.id, [])) for r in rows], total=total)
+    if group == "trajectory":
+        total, rows = _page_by_trajectory(db, q, limit, offset)
+    else:
+        total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
+        rows = list(db.scalars(q.order_by(LlmExchangeRow.id.desc()).limit(limit).offset(offset)))
+    return ExchangePage(items=summaries(db, rows), total=total)
+
+
+def _page_by_trajectory(db: Session, q: Select, limit: int, offset: int) -> tuple[int, list[LlmExchangeRow]]:
+    """The number of Trajectories with an Exchange matching `q`, and a page of them, newest first: each one's matching
+    Exchanges together, in position order."""
+    key = trajectory_key_sql()
+    groups = q.with_only_columns(key).group_by(key)
+    total = db.scalar(select(func.count()).select_from(groups.subquery())) or 0
+    page = list(db.scalars(groups.order_by(func.max(LlmExchangeRow.id).desc()).limit(limit).offset(offset)))
+    order = {k: i for i, k in enumerate(page)}
+    matching = db.scalars(q.where(key.in_(page))).all() if page else []
+    return total, sorted(matching, key=lambda r: (order[trajectory_key(r)], r.trajectory_position or 0))
 
 
 STREAM_BATCH = 100
@@ -237,7 +295,7 @@ def _exchange_events(request: Request, after_id: int | None) -> Iterator[str]:
                 if _awaiting_link(r, events):
                     break
                 ready.append(r)
-            chunks = [_sse(exchange_summary(r, events.get(r.id, []))) for r in ready]
+            chunks = [_sse(summary) for summary in summaries(db, ready)]
             rows = ready
         if rows:
             cursor = rows[-1].id
@@ -291,4 +349,20 @@ def exchange_detail(db: Session, exchange_id: int) -> ExchangeDetail | None:
         verdicts.append(
             GroundingVerdict(check_id=check_id, summary=GroundingSummary(**grounding.summarise(claims)), claims=claims)
         )
-    return ExchangeDetail(**exchange_out(row).model_dump(), used_by=[event_out(e) for e in events], grounding=verdicts)
+    steps = (
+        list(
+            db.scalars(
+                select(LlmExchangeRow.id)
+                .where(LlmExchangeRow.trajectory_id == row.trajectory_id)
+                .order_by(LlmExchangeRow.trajectory_position, LlmExchangeRow.id)
+            )
+        )
+        if row.trajectory_id is not None
+        else [row.id]
+    )
+    return ExchangeDetail(
+        **exchange_out(row).model_dump(),
+        used_by=[event_out(e) for e in events],
+        grounding=verdicts,
+        trajectory_exchange_ids=steps,
+    )
