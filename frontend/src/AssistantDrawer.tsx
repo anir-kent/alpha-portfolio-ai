@@ -104,10 +104,22 @@ const SCREEN_ROUTES: Record<Screen["kind"], (ids: Screen["entity_ids"]) => strin
   health: () => "/health",
 };
 
-/** Lookup figures retain their Portfolio source even when the Question was asked elsewhere. */
+/** The screens whose figures are named after them, wherever the Question was asked. */
+const FIGURE_ROUTES: [prefix: string, route: string][] = [
+  ["queue.", "/queue"],
+  ["approvals.", "/approvals"],
+  ["audit.", "/audit"],
+  ["model_card.", "/governance"],
+];
+
+/** Lookup figures retain their source screen even when the Question was asked elsewhere. A filtered lookup's figures
+ * are numbered by its place in the turn (`lookup.2.queue.total_rows`); a Recommendation's sit under its Portfolio. */
 function figureRoute(figure: string, screen: Screen): string {
-  const portfolio = /^portfolio\.([^.]+)\./.exec(figure);
-  return portfolio ? `/portfolios/${encodeURIComponent(portfolio[1])}` : SCREEN_ROUTES[screen.kind](screen.entity_ids);
+  const name = figure.replace(/^lookup\.\d+\./, "");
+  const portfolio = /^portfolio\.([^.]+)\./.exec(name);
+  if (portfolio) return `/portfolios/${encodeURIComponent(portfolio[1])}`;
+  const named = FIGURE_ROUTES.find(([prefix]) => name.startsWith(prefix));
+  return named ? named[1] : SCREEN_ROUTES[screen.kind](screen.entity_ids);
 }
 
 /** One Claim with its citation chips: a Report citation opens the quoted passage, an engine figure goes to the screen

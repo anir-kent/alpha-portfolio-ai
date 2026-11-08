@@ -128,8 +128,8 @@ def test_the_model_card_shows_the_latest_live_eval_results(app, login, settings,
 
 
 @pytest.mark.xfail(
-    prompts.ASSISTANT_ANSWER.label == "assistant_answer@v4",
-    reason="Live prompt-v4 eval pending: this implementation was explicitly restricted to offline model calls",
+    prompts.ASSISTANT_ANSWER.label == "assistant_answer@v5",
+    reason="Live prompt-v5 eval pending: this implementation was explicitly restricted to offline model calls",
     strict=True,
 )
 def test_the_committed_live_eval_results_are_for_the_current_prompt_version(login):

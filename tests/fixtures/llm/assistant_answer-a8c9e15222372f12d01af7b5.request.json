@@ -1,0 +1,15 @@
+{
+  "model": "scripted-assistant-fixture-v5",
+  "parts": [
+    {
+      "content": "{\"in_scope\": true, \"answer_markdown\": \"Which Suitability Rules flag this Portfolio, and why?\\n\\nNo Suitability Rules are flagged.\", \"claims\": [], \"follow_up_questions\": [\"Which screen shows the supporting figures?\"]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v5",
+  "task": "assistant_answer",
+  "usage": {
+    "input_tokens": 821,
+    "output_tokens": 27
+  }
+}

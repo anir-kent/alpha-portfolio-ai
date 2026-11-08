@@ -79,7 +79,7 @@ The Audit Event types the chain accepts:
 | `research_tilt` | `v1` | `research_tilt@v1` |
 | `recommendation_narrative` | `v1` | `recommendation_narrative@v1` |
 | `priority_narrative` | `v1` | `priority_narrative@v1` |
-| `assistant_answer` | `v4` | `assistant_answer@v4` |
+| `assistant_answer` | `v5` | `assistant_answer@v5` |
 
 <!-- END GENERATED: prompt-versions -->
 

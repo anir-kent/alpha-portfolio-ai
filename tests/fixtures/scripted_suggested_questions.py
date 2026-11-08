@@ -16,7 +16,7 @@ class ScriptedSuggestedModel(ScriptedModel):
     """Restates current engine figures and uses the Portfolio lookup for the cross-screen Suggested Question."""
 
     def __init__(self) -> None:
-        super().__init__(then=self._reply, model_name="scripted-assistant-fixture-v4")
+        super().__init__(then=self._reply, model_name="scripted-assistant-fixture-v5")
 
     def _reply(self, request: ScriptedRequest) -> object:
         question = request.user_prompt.rsplit("\n\nQUESTION\n", 1)[1]

@@ -1,0 +1,15 @@
+{
+  "model": "scripted-assistant-fixture-v5",
+  "parts": [
+    {
+      "content": "{\"in_scope\": true, \"answer_markdown\": \"What is the post-trade Suitability outcome?\\n\\nPost-trade Suitability: {\\\"rules\\\": [{\\\"findings\\\": [{\\\"actual\\\": 46.5, \\\"limit\\\": 55.0, \\\"note\\\": \\\"\\\", \\\"status\\\": \\\"pass\\\", \\\"subject\\\": \\\"equity\\\"}], \\\"message\\\": \\\"Equity is 46.5% of the Portfolio against a 55% cap for a moderate Risk Profile (pass)\\\", \\\"name\\\": \\\"Maximum equity share\\\", \\\"rule_id\\\": \\\"SR-01\\\", \\\"status\\\": \\\"pass\\\"}, {\\\"findings\\\": [{\\\"actual\\\": 11.63, \\\"limit\\\": 10.0, \\\"note\\\": \\\"\\\", \\\"status\\\": \\\"breach\\\", \\\"subject\\\": \\\"XOM\\\"}], \\\"message\\\": \\\"XOM 11.63% against a 10% single-position limit (breach)\\\", \\\"name\\\": \\\"Single-position limit\\\", \\\"rule_id\\\": \\\"SR-02\\\", \\\"status\\\": \\\"breach\\\"}, {\\\"findings\\\": [{\\\"actual\\\": 22.08, \\\"limit\\\": 30.0, \\\"note\\\": \\\"\\\", \\\"status\\\": \\\"pass\\\", \\\"subject\\\": \\\"Energy\\\"}], \\\"message\\\": \\\"Energy 22.08% including look-through against a 30% sector limit (pass)\\\", \\\"name\\\": \\\"Sector concentration\\\", \\\"rule_id\\\": \\\"SR-03\\\", \\\"status\\\": \\\"pass\\\"}, {\\\"findings\\\": [{\\\"actual\\\": 10.5, \\\"limit\\\": 4.6, \\\"note\\\": \\\"\\\", \\\"status\\\": \\\"pass\\\", \\\"subject\\\": \\\"cash\\\"}], \\\"message\\\": \\\"Cash is 10.5% against a 3% floor and 4.6% liquidity needs (pass)\\\", \\\"name\\\": \\\"Minimum cash reserve\\\", \\\"rule_id\\\": \\\"SR-04\\\", \\\"status\\\": \\\"pass\\\"}, {\\\"findings\\\": [], \\\"message\\\": \\\"No Restriction is violated\\\", \\\"name\\\": \\\"Client Restrictions\\\", \\\"rule_id\\\": \\\"SR-05\\\", \\\"status\\\": \\\"pass\\\"}, {\\\"findings\\\": [{\\\"actual\\\": 46.5, \\\"limit\\\": 40.0, \\\"note\\\": \\\"horizon is not short\\\", \\\"status\\\": \\\"pass\\\", \\\"subject\\\": \\\"equity\\\"}], \\\"message\\\": \\\"Horizon of 5 years is not short (under 5)\\\", \\\"name\\\": \\\"Horizon check\\\", \\\"rule_id\\\": \\\"SR-06\\\", \\\"status\\\": \\\"pass\\\"}, {\\\"findings\\\": [{\\\"actual\\\": 8.29, \\\"limit\\\": 15.0, \\\"note\\\": \\\"\\\", \\\"status\\\": \\\"pass\\\", \\\"subject\\\": \\\"taxable gains\\\"}], \\\"message\\\": \\\"Unrealised gains (not netted against losses) in taxable accounts are 8.29% of the Portfolio against a 15% warning line (pass)\\\", \\\"name\\\": \\\"Taxable-gain warning\\\", \\\"rule_id\\\": \\\"SR-07\\\", \\\"status\\\": \\\"pass\\\"}], \\\"status\\\": \\\"breach\\\"}\", \"claims\": [], \"follow_up_questions\": [\"Which screen shows the supporting figures?\"]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v5",
+  "task": "assistant_answer",
+  "usage": {
+    "input_tokens": 3303,
+    "output_tokens": 380
+  }
+}

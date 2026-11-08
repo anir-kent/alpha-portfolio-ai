@@ -1,0 +1,15 @@
+{
+  "model": "scripted-assistant-fixture-v5",
+  "parts": [
+    {
+      "content": "{\"in_scope\": true, \"answer_markdown\": \"What orders the Queue?\\n\\nThe Queue orders Portfolios by a deterministic priority score. Open the Queue to inspect its drift, risk, opportunity and urgency components and scores.\", \"claims\": [], \"follow_up_questions\": [\"Which screen shows the supporting figures?\"]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v5",
+  "task": "assistant_answer",
+  "usage": {
+    "input_tokens": 272,
+    "output_tokens": 41
+  }
+}

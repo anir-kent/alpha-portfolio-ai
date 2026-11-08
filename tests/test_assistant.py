@@ -76,7 +76,7 @@ def test_an_advisor_asks_on_the_portfolio_screen_and_gets_a_markdown_answer(logi
     assert turn["answer"]["follow_up_questions"] == ["Which Restriction applies?"]
     assert isinstance(turn["exchange_id"], int) and len(turn["exchange_hash"]) == 64
     (request,) = model.requests
-    assert request.prompt_version == "assistant_answer@v4"
+    assert request.prompt_version == "assistant_answer@v5"
     assert "Which asset class drives the drift?" in request.user_prompt
 
 
@@ -200,7 +200,7 @@ def test_an_answered_turn_writes_an_audit_event_anchoring_its_exchange_and_the_c
     assert event["seq"] == 1 and len(event["screen_context_hash"]) == 64
     auditor = login("auditor")
     ex = auditor.get(f"/api/llm/exchanges/{turn['exchange_id']}").json()
-    assert ex["task"] == "assistant_answer" and ex["prompt_version"] == "assistant_answer@v4"
+    assert ex["task"] == "assistant_answer" and ex["prompt_version"] == "assistant_answer@v5"
     verdict = auditor.get("/api/audit/verify").json()
     assert verdict["valid"] and verdict["exchanges_checked"] >= 1
 
