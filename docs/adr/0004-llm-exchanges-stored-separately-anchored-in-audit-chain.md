@@ -1,3 +1,7 @@
+---
+status: accepted, amended by ADR-0010 (Audit Events anchor an ordered list of Exchanges; live capture at the HTTP transport)
+---
+
 # LLM Exchanges are stored in their own append-only table and anchored in the audit chain by hash
 
 Every call through the LLM interface is captured as an LLM Exchange: live calls, replays from recordings (labelled as such) and failed calls. For a live call the Exchange stores exactly what crossed the wire: the messages sent, the raw reply text before parsing, token usage and latency; a replay can only know the request fields and the recorded content, and says so. Exchanges live in a separate append-only table rather than inside Audit Event payloads, because prompts carry report passages and portfolio figures and would bloat the chain. Each Exchange has a content hash, and the Audit Event that the calling code already writes references the Exchange by id and hash, so altering an Exchange breaks the chain check.
