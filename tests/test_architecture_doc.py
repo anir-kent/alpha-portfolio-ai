@@ -6,6 +6,7 @@ touched. To show that a generated region follows the live code, a test changes t
 edit to the document could not show that."""
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -232,6 +233,18 @@ def git(repo: Path, *args: str) -> str:
 @pytest.fixture
 def committed_doc(doc: Path) -> Path:
     """The `doc` copy, committed as the only commit of a fresh repository, so its working tree is clean."""
+    # Release metadata belongs to the fixture: publishing a new real export must not change these scenarios.
+    index = doc / "index.md"
+    text = re.sub(r"^\| Status \|.*$", "| Status | Draft |", index.read_text(), flags=re.MULTILINE)
+    before, history = text.split("### Version history", 1)
+    _, contents = history.split("## Contents", 1)
+    index.write_text(
+        before + "### Version history\n\n"
+        "| Version | Date | Commit | Status | Change |\n"
+        "| --- | --- | --- | --- | --- |\n"
+        "| 0.0 | 2026-11-07 | (this export) | Draft | Test baseline |\n\n"
+        "## Contents" + contents
+    )
     repo = doc.parents[1]
     git(repo, "init", "--quiet")
     git(repo, "add", "--all")

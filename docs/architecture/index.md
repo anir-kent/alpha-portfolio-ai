@@ -10,7 +10,7 @@ This document is living: it is updated in the same pull request as any architect
 | --- | --- |
 | Document | Portfolio Rebalancing: Architecture Document |
 | Owner | Aniruddh Kendurkar, Principal AI/Data Architect |
-| Status | Draft |
+| Status | Draft / Under ARB Review |
 | Status values | Draft / Under ARB Review / Approved |
 | Baseline | `development` after ai-portfolio-rebalancing ticket 15 |
 
@@ -25,10 +25,12 @@ This document is living: it is updated in the same pull request as any architect
 ### Version history
 
 One row per exported PDF. The commit SHA is the one stamped on that export's cover.
+`(this export)` identifies the commit containing the row, resolved to its full SHA on the cover at build time. A later documentation commit records that SHA here without rebuilding the frozen export.
 
 | Version | Date | Commit | Status | Change |
 | --- | --- | --- | --- | --- |
 | 0.0 | 2026-11-07 | (unreleased) | Draft | Skeleton and document check |
+| 0.1 | 2026-11-08 | (this export) | Draft / Under ARB Review | First frozen ARB baseline following the reviewer pass; includes arc42/C4 views, generated control tables and governance evidence. |
 
 ## Contents
 
