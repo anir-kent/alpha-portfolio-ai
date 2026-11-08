@@ -12,6 +12,7 @@ import hashlib
 import json
 import re
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -73,12 +74,19 @@ class LlmResponse:
     latency_ms: int | None = None
 
 
-def exchange_ref(outcome: "LlmResponse | LlmError | None") -> dict:
-    """What an Audit Event carries to anchor an LLM Exchange in the chain: pass the response or the error the call
-    produced. Empty if capture did not store one, so a step needs no other change to inherit capture (ADR-0004)."""
-    if outcome is None or outcome.exchange_id is None:
-        return {}
-    return {"exchange_id": outcome.exchange_id, "exchange_hash": outcome.exchange_hash}
+def exchange_ref(outcomes: "LlmResponse | LlmError | Sequence[LlmResponse | LlmError] | None") -> dict:
+    """What an Audit Event carries to anchor its LLM Trajectory in the chain: an ordered `exchanges` list of
+    `{exchange_id, exchange_hash}`. Pass the response or error of a single call (a list of one), or every outcome of a
+    Trajectory in call order. Outcomes capture did not store are left out, and with none stored the result is empty, so
+    a step needs no other change to inherit capture (ADR-0004 as amended by ADR-0010)."""
+    if outcomes is None:
+        outcomes = []
+    elif isinstance(outcomes, LlmResponse | LlmError):
+        outcomes = [outcomes]
+    anchored = [
+        {"exchange_id": o.exchange_id, "exchange_hash": o.exchange_hash} for o in outcomes if o.exchange_id is not None
+    ]
+    return {"exchanges": anchored} if anchored else {}
 
 
 class LlmClient(Protocol):

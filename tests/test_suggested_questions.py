@@ -75,7 +75,7 @@ def test_a_free_form_question_in_replay_mode_fails_with_the_replay_mode_message(
     assert turn["outcome"] == "failed" and turn["answer"] is None
     assert turn["message"] == REPLAY_MESSAGE
     (event,) = events(app, "assistant.failed")
-    assert event["reason"] == "replay_miss" and event["exchange_id"] == turn["exchange_id"]
+    assert event["reason"] == "replay_miss" and event["exchanges"][0]["exchange_id"] == turn["exchange_id"]
     (stored,) = advisor.get("/api/assistant/conversation").json()["turns"]
     assert stored["message"] == REPLAY_MESSAGE
 

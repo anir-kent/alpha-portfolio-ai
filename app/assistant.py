@@ -292,6 +292,7 @@ def ask(
     elif outcome == "refused":
         answer = Answer(markdown=OUT_OF_SCOPE_REFUSAL, claims=[], follow_up_questions=[])
     ref = exchange_ref(called)
+    final = (ref.get("exchanges") or [{}])[-1]  # the turn row and response name the request that produced the reply
     context_hash = context.hash if context else None
     db.add(
         AssistantTurnRow(
@@ -304,8 +305,8 @@ def ask(
             outcome=outcome,
             answer_json=answer.model_dump_json() if answer else None,
             grounding_check_id=check_id,
-            exchange_id=ref.get("exchange_id"),
-            exchange_hash=ref.get("exchange_hash"),
+            exchange_id=final.get("exchange_id"),
+            exchange_hash=final.get("exchange_hash"),
             failure_reason=reason,
         )
     )
@@ -340,8 +341,8 @@ def ask(
         message=_failure_message(reason) if outcome == "failed" else None,
         screen=screen,
         context_label=context.label if context else None,
-        exchange_id=ref.get("exchange_id"),
-        exchange_hash=ref.get("exchange_hash"),
+        exchange_id=final.get("exchange_id"),
+        exchange_hash=final.get("exchange_hash"),
         grounding_check_id=check_id,
     )
 

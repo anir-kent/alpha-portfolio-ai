@@ -32,12 +32,12 @@ def extraction_event(app, report_id):
 def test_recorded_extraction_is_captured_and_anchored_in_the_audit_event(app, login):
     report = upload(login("research_analyst")).json()
     payload = extraction_event(app, report["id"])
-    assert HEX64.match(payload["exchange_hash"])
+    assert HEX64.match(payload["exchanges"][0]["exchange_hash"])
 
-    r = login("auditor").get(f"/api/llm/exchanges/{payload['exchange_id']}")
+    r = login("auditor").get(f"/api/llm/exchanges/{payload['exchanges'][0]['exchange_id']}")
     assert r.status_code == 200, r.text
     ex = r.json()
-    assert ex["hash"] == payload["exchange_hash"]
+    assert ex["hash"] == payload["exchanges"][0]["exchange_hash"]
     assert (ex["mode"], ex["outcome"], ex["task"]) == ("recorded", "ok", "insight_extraction")
     assert (ex["prompt_version"], ex["model"]) == ("insight_extraction@v1", "claude-sonnet-5-5")
     assert "We are constructive on technology." in ex["user_prompt"]
@@ -53,10 +53,10 @@ def test_a_call_with_no_recording_is_captured_as_an_error_exchange(app, login):
     payload = extraction_event(app, r.json()["id"])
     assert payload["outcome"] == "failed" and payload["insight_count"] == 0
 
-    ex = login("auditor").get(f"/api/llm/exchanges/{payload['exchange_id']}").json()
+    ex = login("auditor").get(f"/api/llm/exchanges/{payload['exchanges'][0]['exchange_id']}").json()
     assert (ex["outcome"], ex["mode"]) == ("error", "recorded")
     assert "No recorded response" in ex["error"]
-    assert ex["hash"] == payload["exchange_hash"]
+    assert ex["hash"] == payload["exchanges"][0]["exchange_hash"]
     with app.state.session_factory() as db:
         assert audit.verify(db).valid
 
@@ -69,7 +69,7 @@ def test_failing_to_save_the_exchange_fails_the_ai_step_but_not_deterministic_fe
     assert r.status_code == 201
     assert r.json()["extraction_status"] == "failed" and r.json()["insights"] == []
     payload = extraction_event(app, r.json()["id"])
-    assert "exchange_id" not in payload and payload["outcome"] == "failed"
+    assert "exchanges" not in payload and payload["outcome"] == "failed"
     assert login("auditor").get("/api/audit/verify").json()["valid"]
     assert login("platform_owner").get("/api/config").status_code == 200
 
@@ -92,7 +92,7 @@ def test_exchange_table_is_created_on_an_existing_database(settings):
 @pytest.mark.parametrize("role", ROLES)
 def test_exchange_read_is_limited_to_llm_read_roles_and_refusals_are_audited(app, login, role):
     report = upload(login("research_analyst")).json()
-    exchange_id = extraction_event(app, report["id"])["exchange_id"]
+    exchange_id = extraction_event(app, report["id"])["exchanges"][0]["exchange_id"]
     r = login(role).get(f"/api/llm/exchanges/{exchange_id}")
     if role in ("auditor", "compliance_officer", "platform_owner"):
         assert r.status_code == 200
@@ -162,7 +162,11 @@ def as_role(app, role):
 def test_live_exchange_stores_what_crossed_the_wire(live_app):
     app, seen = live_app(provider_ok)
     report = upload(as_role(app, "research_analyst")).json()
-    ex = as_role(app, "auditor").get(f"/api/llm/exchanges/{extraction_event(app, report['id'])['exchange_id']}").json()
+    ex = (
+        as_role(app, "auditor")
+        .get(f"/api/llm/exchanges/{extraction_event(app, report['id'])['exchanges'][0]['exchange_id']}")
+        .json()
+    )
 
     sent = json.loads(seen[0].content)["messages"]
     assert ex["messages"] == sent
@@ -176,7 +180,9 @@ def test_live_exchange_stores_what_crossed_the_wire(live_app):
 
 def exchange_for(app, report):
     return (
-        as_role(app, "auditor").get(f"/api/llm/exchanges/{extraction_event(app, report['id'])['exchange_id']}").json()
+        as_role(app, "auditor")
+        .get(f"/api/llm/exchanges/{extraction_event(app, report['id'])['exchanges'][0]['exchange_id']}")
+        .json()
     )
 
 
@@ -233,7 +239,9 @@ def test_api_key_and_headers_never_appear_in_any_exchange_or_response(live_app):
     app, seen = live_app(lambda r: httpx.Response(401, text=f"bad credential {r.headers['authorization']}"))
     report = upload(as_role(app, "research_analyst")).json()
     assert seen[0].headers["authorization"] == f"Bearer {API_KEY}"  # it really was sent
-    ex = as_role(app, "auditor").get(f"/api/llm/exchanges/{extraction_event(app, report['id'])['exchange_id']}")
+    ex = as_role(app, "auditor").get(
+        f"/api/llm/exchanges/{extraction_event(app, report['id'])['exchanges'][0]['exchange_id']}"
+    )
     with app.state.session_factory() as db:
         stored = " ".join(str(v) for row in db.execute(text("SELECT * FROM llm_exchanges")) for v in row)
         stored += " ".join(r.payload_json for r in db.scalars(select(AuditEventRow)))
@@ -288,8 +296,8 @@ def test_verify_names_the_first_event_whose_exchange_was_altered(app, login):
     tamper(
         app,
         "update llm_exchanges set user_prompt = 'edited' where id in (:a, :b)",
-        a=e1["exchange_id"],
-        b=e2["exchange_id"],
+        a=e1["exchanges"][0]["exchange_id"],
+        b=e2["exchanges"][0]["exchange_id"],
     )
     with app.state.session_factory() as db:
         first_event = (
@@ -305,15 +313,15 @@ def test_verify_names_the_first_event_whose_exchange_was_altered(app, login):
     body = login("auditor").get("/api/audit/verify").json()
     assert body["valid"] is False
     assert body["first_broken_id"] == first_event
-    assert body["first_broken_exchange_id"] == e1["exchange_id"]
+    assert body["first_broken_exchange_id"] == e1["exchanges"][0]["exchange_id"]
     assert "Exchange" in body["reason"] and "altered" in body["reason"]
 
 
 def test_verify_detects_a_removed_exchange(app, login):
     payload = extraction_event(app, upload(login("research_analyst")).json()["id"])
-    tamper(app, "delete from llm_exchanges where id = :i", i=payload["exchange_id"])
+    tamper(app, "delete from llm_exchanges where id = :i", i=payload["exchanges"][0]["exchange_id"])
     body = login("auditor").get("/api/audit/verify").json()
-    assert body["valid"] is False and body["first_broken_exchange_id"] == payload["exchange_id"]
+    assert body["valid"] is False and body["first_broken_exchange_id"] == payload["exchanges"][0]["exchange_id"]
     assert "Exchange" in body["reason"] and "missing" in body["reason"]
 
 
@@ -324,12 +332,12 @@ def test_verify_detects_an_exchange_rewritten_with_a_matching_hash(app, login):
 
     payload = extraction_event(app, upload(login("research_analyst")).json()["id"])
     with app.state.session_factory() as db:
-        row = db.get(LlmExchangeRow, payload["exchange_id"])
+        row = db.get(LlmExchangeRow, payload["exchanges"][0]["exchange_id"])
         row.user_prompt = "rewritten"
         row.hash = exchange_digest(row)
         db.commit()
     body = login("auditor").get("/api/audit/verify").json()
-    assert body["valid"] is False and body["first_broken_exchange_id"] == payload["exchange_id"]
+    assert body["valid"] is False and body["first_broken_exchange_id"] == payload["exchanges"][0]["exchange_id"]
 
 
 def test_events_without_an_exchange_reference_are_pre_capture_not_a_break(app, login):

@@ -40,6 +40,10 @@ class ExchangeOut(BaseModel):
     telemetry: Literal["measured", "not_available_replayed"]
     outcome: Literal["ok", "error"]
     error: str | None
+    # The LLM Trajectory this request belongs to and its 0-based place in it (ADR-0010). A row written before
+    # Trajectories existed has neither and is a Trajectory of one.
+    trajectory_id: str | None
+    trajectory_position: int | None
     hash: str
 
 
@@ -86,6 +90,8 @@ def exchange_out(r: LlmExchangeRow) -> ExchangeOut:
         telemetry="measured" if r.mode == "live" else "not_available_replayed",
         outcome=r.outcome,
         error=r.error,
+        trajectory_id=r.trajectory_id,
+        trajectory_position=r.trajectory_position,
         hash=r.hash,
     )
 
@@ -104,6 +110,8 @@ class ExchangeSummary(BaseModel):
     usage: dict | None
     telemetry: Literal["measured", "not_available_replayed"]
     error: str | None  # a failed call's message, cut short: a summary for the row, the full text is in the detail
+    trajectory_id: str | None  # None for a row written before Trajectories, which is a Trajectory of one
+    trajectory_position: int | None
     hash: str
     recommendation_id: str | None  # from the Audit Event that references this Exchange
     portfolio_id: str | None
@@ -123,9 +131,9 @@ def referencing_events(db: Session, exchange_ids: list[int]) -> dict[int, list[A
     for ev in db.scalars(
         select(AuditEventRow).where(AuditEventRow.payload_json.contains('"exchange_id"')).order_by(AuditEventRow.id)
     ):
-        exchange_id = audit.exchange_reference(ev.payload_json)[0]
-        if exchange_id in wanted:
-            found.setdefault(exchange_id, []).append(ev)
+        for exchange_id, _ in audit.exchange_references(ev.payload_json):
+            if exchange_id in wanted:
+                found.setdefault(exchange_id, []).append(ev)
     return found
 
 
@@ -144,6 +152,8 @@ def exchange_summary(r: LlmExchangeRow, events: list[AuditEventRow]) -> Exchange
         outcome=r.outcome,
         latency_ms=r.latency_ms,
         usage=_loads(r.usage_json),
+        trajectory_id=r.trajectory_id,
+        trajectory_position=r.trajectory_position,
         hash=r.hash,
         telemetry="measured" if r.mode == "live" else "not_available_replayed",
         recommendation_id=next((e.recommendation_id for e in events if e.recommendation_id), None),

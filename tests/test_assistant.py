@@ -187,13 +187,19 @@ def test_out_of_scope_from_the_model_returns_the_fixed_refusal_and_never_the_mod
     assert turn["outcome"] == "refused"
     assert turn["answer"]["markdown"].startswith(REFUSAL_START) and "NVDA" not in json.dumps(turn["answer"])
     (event,) = events(app, "assistant.refused")
-    assert (event["exchange_id"], event["exchange_hash"]) == (turn["exchange_id"], turn["exchange_hash"])
+    assert (event["exchanges"][0]["exchange_id"], event["exchanges"][0]["exchange_hash"]) == (
+        turn["exchange_id"],
+        turn["exchange_hash"],
+    )
 
 
 def test_an_answered_turn_writes_an_audit_event_anchoring_its_exchange_and_the_chain_verifies(app, login, model):
     turn = ask(login("advisor"), "Why?", portfolio_screen("C001")).json()
     (event,) = events(app, "assistant.answered")
-    assert (event["exchange_id"], event["exchange_hash"]) == (turn["exchange_id"], turn["exchange_hash"])
+    assert (event["exchanges"][0]["exchange_id"], event["exchanges"][0]["exchange_hash"]) == (
+        turn["exchange_id"],
+        turn["exchange_hash"],
+    )
     assert event["seq"] == 1 and len(event["screen_context_hash"]) == 64
     auditor = login("auditor")
     ex = auditor.get(f"/api/llm/exchanges/{turn['exchange_id']}").json()
@@ -216,7 +222,7 @@ def test_a_reply_the_assistant_cannot_read_is_a_failed_turn_with_a_safe_message(
     turn = ask(login("advisor"), "Why?", portfolio_screen("C001")).json()
     assert turn["outcome"] == "failed" and turn["answer"] is None
     (event,) = events(app, "assistant.failed")
-    assert event["exchange_id"] == turn["exchange_id"]
+    assert event["exchanges"][0]["exchange_id"] == turn["exchange_id"]
 
 
 def test_asking_without_assistant_use_is_403_and_audited(app, login, model, monkeypatch):
@@ -247,7 +253,7 @@ def test_more_than_three_follow_up_questions_are_cut_to_three(login, model):
 def test_refusing_an_unreadable_portfolio_is_audited_without_an_exchange(app, login, model):
     ask(login("research_analyst"), "What does this hold?", portfolio_screen("C001"))
     (event,) = events(app, "assistant.refused")
-    assert "exchange_id" not in event and event["screen_context_hash"] is None
+    assert "exchanges" not in event and event["screen_context_hash"] is None
     assert login("auditor").get("/api/audit/verify").json()["valid"]
 
 
@@ -539,7 +545,10 @@ def test_a_raising_llm_gives_a_failed_turn_an_audit_event_with_the_error_exchang
     assert "503" not in r.text and "sk-live" not in r.text
     (event,) = events(app, "assistant.failed")
     assert isinstance(turn["exchange_id"], int)
-    assert (event["exchange_id"], event["exchange_hash"]) == (turn["exchange_id"], turn["exchange_hash"])
+    assert (event["exchanges"][0]["exchange_id"], event["exchanges"][0]["exchange_hash"]) == (
+        turn["exchange_id"],
+        turn["exchange_hash"],
+    )
     assert event["reason"] == "llm_error" and "503" not in json.dumps(event)
     auditor = login("auditor")
     ex = auditor.get(f"/api/llm/exchanges/{turn['exchange_id']}").json()
@@ -585,7 +594,7 @@ def test_an_answer_containing_a_client_name_or_email_is_rejected_as_a_failure(ap
     assert turn["outcome"] == "failed" and turn["answer"] is None and turn["message"] == FAILED
     assert other.name not in r.text and other.email.lower() not in r.text.lower()
     (event,) = events(app, "assistant.failed")
-    assert event["exchange_id"] == turn["exchange_id"] and event["reason"] == "pii"
+    assert event["exchanges"][0]["exchange_id"] == turn["exchange_id"] and event["reason"] == "pii"
     assert events(app, "grounding_checked") == []  # a rejected Answer is never checked or kept
     (read_back,) = advisor.get(CONVERSATION).json()["turns"]
     assert read_back["answer"] is None and other.name not in json.dumps(read_back)
@@ -611,7 +620,7 @@ def test_an_exchange_that_cannot_be_captured_fails_closed_and_no_answer_reaches_
     assert "perfectly good" not in r.text and "nonexistent" not in r.text and "sqlite" not in r.text.lower()
     assert turn["exchange_id"] is None  # nothing was stored, so there is nothing to point at
     (event,) = events(app, "assistant.failed")
-    assert event["reason"] == "llm_error" and "exchange_id" not in event
+    assert event["reason"] == "llm_error" and "exchanges" not in event
     (read_back,) = advisor.get(CONVERSATION).json()["turns"]
     assert read_back["outcome"] == "failed" and read_back["answer"] is None
     assert login("auditor").get("/api/audit/verify").json()["valid"]

@@ -3457,6 +3457,28 @@
             ],
             "title": "Error"
           },
+          "trajectory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory Id"
+          },
+          "trajectory_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory Position"
+          },
           "hash": {
             "type": "string",
             "title": "Hash"
@@ -3496,6 +3518,8 @@
           "telemetry",
           "outcome",
           "error",
+          "trajectory_id",
+          "trajectory_position",
           "hash",
           "used_by",
           "grounding"
@@ -3610,6 +3634,28 @@
             ],
             "title": "Error"
           },
+          "trajectory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory Id"
+          },
+          "trajectory_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory Position"
+          },
           "hash": {
             "type": "string",
             "title": "Hash"
@@ -3650,6 +3696,8 @@
           "usage",
           "telemetry",
           "error",
+          "trajectory_id",
+          "trajectory_position",
           "hash",
           "recommendation_id",
           "portfolio_id"

@@ -93,9 +93,7 @@ def capture_health(db: Session) -> CaptureHealth:
     for (raw,) in db.execute(
         select(AuditEventRow.payload_json).where(AuditEventRow.payload_json.contains('"exchange_id"'))
     ):
-        exchange_id = audit.exchange_reference(raw)[0]
-        if exchange_id is not None:
-            referenced.add(exchange_id)
+        referenced.update(exchange_id for exchange_id, _ in audit.exchange_references(raw))
     stored = set(db.scalars(select(LlmExchangeRow.id)))
     return CaptureHealth(
         total=total, live=live, recorded=recorded, errors=errors, unreferenced=len(stored - referenced)

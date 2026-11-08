@@ -55,7 +55,9 @@ class AuditEventRow(Base):
 
 class LlmExchangeRow(Base):
     """One request and reply through the LLM interface (ADR-0004). Append-only: written once, never updated or deleted.
-    `hash` is a SHA-256 over the content fields (everything but `id`); the calling step's Audit Event references it."""
+    `hash` is a SHA-256 over the content fields (everything but `id`); the calling step's Audit Event references it.
+    `trajectory_id` and `trajectory_position` place the request in its LLM Trajectory (ADR-0010); both are None on rows written
+    before Trajectories existed, each of which is a Trajectory of one."""
 
     __tablename__ = "llm_exchanges"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -75,6 +77,8 @@ class LlmExchangeRow(Base):
     latency_ms: Mapped[int | None] = mapped_column(nullable=True)
     outcome: Mapped[str] = mapped_column(String, index=True)  # ok | error (transport only)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trajectory_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    trajectory_position: Mapped[int | None] = mapped_column(nullable=True)  # 0-based within the Trajectory
     hash: Mapped[str] = mapped_column(String)
 
 
@@ -380,6 +384,7 @@ def make_session_factory(url: str) -> sessionmaker:
     _add_run_outcome_columns(engine)
     _generalise_grounding_results(engine)
     _add_turn_failure_reason(engine)
+    _add_exchange_trajectory(engine)
     return sessionmaker(engine, expire_on_commit=False)
 
 
@@ -401,6 +406,17 @@ def _add_turn_failure_reason(engine: Engine) -> None:
     with engine.begin() as conn:
         if "failure_reason" not in {c["name"] for c in inspect(conn).get_columns("assistant_turns")}:
             conn.execute(text("ALTER TABLE assistant_turns ADD COLUMN failure_reason VARCHAR"))
+
+
+def _add_exchange_trajectory(engine: Engine) -> None:
+    """An existing database predates LLM Trajectories: afterwards every Exchange has a `trajectory_id` and `trajectory_position`
+    column, empty for older rows, whose stored hashes stay valid because the digest leaves empty ones out."""
+    with engine.begin() as conn:
+        existing = {c["name"] for c in inspect(conn).get_columns("llm_exchanges")}
+        for name, kind in (("trajectory_id", "VARCHAR"), ("trajectory_position", "INTEGER")):
+            if name not in existing:
+                conn.execute(text(f"ALTER TABLE llm_exchanges ADD COLUMN {name} {kind}"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_llm_exchanges_trajectory_id ON llm_exchanges (trajectory_id)"))
 
 
 def _generalise_grounding_results(engine: Engine) -> None:

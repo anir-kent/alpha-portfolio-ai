@@ -166,6 +166,15 @@ def test_roles_without_analysis_run_are_denied_every_run_endpoint_and_the_denial
     assert sorted(json.loads(e.payload_json)["path"] for e in denied) == sorted(p for _, p in paths)
 
 
+def without_exchange_hashes(payload: dict) -> dict:
+    """An event payload minus what differs between identical runs: Exchange hashes (each covers its fresh Trajectory
+    id) and grounding check ids."""
+    kept = {k: v for k, v in payload.items() if k not in ("exchange_hash", "check_id")}
+    if "exchanges" in kept:
+        kept["exchanges"] = [ref["exchange_id"] for ref in kept["exchanges"]]
+    return kept
+
+
 def run_events(app) -> list[tuple]:
     """The Audit Events from the first run's start on, comparable across databases: a parent is its position in that
     list, or for an earlier event (the seeded research) its type and payload. An Exchange hash covers the Exchange's own
@@ -180,7 +189,7 @@ def run_events(app) -> list[tuple]:
             e.actor_kind,
             e.actor_name,
             e.actor_role,
-            {k: v for k, v in json.loads(e.payload_json).items() if k not in ("exchange_hash", "check_id")},
+            without_exchange_hashes(json.loads(e.payload_json)),
             e.portfolio_id,
             e.client_id,
             e.recommendation_id,

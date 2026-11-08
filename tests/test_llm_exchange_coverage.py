@@ -46,9 +46,13 @@ def test_every_ai_step_is_captured_and_referenced_by_its_audit_event(app, login,
     auditor = login("auditor")
     seen = set()
     for event_type, payload in step_events(app, *STEPS):
-        assert HEX64.match(payload.get("exchange_hash", "")), (event_type, payload)
-        ex = auditor.get(f"/api/llm/exchanges/{payload['exchange_id']}").json()
-        assert (ex["task"], ex["outcome"], ex["hash"]) == (STEPS[event_type], "ok", payload["exchange_hash"])
+        assert HEX64.match((payload.get("exchanges") or [{}])[0].get("exchange_hash", "")), (event_type, payload)
+        ex = auditor.get(f"/api/llm/exchanges/{payload['exchanges'][0]['exchange_id']}").json()
+        assert (ex["task"], ex["outcome"], ex["hash"]) == (
+            STEPS[event_type],
+            "ok",
+            payload["exchanges"][0]["exchange_hash"],
+        )
         seen.add(event_type)
     assert seen == set(STEPS)
     assert auditor.get("/api/audit/verify").json()["valid"]
@@ -62,8 +66,12 @@ def test_a_step_with_no_recording_is_captured_as_an_error_exchange_and_the_event
     assert {t for t, _ in events} == set(STEPS)
     for event_type, payload in events:
         assert payload["status"] == "failed"
-        ex = auditor.get(f"/api/llm/exchanges/{payload['exchange_id']}").json()
-        assert (ex["task"], ex["outcome"], ex["hash"]) == (STEPS[event_type], "error", payload["exchange_hash"])
+        ex = auditor.get(f"/api/llm/exchanges/{payload['exchanges'][0]['exchange_id']}").json()
+        assert (ex["task"], ex["outcome"], ex["hash"]) == (
+            STEPS[event_type],
+            "error",
+            payload["exchanges"][0]["exchange_hash"],
+        )
         assert "No recorded response" in ex["error"]
     assert auditor.get("/api/audit/verify").json()["valid"]
 
@@ -73,8 +81,10 @@ def test_a_reply_the_step_rejects_still_points_at_its_exchange(app, login, captu
     captured.run()
     _, payload = step_events(app, "research_tilt_proposed")[0]
     assert payload["status"] == "failed"
-    ex = login("auditor").get(f"/api/llm/exchanges/{payload['exchange_id']}").json()
-    assert ex["outcome"] == "ok" and ex["hash"] == payload["exchange_hash"]  # the transport succeeded; the step refused
+    ex = login("auditor").get(f"/api/llm/exchanges/{payload['exchanges'][0]['exchange_id']}").json()
+    assert (
+        ex["outcome"] == "ok" and ex["hash"] == payload["exchanges"][0]["exchange_hash"]
+    )  # the transport succeeded; the step refused
 
 
 def test_losing_the_exchange_store_fails_each_ai_step_but_nothing_deterministic(app, login, captured):
@@ -87,7 +97,7 @@ def test_losing_the_exchange_store_fails_each_ai_step_but_nothing_deterministic(
     events = step_events(app, *STEPS)
     assert {t for t, _ in events} == set(STEPS)
     for _, payload in events:
-        assert payload["status"] == "failed" and "exchange_id" not in payload
+        assert payload["status"] == "failed" and "exchanges" not in payload
     queue = advisor.get("/api/queue").json()["items"]
     assert queue and all(i["score"] is not None for i in queue)
     rec = advisor.get(url("C003")).json()["recommendation"]
@@ -104,7 +114,9 @@ def test_losing_the_exchange_store_fails_each_ai_step_but_nothing_deterministic(
 def test_no_client_name_or_email_ever_appears_in_a_captured_prompt(app, login, captured):
     captured.run()
     auditor = login("auditor")
-    exchange_ids = [p["exchange_id"] for _, p in step_events(app, *STEPS, "insight_extracted") if "exchange_id" in p]
+    exchange_ids = [
+        p["exchanges"][0]["exchange_id"] for _, p in step_events(app, *STEPS, "insight_extracted") if "exchanges" in p
+    ]
     assert len(set(exchange_ids)) >= 4  # extraction, tilts, memos and narratives for the seeded clients
     with app.state.session_factory() as db:
         clients = db.scalars(select(ClientRow)).all()
@@ -128,6 +140,8 @@ def test_a_run_started_from_the_cli_captures_every_ai_step_as_an_exchange_too(ap
     auditor = login("auditor")
     events = step_events(app, *STEPS)
     assert events, "the run made no AI step"
-    assert all(HEX64.match(payload.get("exchange_hash") or "") for _, payload in events), events[:1]
+    assert all(
+        HEX64.match((payload.get("exchanges") or [{}])[0].get("exchange_hash") or "") for _, payload in events
+    ), events[:1]
     verified = auditor.get("/api/audit/verify").json()
     assert verified["valid"] and verified["exchanges_checked"] == len(events)

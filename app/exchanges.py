@@ -1,14 +1,20 @@
-"""LLM Exchange capture (ADR-0004).
+"""LLM Exchange capture (ADR-0004 as amended by ADR-0010).
 
 `CapturingLlm` wraps the LLM interface, so every call site is captured without change. It stores one immutable Exchange
 per call, as soon as the reply or error is in and before the caller writes its Audit Event, and hands the Exchange id and
 hash back on the response or error so the event can reference them. If the Exchange cannot be stored the call fails
 closed with the existing `LlmError`: no model output exists without a record.
+
+Every Exchange belongs to an LLM Trajectory and records its position in it. A plain call is a Trajectory of one; calls
+made through a `trajectory()` view share one Trajectory and take successive positions.
 """
 
 import dataclasses
 import hashlib
+import itertools
 import json
+import uuid
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from urllib.parse import urlparse
 
@@ -46,11 +52,21 @@ def exchange_digest(row: LlmExchangeRow) -> str:
         row.outcome,
         row.error,
     ]
+    if (
+        row.trajectory_id is not None or row.trajectory_position is not None
+    ):  # absent on rows written before Trajectories
+        content.append([row.trajectory_id, row.trajectory_position])
     return hashlib.sha256(_canonical(content).encode()).hexdigest()
 
 
 def _dump(value) -> str | None:
     return None if value is None else _canonical(value)
+
+
+@dataclasses.dataclass
+class _Trajectory:
+    id: str = dataclasses.field(default_factory=lambda: uuid.uuid4().hex)
+    positions: Iterator[int] = dataclasses.field(default_factory=itertools.count)
 
 
 class CapturingLlm:
@@ -60,13 +76,22 @@ class CapturingLlm:
         self.mode = mode
         self.endpoint_host = endpoint_host
         self._db: Session | None = None
+        self._trajectory: _Trajectory | None = None
+
+    def _view(self, *, db: Session | None, trajectory: _Trajectory | None) -> "CapturingLlm":
+        view = CapturingLlm(self.inner, self.session_factory, mode=self.mode, endpoint_host=self.endpoint_host)
+        view._db, view._trajectory = db, trajectory
+        return view
 
     def bind(self, db: Session) -> "CapturingLlm":
         """A view of this client that stores Exchanges through the caller's own open session. A caller in the middle of
         a write transaction (the analysis run) needs this: a second connection could not write until it committed."""
-        bound = CapturingLlm(self.inner, self.session_factory, mode=self.mode, endpoint_host=self.endpoint_host)
-        bound._db = db
-        return bound
+        return self._view(db=db, trajectory=self._trajectory)
+
+    def trajectory(self) -> "CapturingLlm":
+        """A view whose calls form one new LLM Trajectory: they share its id and take positions 0, 1, 2… in call order,
+        failed calls included."""
+        return self._view(db=self._db, trajectory=_Trajectory())
 
     def _store(
         self,
@@ -77,6 +102,7 @@ class CapturingLlm:
     ) -> LlmExchangeRow:
         detail = response or error  # both carry whatever transport detail the adapter knew
         assert detail is not None, "an Exchange is stored for a response or an error"
+        trajectory = self._trajectory or _Trajectory()  # a call outside a Trajectory view is a Trajectory of one
         row = LlmExchangeRow(
             created_at=format_ts(datetime.now(UTC)),
             task=request.task,
@@ -94,6 +120,8 @@ class CapturingLlm:
             latency_ms=detail.latency_ms,
             outcome="ok" if response else "error",
             error=str(error) if error else None,
+            trajectory_id=trajectory.id,
+            trajectory_position=next(trajectory.positions),
             hash="",
         )
         row.hash = exchange_digest(row)
