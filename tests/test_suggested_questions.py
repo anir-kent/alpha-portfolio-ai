@@ -5,12 +5,12 @@ Replay tests run in the default recorded mode against the committed recordings i
 
 import pytest
 
-from app.exchanges import CapturingLlm
 from app.main import create_app
 from tests.conftest import ROLES
 from tests.fixtures.suggested_questions import demo_screens, lift_question_limits, replay_settings, seed_demo
 from tests.fixtures.suggested_questions import login as demo_login
-from tests.test_assistant import PromptCapturingLlm, answer, ask, events, model, portfolio_screen  # noqa: F401  (fixture)
+from tests.scripted import serve
+from tests.test_assistant import AnsweringModel, answer, ask, events, model, portfolio_screen  # noqa: F401  (fixture)
 from tests.test_queue import seeded  # noqa: F401  (fixture)
 
 SUGGESTED = "/api/assistant/suggested-questions"
@@ -54,8 +54,8 @@ def test_a_suggested_question_is_asked_without_the_conversation_so_far_so_its_pr
     ask(advisor, suggested, portfolio_screen("C001"))
     ask(login("advisor"), suggested, portfolio_screen("C001"))  # a fresh Conversation
     free_form, after_history, fresh = model.requests
-    assert "CONVERSATION SO FAR" not in after_history.user
-    assert after_history.user == fresh.user
+    assert "CONVERSATION SO FAR" not in after_history.user_prompt
+    assert after_history.user_prompt == fresh.user_prompt
 
 
 def test_a_suggested_question_from_another_screen_kind_still_carries_the_conversation(login, model):
@@ -63,7 +63,7 @@ def test_a_suggested_question_from_another_screen_kind_still_carries_the_convers
     (queue_question, *_) = advisor.get(SUGGESTED, params={"kind": "queue"}).json()["questions"]
     ask(advisor, "Tell me about this client", portfolio_screen("C001"))
     ask(advisor, queue_question, portfolio_screen("C001"))
-    assert "CONVERSATION SO FAR" in model.requests[1].user
+    assert "CONVERSATION SO FAR" in model.requests[1].user_prompt
 
 
 REPLAY_MESSAGE = "Only Suggested Questions work in replay mode."
@@ -93,8 +93,7 @@ def _seeded_demo_prompts(directory) -> list[tuple[str, str, str]]:
     directory.mkdir()
     app = create_app(lift_question_limits(replay_settings(directory)))
     seed_demo(app)
-    fake = PromptCapturingLlm(answer())
-    app.state.llm = CapturingLlm(fake, app.state.session_factory, mode="recorded")
+    fake = serve(app, AnsweringModel(answer()))
     asked = []
     for screen in demo_screens(app):
         for role in ROLES:
@@ -103,7 +102,9 @@ def _seeded_demo_prompts(directory) -> list[tuple[str, str, str]]:
                 before = len(fake.requests)
                 ask(c, question, screen)
                 if len(fake.requests) > before:  # a role that cannot read the screen is refused without a call
-                    asked.append((role, screen["kind"], fake.requests[-1].system + fake.requests[-1].user))
+                    asked.append(
+                        (role, screen["kind"], (fake.requests[-1].instructions or "") + fake.requests[-1].user_prompt)
+                    )
     return asked
 
 

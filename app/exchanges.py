@@ -1,14 +1,12 @@
 """LLM Exchange capture (ADR-0004 as amended by ADR-0010).
 
-Two step-facing clients share one store, so every call site is captured without change:
-- `ModelLlm`, what `build_llm` serves: the call runs on pydantic-ai over the live or replay Model, wrapped in
-  `CapturingModel`, which stores one Exchange per model request. For a live Model those are the bytes its recording
-  transport saw on the wire; a replay is captured at the model boundary and labelled `recorded`.
-- `CapturingLlm` wraps a hand-written `LlmClient` (test doubles that stub `complete`, until they move to scripted
-  Models).
-Each stores an immutable Exchange as soon as the reply or error is in and before the caller writes its Audit Event, and
-hands the Exchange id and hash back on the response or error so the event can reference them. If the Exchange cannot be
-stored the call fails closed with the existing `LlmError`: no model output exists without a record.
+`ModelLlm`, what `build_llm` serves, is the step-facing `complete`, so every call site is captured without change: the
+call runs on pydantic-ai over the live or replay Model (or a test's scripted Model), wrapped in `CapturingModel`, which
+stores one Exchange per model request. For a live Model those are the bytes its recording transport saw on the wire; a
+replay or scripted Model is captured at the model boundary. An immutable Exchange is stored as soon as the reply or
+error is in and before the caller writes its Audit Event, and the Exchange id and hash are handed back on the response
+or error so the event can reference them. If the Exchange cannot be stored the call fails closed with the existing
+`LlmError`: no model output exists without a record.
 
 Every Exchange belongs to an LLM Trajectory and records its position in it. A plain call is a Trajectory of one; calls
 made through a `trajectory()` view share one Trajectory and take successive positions.
@@ -36,7 +34,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.audit import format_ts
 from app.db import LlmExchangeRow
-from app.llm import LlmClient, LlmError, LlmRequest, LlmResponse, parse_json_reply
+from app.llm import LlmError, LlmRequest, LlmResponse, parse_json_reply
 from app.pydantic_llm import (
     RecordingModel,
     ReplayModel,
@@ -161,45 +159,6 @@ class _Capture:
             db.add(row)
             db.commit()
         return row
-
-
-class CapturingLlm(_Capture):
-    """Capture around an `LlmClient` that reports its own transport detail (the hand-written client and old replay)."""
-
-    def __init__(self, inner: LlmClient, session_factory: sessionmaker, *, mode: str, endpoint_host: str | None = None):
-        super().__init__(session_factory, mode=mode, endpoint_host=endpoint_host)
-        self.inner = inner
-
-    def _store(
-        self, request: LlmRequest, *, response: LlmResponse | None, error: LlmError | None = None
-    ) -> LlmExchangeRow:
-        detail = response or error  # both carry whatever transport detail the adapter knew
-        assert detail is not None, "an Exchange is stored for a response or an error"
-        return self._persist(
-            request,
-            model=response.model if response else getattr(self.inner, "model", None),
-            messages=detail.messages,
-            raw_reply=detail.raw_reply,
-            content=response.content if response else None,
-            usage=detail.usage,
-            latency_ms=detail.latency_ms,
-            error=str(error) if error else None,
-        )
-
-    def complete(self, request: LlmRequest) -> LlmResponse:
-        try:
-            response = self.inner.complete(request)
-        except LlmError as e:
-            try:
-                row = self._store(request, response=None, error=e)
-            except Exception:
-                raise LlmError(f"{e} (the failed call could not be recorded)") from e
-            raise LlmError(str(e), exchange_id=row.id, exchange_hash=row.hash) from e
-        try:
-            row = self._store(request, response=response)
-        except Exception as e:
-            raise LlmError(f"LLM exchange could not be recorded: {e}") from e
-        return dataclasses.replace(response, exchange_id=row.id, exchange_hash=row.hash)
 
 
 def _failure_message(error: Exception, sent: WireExchange | None) -> str:

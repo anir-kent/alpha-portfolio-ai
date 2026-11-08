@@ -1,27 +1,25 @@
 """Seam: the HTTP API (`/api/audit/verify`, `/api/llm/exchanges/{id}`). An Audit Event anchors an ordered LLM Trajectory
 and chain verification proves it complete, unaltered and in order (ADR-0004 as amended by ADR-0010). The Trajectory
-is built in the test through the capture client; no network."""
+is built in the test through capture over a scripted Model; no network."""
 
 import hashlib
 import json
 
+import httpx
 from sqlalchemy import select, text
 
 from app import audit
 from app.db import AuditEventRow, LlmExchangeRow
-from app.exchanges import CapturingLlm, exchange_digest
+from app.exchanges import ModelLlm, exchange_digest
 from app.llm import LlmError, LlmRequest, LlmResponse, exchange_ref
+from tests.scripted import ScriptedModel, ScriptedRequest
 
 
-class Echo:
-    """An inner LLM that answers every request with its own user text, or fails when the text says so."""
-
-    model = "echo-1"
-
-    def complete(self, request: LlmRequest) -> LlmResponse:
-        if request.user == "fail":
-            raise LlmError("provider unavailable")
-        return LlmResponse(content={"echo": request.user}, model=self.model, prompt_version=request.prompt_version)
+def echo(request: ScriptedRequest) -> dict | httpx.ConnectError:
+    """Answers every request with its own user text, or fails as an unreachable provider does when the text says so."""
+    if request.user_prompt == "fail":
+        return httpx.ConnectError("provider unavailable")
+    return {"echo": request.user_prompt}
 
 
 def ask(llm, user: str) -> LlmResponse | LlmError:
@@ -37,8 +35,8 @@ def anchor(app, outcomes) -> int:
         return audit.record(db, "assistant.answered", audit.Actor.system("t"), {"seq": 1, **exchange_ref(outcomes)})
 
 
-def capture(app) -> CapturingLlm:
-    return CapturingLlm(Echo(), app.state.session_factory, mode="recorded")
+def capture(app) -> ModelLlm:
+    return ModelLlm(ScriptedModel(then=echo, model_name="echo-1"), app.state.session_factory, mode="recorded")
 
 
 def trajectory_of_three(app) -> tuple[int, list[int | None]]:

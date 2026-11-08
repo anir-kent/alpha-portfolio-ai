@@ -9,7 +9,6 @@ import pytest
 from sqlalchemy import select
 
 from app.db import ClientRow
-from app.exchanges import CapturingLlm
 from tests.fixtures.assistant_eval import (
     EVAL_SET,
     LEAK,
@@ -19,15 +18,14 @@ from tests.fixtures.assistant_eval import (
     screen_context_of,
 )
 from tests.fixtures.suggested_questions import lift_question_limits, seed_demo
+from tests.scripted import serve
 
 
 @pytest.fixture
 def scripted(app):
     lift_question_limits(app.state.settings)
     seed_demo(app)
-    model = ScriptedEvalModel(EVAL_SET)
-    app.state.llm = CapturingLlm(model, app.state.session_factory, mode="recorded")
-    return model
+    return serve(app, ScriptedEvalModel(EVAL_SET))
 
 
 def by_id(report):
@@ -86,12 +84,14 @@ def test_injected_report_passages_stay_fenced_in_the_prompt(app, scripted):
     assert len(injected) >= 3
     seen = 0
     for request in scripted.requests:
-        question = question_of(request.user)
+        question = question_of(request.user_prompt)
         if question not in injected:
             continue
         seen += 1
-        assert request.user.count("<<<END_REPORT_PASSAGE>>>") == 1
-        outside = request.user.split("<<<REPORT_PASSAGE")[0] + request.user.split("<<<END_REPORT_PASSAGE>>>")[1]
+        assert request.user_prompt.count("<<<END_REPORT_PASSAGE>>>") == 1
+        outside = (
+            request.user_prompt.split("<<<REPORT_PASSAGE")[0] + request.user_prompt.split("<<<END_REPORT_PASSAGE>>>")[1]
+        )
         assert injected[question] not in outside
     assert seen == len(injected)
 
@@ -101,9 +101,9 @@ def test_a_question_naming_another_client_carries_none_of_that_clients_data(app,
     foreign = {c.question: c.foreign_client for c in EVAL_SET if c.foreign_client}
     assert foreign
     for request in scripted.requests:
-        question = question_of(request.user)
+        question = question_of(request.user_prompt)
         if question in foreign:
-            context = screen_context_of(request.user)
+            context = screen_context_of(request.user_prompt)
             assert foreign[question] not in context
 
 

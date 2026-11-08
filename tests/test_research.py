@@ -1,7 +1,6 @@
 """Seam: Report ingestion, Insight approval and the LLM interface. All LLM calls replay committed recordings
 (tests/fixtures/llm); a live smoke test runs only with LLM_LIVE=1."""
 
-import asyncio
 import json
 import os
 from pathlib import Path
@@ -11,9 +10,9 @@ from sqlalchemy import select
 
 from app import audit
 from app.db import AuditEventRow
-from app.llm import LlmRequest
 from app.research_seed import seed_research
 from tests.conftest import ROLES
+from tests.scripted import ScriptedModel, serve
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -83,26 +82,28 @@ def test_pdf_upload_keeps_page_references(login):
     assert "We prefer equities over bonds" in page.json()["text"]
 
 
-class OffLoopLlm:
-    """Replays recordings, but refuses to run on a thread with a running event loop, as `run_sync` would."""
-
-    def __init__(self, delegate):
-        self.delegate, self.calls = delegate, 0
-
-    def complete(self, request: LlmRequest):
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            self.calls += 1
-            return self.delegate.complete(request)
-        raise AssertionError("LLM called on the event loop thread")
-
-
 def test_upload_runs_insight_extraction_off_the_event_loop(app, login):
-    app.state.llm = llm = OffLoopLlm(app.state.llm)
+    model = serve(
+        app,
+        ScriptedModel(
+            {
+                "insights": [
+                    {
+                        "subject_kind": "sector",
+                        "subject": "Information Technology",
+                        "direction": "positive",
+                        "confidence": "high",
+                        "page": 1,
+                        "passage": "We are constructive on technology.",
+                    }
+                ]
+            }
+        ),
+    )
     r = upload(login("research_analyst"))
     assert r.status_code == 201, r.text
-    assert llm.calls == 1 and r.json()["extraction_status"] == "complete" and len(r.json()["insights"]) == 3
+    assert len(model.requests) == 1 and r.json()["extraction_status"] == "complete" and len(r.json()["insights"]) == 1
+    assert r.json()["insights"][0]["passage"] == "We are constructive on technology."
 
 
 def test_every_llm_call_logs_model_and_prompt_version_to_the_audit_chain(app, login):

@@ -3,10 +3,10 @@ stored audit and grounding data; the page is for the Auditor and Platform Owner 
 
 import pytest
 
-from app.exchanges import CapturingLlm
 from tests.conftest import ROLES
 from tests.fixtures.assistant_eval import EVAL_SET, ScriptedEvalModel, run_eval
 from tests.fixtures.suggested_questions import lift_question_limits, seed_demo
+from tests.scripted import serve
 from tests.test_grounding import check, ctx, report_cite  # noqa: F401  (ctx is a fixture)
 from tests.test_queue import seeded  # noqa: F401  (fixture ctx needs)
 
@@ -112,7 +112,7 @@ def test_an_unreadable_eval_results_file_leaves_the_model_card_without_eval_resu
 def test_the_model_card_shows_the_latest_live_eval_results(app, login, settings, tmp_path):
     lift_question_limits(settings)
     seed_demo(app)
-    app.state.llm = CapturingLlm(ScriptedEvalModel(EVAL_SET), app.state.session_factory, mode="recorded")
+    serve(app, ScriptedEvalModel(EVAL_SET))
     report = run_eval(app, EVAL_SET, model="scripted-eval-model")
     settings.assistant_eval_path = str(tmp_path / "assistant_eval.json")
     (tmp_path / "assistant_eval.json").write_text(report.model_dump_json())

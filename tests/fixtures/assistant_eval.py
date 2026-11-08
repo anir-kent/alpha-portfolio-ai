@@ -32,7 +32,6 @@ from sqlalchemy import select
 
 from app.db import InsightRow, RecommendationTiltRow
 from app.governance import AssistantEval, EvalCaseResult, EvalCategory, EvalExpectation
-from app.llm import LlmRequest, LlmResponse
 from app.main import create_app
 from app.prompts import ASSISTANT_ANSWER
 from app.settings import Settings
@@ -44,6 +43,7 @@ from tests.fixtures.suggested_questions import (
     replay_settings,
     seed_demo,
 )
+from tests.scripted import ScriptedModel, ScriptedRequest
 
 ROOT = Path(__file__).resolve().parents[2]
 ASK = "/api/assistant/questions"
@@ -206,35 +206,33 @@ INVENTED_FIGURE = "eval.invented_figure"
 LEAK = "Buy NVDA now."
 
 
-class ScriptedEvalModel:
+class ScriptedEvalModel(ScriptedModel):
     """Says each case's expected verdict, but misbehaves in every way a guard should catch: an out-of-scope reply
     carries advice and the case's canary, and an answer carries one Claim citing a figure the screen does not have.
-    `leak` puts a Client's name in every answer; `obey_injections` writes what each injected passage asks for."""
+    `leak` puts a Client's name in every answer; `obey_injections` writes what each injected passage asks for.
+    `requests` keeps every request received."""
 
-    def __init__(self, cases: tuple[EvalCase, ...]):
+    def __init__(self, cases: tuple[EvalCase, ...]) -> None:
         self.cases = {c.question: c for c in cases}
         self.leak: str | None = None
         self.obey_injections = False
-        self.requests: list[LlmRequest] = []
+        super().__init__(then=self._reply_to, model_name="scripted-eval-model")
 
-    def complete(self, request: LlmRequest) -> LlmResponse:
-        self.requests.append(request)
-        question = question_of(request.user)
+    def _reply_to(self, request: ScriptedRequest) -> dict:
+        question = question_of(request.user_prompt)
         case = self.cases[question]
         if case.expect == "refused":
-            reply = {"in_scope": False, "answer_markdown": f"{LEAK} {case.canary or ''}", "claims": []}
-        else:
-            context = screen_context_of(request.user)
-            figures = json.loads(_FIGURES.findall(context)[-1])
-            claims = [{"text": "The engine computed 42.", "citations": [{"kind": "engine", "figure": INVENTED_FIGURE}]}]
-            if figures:
-                name, value = next(iter(figures.items()))
-                claims.insert(0, {"text": f"It is {value}.", "citations": [{"kind": "engine", "figure": name}]})
-            markdown = f"An answer from the screen. {self.leak or ''}"
-            if self.obey_injections and case.canary:
-                markdown += f" {case.canary}"
-            reply = {"in_scope": True, "answer_markdown": markdown, "claims": claims, "follow_up_questions": []}
-        return LlmResponse(reply, "scripted-eval-model", request.prompt_version)
+            return {"in_scope": False, "answer_markdown": f"{LEAK} {case.canary or ''}", "claims": []}
+        context = screen_context_of(request.user_prompt)
+        figures = json.loads(_FIGURES.findall(context)[-1])
+        claims = [{"text": "The engine computed 42.", "citations": [{"kind": "engine", "figure": INVENTED_FIGURE}]}]
+        if figures:
+            name, value = next(iter(figures.items()))
+            claims.insert(0, {"text": f"It is {value}.", "citations": [{"kind": "engine", "figure": name}]})
+        markdown = f"An answer from the screen. {self.leak or ''}"
+        if self.obey_injections and case.canary:
+            markdown += f" {case.canary}"
+        return {"in_scope": True, "answer_markdown": markdown, "claims": claims, "follow_up_questions": []}
 
 
 class _Planted:
