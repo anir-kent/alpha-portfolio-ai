@@ -1,6 +1,7 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+# also the architecture document's PDF and HTML (build/architecture/), never committed
 build/
 dist/
 wheels/

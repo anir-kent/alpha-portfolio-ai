@@ -327,3 +327,12 @@ def test_findings_on_measures_name_the_trade_lines_that_drive_them(advisor, comp
     item = compliance.get("/api/approvals").json()["items"][0]
     by_subject = {f["subject"]: f for r in item["rules"] for f in r["findings"]}
     assert {line["symbol"] for line in by_subject["equity"]["affected_trade_lines"]} >= {"XLK"}
+
+
+def test_lowering_thresholds_before_the_committee_step_adds_it(advisor, compliance, login):
+    set_config(login, NEVER)
+    r_id = breach_pending(advisor)  # needs Compliance only while nothing is high-impact
+    assert rec(advisor, "C003")["approval"]["required_steps"] == ["advisor", "compliance"]
+    set_config(login, {"approval_thresholds": {"turnover_pct": 15, "trade_line_pct": 10}})
+    out = act(compliance, "compliance", r_id, "approve", "Exception accepted")
+    assert out.status_code == 200 and out.json()["recommendation"]["status"] == "pending_committee"

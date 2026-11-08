@@ -110,6 +110,10 @@ A Claim whose Report citations quote a real Report page verbatim, whose engine c
 One request and reply through the single LLM interface: the full prompt, reply schema, raw reply, model, prompt version, timing, token counts and outcome, labelled live or recorded. An Audit Event can point to the Exchange that produced it.
 _Avoid_: Log entry, trace, transcript
 
+**LLM Trajectory**:
+The ordered LLM Exchanges, with the lookups the model asked for between them, that together produce one outcome such as one Answer; a single-call step is a Trajectory of one Exchange.
+_Avoid_: Trace, run, session, chain
+
 ### Assistant
 
 **Assistant**:

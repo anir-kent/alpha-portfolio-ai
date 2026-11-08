@@ -15,6 +15,7 @@ Run these before every commit. All must pass.
 | Frontend lint (ESLint recommended, typescript-eslint recommended, React hooks) | `cd frontend && npm run lint` |
 | Frontend format (Prettier, 120 columns) | `cd frontend && npm run format` (`format:check` in CI) |
 | Frontend types | `cd frontend && npm run typecheck` |
+| Architecture document (sections, links, Mermaid, generated regions) | `uv run python -m scripts.architecture_doc check` (`regenerate` rewrites the generated tables; `--no-mermaid` without Node) |
 
 **Pre-commit** runs the lint, format and type checks on each commit (`.pre-commit-config.yaml`). Set it up once with `uv run pre-commit install`. `uv run pre-commit run --all-files` runs them all by hand. The tests are too slow for a commit hook, so they run in CI.
 

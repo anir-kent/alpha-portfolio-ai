@@ -1,5 +1,7 @@
 # Run Step progress is held in process memory, and only one Analysis Run is in flight at a time
 
+> Corrected by ADR-0009: the scoring transaction commits when the run's first Audit Event is written, and recording then commits one Audit Event at a time. The claim below that the scoring part "stays one transaction", and the reason given for rejecting separate commits, describe the intended design, not the code.
+
 The Run Analysis modal shows each Run Step as soon as the backend finishes it. That progress is kept in an in-memory registry inside the API process and pushed to the browser over server-sent events. It is not written to the database while the run is going. The scoring part of an Analysis Run stays one transaction. That transaction holds SQLite's only write lock until it commits (ADR-0004), so no other session can write progress rows that a reader would see. The `analysis_runs` row is created and committed before scoring starts, which gives the browser a durable id at once. When the run ends, its outcome and Run Step results are saved on that row: completed, completed with warnings, failed, or interrupted. One process-wide lock lets only one Analysis Run be in flight. A second start returns `409` with the id of the run in flight, and the modal attaches to it.
 
 ## Considered Options
