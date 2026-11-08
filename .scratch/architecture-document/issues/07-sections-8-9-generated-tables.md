@@ -4,9 +4,28 @@
 
 **Blocked by:** 01, 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Generators for prompt versions, Audit Event types, config defaults and usage limits import live modules; seam tests extended
-- [ ] §8 prose covers each concept listed above, linking ADRs where they decide it
-- [ ] §9 lists every ADR with a one-line summary and link; no restated content
-- [ ] `check` green; changing a prompt version in code makes `check` fail until regenerated
+- [x] Generators for prompt versions, Audit Event types, config defaults and usage limits import live modules; seam tests extended
+- [x] §8 prose covers each concept listed above, linking ADRs where they decide it
+- [x] §9 lists every ADR with a one-line summary and link; no restated content
+- [x] `check` green; changing a prompt version in code makes `check` fail until regenerated
+
+## Comments
+
+**2026-11-08, implementation (Claude).**
+- Four new generators in `scripts/architecture_doc.py`, each importing the live module:
+  - `prompt-versions` (`app.prompts.ALL`), in §8.3;
+  - `audit-event-types` (`app.audit.EVENT_TYPES`), in §8.2;
+  - `config-defaults` (`app.config_service.Config()` defaults), in §8.6;
+  - `assistant-limits` (the numeric `assistant_*` fields of `app.settings.Settings`), in a new §8.10.
+- `assistant-limits` reads defaults from the class, never an instance, so it never reads the environment or `.env`. Its Effect column comes from `Field(description=...)`. The five Assistant settings' inline comments moved into those descriptions, with values unchanged. The generator fails if a limit has no description.
+- Seam tests: one parametrized test per region. It changes the region's source in code (monkeypatching the module attribute), then asserts that `check` reports the region as stale and that `regenerate` fixes it. **This departs from the spec's wording** ("simulated with a temporary document copy whose marked region is edited"). An edit to the document cannot show that a region follows the code, and that is the acceptance criterion here. The test module docstring says so.
+- End-to-end proof outside the tests: bumping `assistant_answer` to v4 in `app/prompts.py` made the real CLI `check` exit 1 with `08-crosscutting-concepts.md:74: stale generated region 'prompt-versions'`. The change was then reverted.
+- §9 indexes ADR-0001 to ADR-0009. ADR-0009 now exists and corrects ADR-0005, so it is listed, although the ticket says 0001–0008. A Relation column shows corrections and where §8 applies each ADR.
+- §8.2 and §8.6 state plainly that **configuration changes write no Audit Event**. That is true of the code. Worth a Risks entry (ticket 08) or a code ticket.
+- Review fixes:
+  - Standards: domain names, the docstring states the outcome, the prompt test folded into the parametrized test, the limits filter widened to every numeric type.
+  - Spec: the run SSE stream also polls, keeps alive and times out; fencing is scoped to the Assistant prompt; Tolerance Bands merge per profile, not per field.
+
+**Verified:** `architecture_doc check` OK with Mermaid on; `tests/test_architecture_doc.py` 18 passed; full pytest 635 passed, 1 skipped; ruff, ruff format and mypy clean.

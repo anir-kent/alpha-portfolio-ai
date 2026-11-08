@@ -1,6 +1,9 @@
 """Seam: the architecture document build command (`scripts/architecture_doc.py`), driven from the outside through its
-`check`, `regenerate` and `build` modes. Assertions are on the exit status, the reported problems and, for `build`, the text of the PDF. Edits are made on
-`tmp_path` copies of the document, so the real document is never touched."""
+`check`, `regenerate` and `build` modes. Assertions are on the exit status, the reported problems and the document text
+or, for `build`, the text of the PDF. Edits are made on `tmp_path` copies of the document, so the real document is never
+touched. To show that a generated region follows the live code, a test changes the code source itself for one test
+(monkeypatching the module attribute the region is generated from: a prompt version, an event type, a default); an
+edit to the document could not show that."""
 
 import os
 import shutil
@@ -8,8 +11,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from pydantic import Field
 from pypdf import PdfReader
 
+from app import audit, config_service, prompts, settings
 from scripts.architecture_doc import main
 
 REPO = Path(__file__).resolve().parents[1]
@@ -82,13 +87,70 @@ def test_regenerate_makes_a_stale_document_pass_check_and_leaves_everything_outs
     assert code == 0, out
 
 
+SOURCE_CHANGES = {  # region -> (a change to its source in code, a row only the changed source renders)
+    "prompt-versions": (
+        lambda mp: mp.setattr(
+            prompts,
+            "ALL",
+            tuple(
+                prompts.Prompt(prompt.name, "v4", prompt.system) if prompt.name == "assistant_answer" else prompt
+                for prompt in prompts.ALL
+            ),
+        ),
+        "| `assistant_answer` | `v4` | `assistant_answer@v4` |",
+    ),
+    "audit-event-types": (
+        lambda mp: mp.setattr(audit, "EVENT_TYPES", (*audit.EVENT_TYPES, "chain_sealed")),
+        "| `chain_sealed` |",
+    ),
+    "config-defaults": (
+        lambda mp: mp.setattr(
+            config_service,
+            "Config",
+            type("Config", (config_service.Config,), {"__annotations__": {"sla_days": int}, "sla_days": 45}),
+        ),
+        "| `sla_days` | 45 |",
+    ),
+    "assistant-limits": (
+        lambda mp: mp.setattr(
+            settings,
+            "Settings",
+            type(
+                "Settings",
+                (settings.Settings,),
+                {
+                    "__annotations__": {"assistant_questions_per_hour": int},
+                    "assistant_questions_per_hour": Field(10, description="Questions an hour"),
+                },
+            ),
+        ),
+        "| `APP_ASSISTANT_QUESTIONS_PER_HOUR` | 10 |",
+    ),
+}
+
+
+@pytest.mark.parametrize("region", SOURCE_CHANGES)
+def test_a_code_change_behind_a_generated_region_fails_check_until_regenerated(region, doc, monkeypatch, capsys):
+    change, new_row = SOURCE_CHANGES[region]
+    change(monkeypatch)
+
+    code, out = run(capsys, "check", "--doc-dir", str(doc), "--no-mermaid")
+    assert code == 1
+    assert f"stale generated region '{region}'" in out
+
+    assert run(capsys, "regenerate", "--doc-dir", str(doc))[0] == 0
+    assert new_row in (doc / "08-crosscutting-concepts.md").read_text()
+    code, out = run(capsys, "check", "--doc-dir", str(doc), "--no-mermaid")
+    assert code == 0, out
+
+
 def test_check_reports_a_broken_relative_link_with_its_file_and_line(doc, capsys):
     edit(doc / "09-architecture-decisions.md", "../adr/0001-deterministic", "../adr/0099-deterministic")
 
     code, out = run(capsys, "check", "--doc-dir", str(doc), "--no-mermaid")
 
     assert code == 1
-    assert "09-architecture-decisions.md:5: broken link '../adr/0099-deterministic-engine-owns-numbers.md'" in out
+    assert "09-architecture-decisions.md:7: broken link '../adr/0099-deterministic-engine-owns-numbers.md'" in out
 
 
 def test_check_reports_a_link_to_a_heading_that_does_not_exist(doc, capsys):

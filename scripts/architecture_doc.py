@@ -39,7 +39,7 @@ from typing import NamedTuple
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
-from app import rbac
+from app import audit, config_service, prompts, rbac, settings
 
 DOC_DIR = Path(__file__).resolve().parents[1] / "docs" / "architecture"
 MERMAID_CLI = "@mermaid-js/mermaid-cli@12.2.0"
@@ -165,8 +165,60 @@ def rbac_matrix() -> str:
     return "\n".join(lines)
 
 
+def prompt_versions() -> str:
+    """Every registered prompt (`app.prompts.ALL`) with the version logged on its LLM Exchanges and recording keys."""
+    lines = ["| Prompt | Version | Logged as |", "| --- | --- | --- |"]
+    lines += [f"| `{prompt.name}` | `{prompt.version}` | `{prompt.label}` |" for prompt in prompts.ALL]
+    return "\n".join(lines)
+
+
+def audit_event_types() -> str:
+    """Every Audit Event type `app.audit.record` accepts (`app.audit.EVENT_TYPES`), in declaration order."""
+    lines = ["| Audit Event type |", "| --- |"]
+    lines += [f"| `{event_type}` |" for event_type in audit.EVENT_TYPES]
+    return "\n".join(lines)
+
+
+def _cell(value: object) -> str:
+    return f"{value:g}" if isinstance(value, float) else str(value)
+
+
+def _setting_rows(path: str, value: object) -> list[str]:
+    """One row per setting; a group whose members are all plain values (a band, a per-profile map) stays on one row."""
+    if not isinstance(value, dict):
+        return [f"| `{path}` | {_cell(value)} |"]
+    if not any(isinstance(setting, dict) for setting in value.values()):
+        return [f"| `{path}` | " + ", ".join(f"{key} {_cell(setting)}" for key, setting in value.items()) + " |"]
+    return [row for key, setting in value.items() for row in _setting_rows(f"{path}.{key}", setting)]
+
+
+def config_defaults() -> str:
+    """The business config a fresh database starts with: the defaults of `app.config_service.Config`."""
+    lines = ["| Setting | Default |", "| --- | --- |"]
+    for key, value in config_service.Config().model_dump().items():
+        lines += _setting_rows(key, value)
+    return "\n".join(lines)
+
+
+def assistant_limits() -> str:
+    """One row per Assistant limit, as shipped: every numeric `assistant_*` field of `app.settings.Settings` (so the
+    eval-file path is not one), with its default value and its description. The values are the code's defaults, never
+    this machine's environment. Raises ValueError for a limit with no description."""
+    lines = ["| Setting | Default | Effect |", "| --- | --- | --- |"]
+    for name, field in settings.Settings.model_fields.items():
+        if name.startswith("assistant_") and field.annotation in (int, float):
+            if not field.description:
+                raise ValueError(f"Settings.{name} needs a description: it is the Effect column of 'assistant-limits'")
+            lines.append(f"| `APP_{name.upper()}` | {field.default} | {field.description} |")
+    return "\n".join(lines)
+
+
 GENERATORS: dict[str, Callable[[], str]] = {
     "rbac-matrix": rbac_matrix,
+    "prompt-versions": prompt_versions,
+    "audit-event-types": audit_event_types,
+    "config-defaults": config_defaults,
+    "assistant-limits": assistant_limits,
 }
 
 REGION = re.compile(
