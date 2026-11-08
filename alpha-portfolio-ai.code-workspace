@@ -1,0 +1,33 @@
+{
+	"folders": [
+		{
+			"name": "🏠 Root",
+			"path": "."
+		},
+		{
+			"name": "🏗️ App",
+			"path": "./app"
+		},
+		{
+			"name": "🌐 Web",
+			"path": "./frontend"
+		},
+		{
+			"name": "🗄️ data",
+			"path": "./data"
+		},
+		{
+			"name": "📜scripts",
+			"path": "./scripts"
+		},
+		{
+			"name": "📖 Documentation",
+			"path": "./docs"
+		},
+		{
+			"name": "📝 Specifications",
+			"path": "./specs"
+		}
+	],
+	"settings": {}
+}
