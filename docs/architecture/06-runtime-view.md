@@ -5,8 +5,8 @@ Four flows carry the platform's critical behaviour. Each diagram shows two kinds
 Some rules hold in all four flows:
 
 - **One appended event, one commit.** Every Audit Event is appended under a process-wide lock and committed on its own ([ADR-0002](../adr/0002-hash-chained-append-only-audit-log.md)). Business rows flushed before that event commit with it.
-- **The LLM Exchange comes first.** Every LLM call goes through one capturing wrapper. The wrapper stores the LLM Exchange, for a reply or an error, before the caller writes the Audit Event that references it by id and hash. If the LLM Exchange cannot be stored, the call fails ([ADR-0004](../adr/0004-llm-exchanges-stored-separately-anchored-in-audit-chain.md)).
-- **One call per LLM step.** Each step is a single, schema-bound request, with no agent loop and no retrieval ([ADR-0007](../adr/0007-llm-steps-are-single-schema-bound-calls.md)).
+- **The LLM Exchange comes first.** Every model request goes through one capturing wrapper. The wrapper stores the LLM Exchange, for a reply or an error, before the caller writes the Audit Event that references it by id and hash. If the LLM Exchange cannot be stored, the request fails ([ADR-0004](../adr/0004-llm-exchanges-stored-separately-anchored-in-audit-chain.md)).
+- **One call per pipeline step, a bounded Trajectory per Answer.** Insight extraction, the Research Tilt and both narratives are each a single, schema-bound request with no tools. Only an Assistant Answer may take several model requests: read-only lookups and at most one self-correction, within the request budget. Either way the step's one Audit Event anchors its whole LLM Trajectory, in order ([ADR-0010](../adr/0010-assistant-is-a-bounded-read-only-agent-on-pydantic-ai.md)).
 - **Replay misses fail.** In recorded mode a prompt with no recording raises a replay miss. It is never answered with a guess, and it fails the call like any other LLM error.
 - **Denials are audited.** A role that lacks the endpoint's permission gets `403`, and an `access_denied` Audit Event is written. The diagrams leave this out.
 
@@ -252,60 +252,73 @@ sequenceDiagram
 
 ## 6.4 Assistant Question
 
-Any role holding `assistant:use` can ask the Assistant about the screen in view. The browser sends only the Question and a screen identity (kind, entity ids, selected item), never screen data. The server rebuilds the Screen Context through the same service the screen itself uses, filtered by the user's permissions. The context carries Client ids only, never names or emails. Each Question gets exactly one LLM call. Every turn, whether answered, refused or failed, is stored append-only in the login session's Conversation, with one Audit Event ([ADR-0006](../adr/0006-assistant-conversations-persisted-and-audited.md)).
+Any role holding `assistant:use` can ask the Assistant about the screen in view. The browser sends only the Question and a screen identity (kind, entity ids, selected item), never screen data. The server rebuilds the Screen Context through the same service the screen itself uses, filtered by the user's permissions. The context carries Client ids only, never names or emails.
+
+The Assistant is a bounded, read-only agent ([ADR-0010](../adr/0010-assistant-is-a-bounded-read-only-agent-on-pydantic-ai.md)). When the Question needs data from another screen, the model asks for a lookup, and the server answers it with that screen's Screen Context, built by the same permission-checked builder. A lookup the user could not open on screen returns "not found or not permitted for your role", which does not say whether the item exists. Each draft reply passes an output validator. A draft that names a Client fails the turn at once. A draft with ungrounded Claims is sent back once with the failing Claims, and anything still ungrounded after that is kept and flagged. Every model request is captured as an LLM Exchange of one Trajectory, at most `APP_ASSISTANT_REQUEST_LIMIT` (6) per Answer. Every turn, whether answered, refused or failed, is stored append-only in the login session's Conversation with one Audit Event that anchors the whole Trajectory ([ADR-0006](../adr/0006-assistant-conversations-persisted-and-audited.md)).
+
+### Assistant Trajectory
+
+A cross-screen Question asked on the Queue ("What does Portfolio C004 hold, and which Restriction does it break?") takes one lookup and, if the first draft misstates a figure, one self-correction:
 
 ```mermaid
 sequenceDiagram
   autonumber
   actor U as Any role
   participant SPA as React SPA: Assistant drawer
-  participant API as API: assistant router
   participant AS as Assistant service
-  participant SC as Screen Context builder
-  participant DB as SQLite: business rows
-  participant LLM as ModelLlm (capture) → live<br/>or replay Model
+  participant SC as Screen Context builders
+  participant AG as Agent loop (pydantic-ai)<br/>read-only tools, output validator
+  participant LLM as Capture → live<br/>or replay Model
   participant EX as LLM Exchanges
   participant G as Grounding validator
   participant AU as Audit chain
 
   U->>SPA: ask a Question on the current screen
-  SPA->>API: POST /api/assistant/questions: Question + screen identity (assistant:use)
-  API->>AS: ask()
-  AS->>DB: count this Conversation's turns, and the user's turns in the last hour
-  break Question too long, or a usage limit is hit
-    AS-->>SPA: 400 over the length limit, 429 per-Conversation limit,<br/>or 429 per-user hourly limit with Retry-After
-    Note over AS,AU: Nothing stored, no LLM call, no Audit Event
-  end
+  SPA->>AS: POST /api/assistant/questions: Question + screen identity (assistant:use)
+  AS->>AS: usage limits: 400 or 429 stores nothing, calls nothing
   AS->>SC: build(screen identity, user)
-  SC->>DB: read through the screen's own service, filtered by the user's permissions,<br/>Client ids only, list screens capped at the configured row budget
   SC-->>AS: Screen Context (text, figures, hash), or none
   alt none: unknown, or not readable by this user
-    AS->>AS: outcome refused, without an LLM call (existence is not revealed)
+    AS->>AS: refused without a model request (existence is not revealed)
   else a Screen Context
-    AS->>LLM: one request: platform brief, Screen Context (data, not instructions),<br/>recent Questions and Answers (none for a Suggested Question), the Question
-    LLM->>EX: store Exchange (own DB session, commit). If storing fails, the call fails.
-    LLM-->>AS: reply with Exchange id and hash, or LlmError
-    alt LlmError
-      AS->>AS: failed: replay_miss ("Only Suggested Questions work in replay mode") or llm_error
-    else the reply fails the schema
-      AS->>AS: failed: unreadable_reply
-    else in_scope is false
-      AS->>AS: refused: the model's text is discarded, the Out-of-Scope Refusal is shown
-    else any Client's name or email in the reply
-      AS->>AS: failed: pii (the Answer is never checked, stored or shown)
-    else in scope and clean
-      opt the reply has Claims
-        AS->>G: check the Claims against the Screen Context's figures
-        G->>AU: grounding_checked (+ claim_ungrounded per flagged Claim)
-      end
-      AS->>AS: answered, every Claim with its grounding result
+    AS->>AG: run: platform brief, Screen Context (data, not instructions),<br/>recent Questions and Answers, the Question. Request budget 6
+    AG->>LLM: request 1 (tool definitions offered)
+    LLM->>EX: Exchange, Trajectory position 0 (own session, commit)
+    LLM-->>AG: tool call look_up_portfolio(C004)
+    AG->>SC: build the Portfolio screen for this user, figures named portfolio.C004.*
+    alt the user may open it
+      SC-->>AG: that screen's Screen Context, its figures join the citable set
+    else not permitted, or does not exist
+      SC-->>AG: "not found or not permitted for your role"
+    end
+    Note over AG: The step goes into the "How I answered" summary
+    AG->>LLM: request 2 (messages so far, tool result included)
+    LLM->>EX: Exchange, position 1
+    LLM-->>AG: draft reply
+    AG->>G: output validator: PII scan, then ground each Claim against<br/>the Screen Context's and every lookup's figures
+    alt a Client's name or email in the draft
+      G-->>AG: PII: the run ends, no retry
+    else ungrounded Claims, first draft
+      G-->>AG: the failing Claims and their issues
+      AG->>LLM: request 3: "These Claims are not grounded…" (self-correction, once)
+      LLM->>EX: Exchange, position 2
+      LLM-->>AG: corrected reply, accepted whatever its grounding
+    else grounded
+      G-->>AG: accepted
+    end
+    AG-->>AS: final reply, or PII, budget_exhausted, LlmError
+    opt answered with Claims
+      AS->>G: record the grounding of the final Claims
+      G->>AU: grounding_checked (+ claim_ungrounded per flagged Claim)
     end
   end
-  AS->>DB: append the turn: Question, screen identity, context hash, outcome, Answer, Exchange ref
-  AS->>AU: assistant.answered, assistant.refused or assistant.failed (commits with the turn)
-  AS-->>SPA: the turn (a failed turn carries only a fixed message)
+  AS->>AS: append the turn: outcome, Answer, final Exchange ref, Trajectory summary
+  AS->>AU: assistant.answered, .refused or .failed, anchoring exchanges [pos 0, 1, 2] by id and hash
+  AS-->>SPA: the turn, with "How I answered": lookups, self-correction, requests used of the budget, tokens
   SPA-->>U: Answer with grounding marks, the Out-of-Scope Refusal, or the failure message
 ```
+
+Each model request of the Trajectory is stored before the next one is sent, so a turn that fails part-way still anchors every Exchange it made. The Exchanges page shows the Trajectory as one group, step k of n, to `llm:read` roles only. The Advisor sees the summary, never raw Exchanges. In recorded mode each request replays by a hash of the messages so far, so a changed lookup result misses rather than replaying a stale continuation.
 
 | Failure path | What happens |
 | --- | --- |
@@ -315,4 +328,5 @@ sequenceDiagram
 | Guardrail refusal: the model judges the Question out of scope | `refused`. The model's text is discarded and the fixed Out-of-Scope Refusal is shown. The LLM Exchange keeps what the model said. |
 | The Trajectory reaches its request budget (`APP_ASSISTANT_REQUEST_LIMIT`, default 6) | `failed` with reason `budget_exhausted`. The request beyond the budget is never sent. Every Exchange made so far is anchored, in order, in `assistant.failed`. The user is told to try a narrower Question, and "How I answered" shows the requests used against the limit. |
 | The PII backstop fires | `failed` with reason `pii`. The Answer is not grounded, stored or shown. The Audit Event records the reason; the user sees only the generic failure message. |
-| An ungrounded Claim | The Answer is shown with that Claim flagged. A `claim_ungrounded` Audit Event is written. |
+| An ungrounded Claim | The draft goes back to the model once, naming each failing Claim and its issues; "How I answered" shows the self-correction. A Claim still ungrounded after that is shown flagged, and a `claim_ungrounded` Audit Event is written. |
+| A lookup the user may not open, or of something that does not exist | The tool returns "not found or not permitted for your role" and the model is told to say so honestly, without guessing which. No data of that screen reaches the prompt. |

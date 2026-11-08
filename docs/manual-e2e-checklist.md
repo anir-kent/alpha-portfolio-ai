@@ -12,6 +12,27 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [x] Log in with username = role name (`advisor`, `compliance_officer`, ...) and the `APP_SEED_USER_PASSWORD` password
 - [ ] LLM mode known: recorded replays the first Analysis Run's AI steps on a fresh seed (anything else shows "failed", the rest still works); live calls OpenRouter
 
+
+## Interviewer demo script: the bounded agent (ADR-0010), about 10 minutes
+
+One story, four beats: the Assistant gathers its own context, shows how it answered, the Auditor sees the same Trajectory raw, and the chain proves nothing was changed. Beats 1 to 3 work in recorded mode; the self-correction and budget beats need live mode (`APP_LLM_MODE=live`, OpenRouter). Talking points are in italics.
+
+1. **A cross-screen Question from the Queue** (advisor, after Run analysis)
+   - [ ] On `/queue`, open the Assistant and ask the Suggested Question "What are the holdings and drift of Portfolio C001?". C001's Holdings are not on the Queue screen. The Answer lists them, and its Claims cite `portfolio.C001.*` figures, marked grounded. _The model chose the lookup; the server built the result through the same permission-checked, PII-free builder the Portfolio screen uses, so it sees no more than the advisor could open._
+   - [ ] Live: from `/queue` ask "What does Portfolio C004 hold, and which Restriction does it break?". The Answer names the broken Restriction, citing looked-up figures
+2. **"How I answered"**
+   - [ ] Open "How I answered": model request 1, then `look_up_portfolio` with `portfolio_id: C001` and its result summary (holdings, drift), then model request 2. "Requests: 2 / 6" and the input and output tokens are shown. _Each step is a stored LLM Exchange, not a log line; six requests is the hard cap per Answer (`APP_ASSISTANT_REQUEST_LIMIT`)._
+   - [ ] Lookups are least privilege. Live: ask "What is waiting for a Compliance Decision right now?" on `/queue`. `look_up_approvals` reports "not found or not permitted for your role", and the Answer says so without guessing. _A missing item and a forbidden one get the same reply, so existence is never revealed._
+   - [ ] Self-correction. Live, from `/portfolios/C001`: "Roughly how many millions is this Portfolio worth?" (or "Quote the exact cash weight to two decimals and the drift of every Asset Class."). If the first draft rounds or misstates a figure, "How I answered" shows "Self-correction · N grounding issues sent back" between two model requests. A Claim still ungrounded after the one retry stays flagged. _Reflection is against a deterministic guardrail, the Grounding validator, not the model grading itself, and it is capped at one retry._
+   - [ ] Budget, optional, live with `APP_ASSISTANT_REQUEST_LIMIT=2`: "Compare the holdings and drift of Portfolios C001, C002 and C003." fails with "That Question needed more lookups than one Answer may make…" and "Requests: 2 / 2". _The request beyond the budget is never sent._
+3. **The same Trajectory on the LLM Exchanges page** (log in as auditor; advisors never see raw Exchanges)
+   - [ ] `/llm-exchanges` shows the Answer as one row, "▸ 2 steps", with summed tokens and latency; expand it to "step 1/2" and "step 2/2"
+   - [ ] Open step 2: the drawer reads "Step 2 of 2 in this Trajectory". Prompt's "Request messages" shows step 1's tool call and the tool result verbatim; Previous goes to step 1. _In live mode these are the bytes that crossed the wire, captured at the `httpx` transport; replays are labelled as replays._
+   - [ ] On `/audit`, the turn's `assistant.answered` event lists both Exchanges in `exchanges`, by id and hash, in position order
+4. **Chain verification**
+   - [ ] "Verify chain" reports OK, recomputing every Audit Event and every Exchange of every Trajectory. _Editing, deleting, reordering or orphaning any step would name the first broken record (QS-A1, QS-A2)._
+   - [ ] Governance: the model card's Assistant eval shows the latest live run for `assistant_answer@v5` and its pass count (the set includes cross-screen, self-correction and not-permitted cases; per-case results are in `data/assistant_eval.json`); capture health shows "Trajectories" and "Turns using lookups"
+
 ## Advisor: queue (C001-C005 are the planted scenarios)
 
 - [x] Nav shows no Audit, Governance or Config

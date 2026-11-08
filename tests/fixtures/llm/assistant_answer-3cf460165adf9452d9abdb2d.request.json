@@ -1,15 +1,27 @@
 {
-  "model": "scripted-assistant-fixture-v5",
+  "model": "anthropic/claude-sonnet-5.5",
   "parts": [
     {
-      "content": "{\"in_scope\": true, \"answer_markdown\": \"Which asset class drives this Portfolio's drift?\\n\\nbond has the largest absolute Asset-Class Drift on this Portfolio.\\n\\n- drift.bond.actual_pct: 45.03.\\n- drift.bond.drift_pp: 0.03.\\n- drift.bond.signed_pp: 0.03.\\n- drift.bond.target_pct: 45.0.\", \"claims\": [{\"text\": \"drift.bond.actual_pct: 45.03.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.bond.actual_pct\"}]}, {\"text\": \"drift.bond.drift_pp: 0.03.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.bond.drift_pp\"}]}, {\"text\": \"drift.bond.signed_pp: 0.03.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.bond.signed_pp\"}]}, {\"text\": \"drift.bond.target_pct: 45.0.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.bond.target_pct\"}]}], \"follow_up_questions\": [\"Which screen shows the supporting figures?\"]}",
+      "content": "Checking the screen data, bond and equity drift are tied at 0.03pp each (equity signed -0.03), cash flat, giving a 0.03 portfolio drift overall\u2014neither class is really driving it since they're offsetting and both sit well inside the 3.0 warn tolerance band. I don't need to look anything up; I just need to cite the engine figures precisely as 0.03 and 3.0.\n\nSince claims taking a view on an asset class require citing a report passage, I'll leave the asset field null on these drift claims since they're pure data statements, not directional views, while keeping all the numbers matched exactly to the source.\n\n",
+      "part_kind": "thinking",
+      "signature": "CAQSpQoKEggTEAIYAjgBQgh0aGlua2luZxIMFaBUMl3/kweV/yesGgxNmvrPTocCk/XiYbYiMGS4FTTjY0Nk1vGkIn2WZQ/nC3LEsU+Z+W7xRN4xXghMHkOYSZToDirB3tUEGLWHSCrACda3bMTHzwZaocj0EGuTHvdO9GJLKVd8oGfFZdIV6ooVH5FjGlpN0sQp2ExECcbAkOp7aWlemgh6BARq+9rmCa8qT4hEPCFuDxb1AxKs0liZdqVea3LHRDDPIHkQGlWp1C6FBfaHm9L4tqeu+MQums0pqlD1oGk3oUgJ/Wa1bNsjFb+CgwHT9He+trBW5PowtON3bnpr0z77FCj8JHS2GbEoNYGIytV7Eer6So4k3DZQPmeac4BQK2yRx9oFmpVZz1QWID5Xo9CzaLv2XCeDGCUT4Vfglbrpta/gbxJ4dkXie/41I8/BR0L/ugkVrvtRgiBV5KQr4iicyR1WA1cP6IbHnu+pKD3lNC2QceZisW7vbiYOyd9Cbntqzu7DC11PeTQaP+R8qHwNZMCSRs+mNMb/RvqGnqxqj0WVV0t9TbfSAdjd5NgRXY2YfJWhglIQGoav9rLGPibAw6p8fcBoRE+hFYLWvEjig/2tKNZGCrmzmUvHOTZgzGHzy8kPtdIeDDBV8GYaShCQCmc4H6r2+KZ8Cw5+xqT97stAbTlyzyhKE2jfZOLr1WJWY1bqtnqdu0xVwcYuR0KhLce10Eyapr6vFBUCmIY+HodU0AevbuQEZFa0/khUZLU/p+d0NT/WTHM0lcZg86HyllBFsmaBAQXD/1KJk7uF01ZzbeZd/8JhUha9FohcQmwHmDPK4/Vk2bPz8y8FCAVTWpFzsT2Ki0h8BP6gqBlKfpBQ66alc8sO1eLrMjVcCZ2IfbQhDuKUYLk7lSF/XuD0kqYyXwyiKlm2Si9eDg3GQd94mlh1qR74pcX9JMiEWHefgUilPR2g1B3Axha02MIQCAuW3Ee1egljSdXBdTOFLVeF53DmzMErIAJPkKIu9lQWUiBC0PUHuN/IhEp7iE3kgrRP2ndMEWQQm1+66URUZkJ8+qJwk9DiXRP2oKTlpffUrr4DSwDe5Act3+Q2xjB96NJgFPJHPcz2BRmDzHZTVBbHVLe1QpMIVIoKeHGlZrsd/4orjCXPsedqMregpmTbq6IsMpZmYheOPS8+RgrDuI5MBfzP5kJIO1eP+n2H0K19mjiHCYD2Mkgxe04qrejcfoWuBtaNWU6DYKZ9lb4NqPmPjVtRvz0uCxCZ+GsohcEDOT3T7CmSgDalnjiADkD1GQeh+NEl3WvzLRvMr7pUTY/nokCj/YzWxKlebA7oPiLYhRSiLbs2QU1qlnLr70rNTJdBBlMtiJ17FsVMuVIFxxfk6NZcGkQKnfsSzPmFF6D9x/LtPVyD1lseWcwDL9v61NX587EHJ3aXa+FUG/U2fjI2rxaPliVzR1Yc+06J/3ahL2jTmw/X1mICwc+YJsSGex8C1vpyvKSdcqDGLOS4Esdbs0MejLvRMEAhQSmbOcCKWzexZ3ap24zFXaylZayaYJXV7ID0DD2eHqhhrplGg8RLP9hFDn6nP3HEzFv3FJed/sAcVh05kDpnejmsU0RWUYDE5D3QBJ5dLub/ks9xnaOhmIZj74nh8hjAU28Z1OMHS8Faw7VLW4SLrYp9aFUGLAKcjvkE/7jwIP/TebNFphepcqksWxjWTuNyNUdB84+wA2Mvp9FCx7oythlpJzyS9//Zputo59IYAQ==.eyJlbmRwb2ludF9zbHVnIjoiYW50aHJvcGljL2NsYXVkZS1zb25uZXQtNS41LTIwMjYwOTI4fGdvb2dsZS12ZXJ0ZXgvZ2xvYmFsIn0"
+    },
+    {
+      "content": "{\"in_scope\":true,\"answer_markdown\":\"No single Asset Class drives the drift. Bond and equity contribute equally, and they offset each other.\\n\\n- **Bond:** actual 45.03% against a 45.0% target, so drift is 0.03 pp (signed +0.03).\\n- **Equity:** actual 44.97% against a 45.0% target, so drift is 0.03 pp (signed -0.03).\\n- **Cash:** 10.0% against a 10.0% target, so drift is 0.0 pp.\\n\\nThe Portfolio Drift is 0.03 pp. That is far inside the 3.0 pp warning line of the moderate Risk Profile's tolerance band, so all three classes show status ok.\",\"claims\":[{\"text\":\"Bond drift is 0.03 pp (signed +0.03), slightly overweight against its target.\",\"asset\":null,\"citations\":[{\"kind\":\"engine\",\"figure\":\"drift.bond.drift_pp\"},{\"kind\":\"engine\",\"figure\":\"drift.bond.signed_pp\"}]},{\"text\":\"Equity drift is 0.03 pp (signed -0.03), slightly underweight against its target. This offsets the bond drift.\",\"asset\":null,\"citations\":[{\"kind\":\"engine\",\"figure\":\"drift.equity.drift_pp\"},{\"kind\":\"engine\",\"figure\":\"drift.equity.signed_pp\"}]},{\"text\":\"Cash drift is 0.0 pp.\",\"asset\":null,\"citations\":[{\"kind\":\"engine\",\"figure\":\"drift.cash.drift_pp\"}]},{\"text\":\"Portfolio Drift is 0.03 pp, well inside the 3.0 pp warning line.\",\"asset\":null,\"citations\":[{\"kind\":\"engine\",\"figure\":\"portfolio_drift_pp\"},{\"kind\":\"engine\",\"figure\":\"tolerance_band.warn\"}]}],\"follow_up_questions\":[\"Why is no Recommendation drafted for this Portfolio?\",\"Which Suitability Rules were evaluated for this Portfolio?\",\"What are the largest Holdings by weight?\"]}",
       "part_kind": "text"
     }
   ],
   "prompt_version": "assistant_answer@v5",
   "task": "assistant_answer",
   "usage": {
-    "input_tokens": 1077,
-    "output_tokens": 118
+    "details": {
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "is_byok": 0,
+      "reasoning_tokens": 348
+    },
+    "input_tokens": 8794,
+    "output_reasoning_tokens": 348,
+    "output_tokens": 1037
   }
 }

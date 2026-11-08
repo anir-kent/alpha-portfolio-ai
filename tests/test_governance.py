@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from app import prompts
 from tests.conftest import ROLES
 from tests.fixtures.assistant_eval import EVAL_SET, ScriptedEvalModel, run_eval
 from tests.fixtures.suggested_questions import lift_question_limits, seed_demo
@@ -128,11 +127,6 @@ def test_the_model_card_shows_the_latest_live_eval_results(app, login, settings,
     assert "results" not in latest  # the card carries the summary; the per-case results stay in the file
 
 
-@pytest.mark.xfail(
-    prompts.ASSISTANT_ANSWER.label == "assistant_answer@v5",
-    reason="Live prompt-v5 eval pending: this implementation was explicitly restricted to offline model calls",
-    strict=True,
-)
 def test_the_committed_live_eval_results_are_for_the_current_prompt_version(login):
     # The default settings read the committed results file; a prompt version bump fails this until the live eval
     # (`uv run python -m tests.fixtures.assistant_eval`) is re-run and its results committed.

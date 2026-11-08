@@ -29,7 +29,7 @@ flowchart TB
   spa -->|"JSON under /api; SSE for Run Step progress<br/>and the LLM Exchange feed<br/>[HTTP, session cookie]"| api
   api -->|"Reads and writes<br/>[SQLAlchemy]"| db
   api -->|"Reads the snapshot and look-through;<br/>replays the configured recordings in recorded mode<br/>[files]"| files
-  api -->|"One schema-bound request per LLM step,<br/>live mode only<br/>[HTTPS, JSON]"| llm
+  api -->|"One schema-bound request per pipeline step;<br/>a bounded Trajectory per Answer, live mode only<br/>[HTTPS, JSON]"| llm
   operator -->|"Runs by hand<br/>[shell]"| scripts
   scripts -->|"Seeds<br/>[SQLAlchemy]"| db
   scripts -->|"Reads seeds; writes the refreshed snapshot<br/>[files]"| files
@@ -46,11 +46,11 @@ flowchart TB
 | Container | Technology | Responsibility | Entry point |
 | --- | --- | --- | --- |
 | React SPA | React 19, TypeScript, React Router, TanStack Query, `openapi-fetch` | Presents every screen and the Assistant drawer. Shows only the navigation the server-issued permissions allow; hiding is cosmetic, the server enforces. Holds no business logic and no state the server does not own. | `frontend/`; in development the Vite dev server proxies `/api` to the API process |
-| API process | Python 3.13, FastAPI, SQLAlchemy, Pydantic, `httpx` | Owns every business rule, number and record. Authenticates sessions, enforces RBAC on every endpoint, runs Analysis Runs on a background thread, calls the LLM through one captured interface, records every Decision and LLM Exchange in the audit chain. One process only ([ADR-0005](../adr/0005-run-step-progress-in-process.md), [ADR-0008](../adr/0008-one-process-on-sqlite-with-hand-written-migrations.md)). | `app.main:create_app`, run by `uvicorn` |
+| API process | Python 3.13, FastAPI, SQLAlchemy, Pydantic, pydantic-ai, `httpx` | Owns every business rule, number and record. Authenticates sessions, enforces RBAC on every endpoint, runs Analysis Runs on a background thread, calls the LLM through one captured interface, records every Decision and LLM Exchange in the audit chain. One process only ([ADR-0005](../adr/0005-run-step-progress-in-process.md), [ADR-0008](../adr/0008-one-process-on-sqlite-with-hand-written-migrations.md)). | `app.main:create_app`, run by `uvicorn` |
 | Operator scripts | Python CLI modules run with `uv` | Seed the synthetic Clients deterministically from a seed number; seed the sample Reports and human-verified Insights; refresh the market snapshot from Twelve Data (the only script that uses the network); run an Analysis Run without the API. | `uv run python -m <module>` |
 | SQLite database | One SQLite file, not committed | The only state the API writes. Tables are created on start; schema changes are hand-written idempotent migrations run at the same point ([ADR-0008](../adr/0008-one-process-on-sqlite-with-hand-written-migrations.md)). Audit Events and LLM Exchanges are append-only by construction. | `APP_DATABASE_URL` |
 | Committed data files | JSON and text in git | Read-only at run time. The market snapshot (prices and Instrument metadata) and the fund look-through (fund sector weights) feed the engine; the seed set holds the sample Reports, their transcribed scorecard and Insights; the committed LLM recordings hold the replies the demo and tests replay when the recordings directory points at them (the default directory is a local, uncommitted one); the eval file holds the latest live eval shown on the model card. | `APP_MARKET_DATA_SNAPSHOT_PATH`, `APP_FUND_LOOKTHROUGH_PATH`, `APP_SEED_DIR`, `APP_LLM_RECORDINGS_DIR`, `APP_ASSISTANT_EVAL_PATH` |
-| LLM endpoint (external) | Any OpenAI-compatible endpoint; OpenRouter by default | Answers one schema-bound request per LLM step in live mode. Never reached in recorded mode. | `APP_LLM_BASE_URL`, `APP_LLM_MODEL` |
+| LLM endpoint (external) | Any OpenAI-compatible endpoint; OpenRouter by default | Answers one schema-bound request per pipeline LLM step, and each model request of an Assistant Trajectory, in live mode. Never reached in recorded mode. | `APP_LLM_BASE_URL`, `APP_LLM_MODEL` |
 
 ## 5.2 Level 2: API process components
 
@@ -77,12 +77,12 @@ flowchart TB
       research["<b>Research and Insights</b><br/>Report ingestion, Insight Review,<br/>approved-only retrieval"]
       aisteps["<b>AI-on-Recommendations steps</b><br/>Research Tilt, Recommendation and<br/>priority narratives, AI step summary"]
       grounding["<b>Grounding validator</b><br/>Every Claim cited and checked"]
-      assistant["<b>Assistant</b><br/>Question to Answer, limits, refusal;<br/>Screen Context"]
+      assistant["<b>Assistant</b><br/>Bounded read-only agent: lookups,<br/>self-correction, request budget;<br/>Screen Context"]
     end
 
     subgraph evidence["Evidence"]
       direction TB
-      capture["<b>LLM client and Exchange capture</b><br/>Recorded / live adapters,<br/>fail-closed capture, Exchange feed"]
+      capture["<b>LLM client and Exchange capture</b><br/>pydantic-ai live / replay Models,<br/>fail-closed capture, Trajectories, Exchange feed"]
       audit["<b>Audit chain</b><br/>Single write path, hash chain,<br/>lineage, verify"]
       governance["<b>Governance</b><br/>AI quality, prompt log, model card,<br/>adversarial fixtures"]
     end
@@ -111,12 +111,12 @@ flowchart TB
   engine -->|"prices, look-through"| market
   aisteps -->|"approved Insights only"| research
   aisteps -->|"checks Claims"| grounding
-  aisteps -->|"one call per step"| capture
+  aisteps -->|"one schema-bound call per step"| capture
   research -->|"extracts Insights"| capture
   grounding -->|"verbatim passage on page"| research
   assistant -->|"checks Claims"| grounding
-  assistant -->|"one call per Question"| capture
-  assistant -->|"Screen Context through the<br/>screens' own read services"| recs
+  assistant -->|"a bounded Trajectory per Question"| capture
+  assistant -->|"Screen Context and lookups through the<br/>screens' own read services"| recs
   capture -->|"live mode"| llm
   capture -->|"recorded mode"| files
   market -->|"reads"| files
@@ -145,8 +145,8 @@ flowchart TB
 | Approvals policy | Decides which Decision steps a Recommendation needs and what status follows each human Decision; see [Tiered approval policy](#tiered-approval-policy). Pure functions of the Recommendation and the config. | `app.approvals` |
 | Grounding validator | Accepts a Claim only if it carries a citation, each Report citation quotes its cited page verbatim, each engine citation names a figure in the set it is checked against, every number in the text equals a cited figure at the stated precision, and a view on an asset also cites a Report. Results are stored per Claim and feed the AI quality panel. | `app.grounding`; `/api/recommendations/{id}/grounding` |
 | Audit chain | The only write path for Audit Events, with no update or delete. Each event's hash covers its content and the previous hash; parent links carry lineage from Report passage to Insight, Research Tilt, Recommendation and Decision. Searches events, verifies the chain by walking it, and derives a Recommendation's lineage read-only ([ADR-0002](../adr/0002-hash-chained-append-only-audit-log.md)). | `app.audit`; `/api/audit`, `/api/recommendations/{id}/lineage` |
-| LLM client and Exchange capture | One `complete` interface with two adapters: recorded replay keyed by a hash of task, prompt version, system text, schema and prompt (a miss is an error, never a guess), and live OpenAI-compatible HTTP. A capturing wrapper stores every call as an immutable LLM Exchange before the caller continues and fails the call if it cannot ([ADR-0004](../adr/0004-llm-exchanges-stored-separately-anchored-in-audit-chain.md), [ADR-0007](../adr/0007-llm-steps-are-single-schema-bound-calls.md)). Serves the Exchange list, detail and live SSE feed. Prompts are versioned beside it. | `app.llm`; `/api/llm/exchanges` |
-| Assistant (incl. Screen Context) | Answers one Question with at most one LLM call: checks the usage limits, rebuilds the Screen Context on the server from the screen identity the browser sends (through the same read services the screen uses, filtered by the user's permissions, Client ids only), sends it with recent history, checks the reply for PII and grounds its Claims. An out-of-scope Question gets the fixed Out-of-Scope Refusal. Every turn, answered, refused or failed, is stored append-only in the session's Conversation and audited ([ADR-0006](../adr/0006-assistant-conversations-persisted-and-audited.md)). | `app.assistant`; `/api/assistant` |
+| LLM client and Exchange capture | Every step runs on pydantic-ai: a pipeline step as one schema-bound call with native structured output and no tools, the Assistant as an Agent. Behind it sit two Models: replay, which answers each model request from a recording keyed by a hash of task, prompt version, reply schema, tool definitions and the full message list so far (a miss is an error, never a guess), and live OpenAI-compatible HTTP with SDK retries off, whose `httpx` transport keeps the wire bytes. A capturing wrapper stores every model request as an immutable LLM Exchange, with its Trajectory id and position, before the caller continues and fails the request if it cannot ([ADR-0004](../adr/0004-llm-exchanges-stored-separately-anchored-in-audit-chain.md), [ADR-0010](../adr/0010-assistant-is-a-bounded-read-only-agent-on-pydantic-ai.md)). Serves the Exchange list grouped by Trajectory, the detail and the live SSE feed. Prompts are versioned beside it. | `app.llm`, `app.pydantic_llm`, `app.exchanges`; `/api/llm/exchanges` |
+| Assistant (incl. Screen Context) | Answers one Question as a bounded, read-only agent ([ADR-0010](../adr/0010-assistant-is-a-bounded-read-only-agent-on-pydantic-ai.md)): checks the usage limits, rebuilds the Screen Context on the server from the screen identity the browser sends (through the same read services the screen uses, filtered by the user's permissions, Client ids only) and sends it with recent history. The model may then call read-only lookups (Queue, Portfolio, Recommendation, Approvals, Audit, governance, approved Insights) that return another screen's Screen Context through the same builders; one the user may not open returns "not found or not permitted for your role". An output validator checks each draft for PII (a hit fails the turn, no retry) and grounds its Claims against the figures of the Screen Context and every lookup; ungrounded Claims are sent back once to self-correct, then kept and flagged. At most `APP_ASSISTANT_REQUEST_LIMIT` model requests per Answer. Each turn stores a "How I answered" summary of its Trajectory (lookups, self-correction, requests used, tokens). An out-of-scope Question gets the fixed Out-of-Scope Refusal. Every turn, answered, refused or failed, is stored append-only in the session's Conversation and audited ([ADR-0006](../adr/0006-assistant-conversations-persisted-and-audited.md)). | `app.assistant`, `app.assistant_agent`; `/api/assistant` |
 | Governance | Assembles the Auditor's and Platform Owner's governance view from stored facts only: the AI quality panel from stored grounding results, the prompt and version log from Audit Events, the model card from live settings and config plus the latest live eval file, and the adversarial fixture results from a stored run of the real Grounding validator. | `app.governance`; `/api/governance` |
 | Config | The single validated configuration surface: Tolerance Bands, priority weights, Research Tilt bound, review SLA, approval thresholds and Suitability limits. Partial updates merge and are validated before they are stored; every engine reads the current values. | `app.config_service`; `/api/config` |
 | Market data | Loads the committed snapshot and fund look-through once per process and classifies the Instrument universe with the platform's own taxonomy. Never touches the network ([ADR-0003](../adr/0003-market-data-snapshot-synthetic-clients.md)). | `app.market_data` |

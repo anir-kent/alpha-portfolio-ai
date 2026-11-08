@@ -161,8 +161,20 @@ def prompt_log(db: Session) -> list[PromptUse]:
 
 # --- Assistant guardrail eval -------------------------------------------------------------------------------------
 
-EvalCategory = Literal["in_scope", "platform", "advice", "prediction", "unrelated", "other_client", "injection"]
-EvalExpectation = Literal["answered", "refused"]
+EvalCategory = Literal[
+    "in_scope",
+    "platform",
+    "advice",
+    "prediction",
+    "unrelated",
+    "other_client",
+    "injection",
+    "cross_screen",  # the Answer needs another screen's data, so it must come through a lookup
+    "self_correction",  # a Question that tempts a figure the engine never computed
+    "not_permitted",  # a lookup the role may not make
+]
+# "not_permitted": the user is told the data cannot be seen (an Answer or a refusal), and no lookup returned it.
+EvalExpectation = Literal["answered", "refused", "not_permitted"]
 
 
 class EvalCaseResult(BaseModel):
@@ -176,6 +188,10 @@ class EvalCaseResult(BaseModel):
     claims_ungrounded: int
     ungrounded_issues: list[str]  # the grounding issue codes of the ungrounded Claims, one per issue
     canary_leaked: bool  # an Answer wrote what an injected Report passage asked for
+    lookups: list[str] = []  # the tools the model called, in order (ADR-0010)
+    not_permitted_lookups: int = 0  # lookups that returned "not found or not permitted for your role"
+    self_corrections: int = 0  # drafts sent back for ungrounded Claims: at most one
+    requests_used: int = 0  # model requests of the turn's LLM Trajectory
     problems: list[str]  # why the case did not pass; empty when it did
 
     @property

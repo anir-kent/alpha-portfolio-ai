@@ -1,15 +1,21 @@
 {
-  "model": "scripted-assistant-fixture-v5",
+  "model": "anthropic/claude-sonnet-5.5",
   "parts": [
     {
-      "content": "{\"in_scope\": true, \"answer_markdown\": \"Which asset class drives this Portfolio's drift?\\n\\nequity has the largest absolute Asset-Class Drift on this Portfolio.\\n\\n- drift.equity.actual_pct: 60.0.\\n- drift.equity.drift_pp: 15.0.\\n- drift.equity.signed_pp: 15.0.\\n- drift.equity.target_pct: 45.0.\", \"claims\": [{\"text\": \"drift.equity.actual_pct: 60.0.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.equity.actual_pct\"}]}, {\"text\": \"drift.equity.drift_pp: 15.0.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.equity.drift_pp\"}]}, {\"text\": \"drift.equity.signed_pp: 15.0.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.equity.signed_pp\"}]}, {\"text\": \"drift.equity.target_pct: 45.0.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.equity.target_pct\"}]}], \"follow_up_questions\": [\"Which screen shows the supporting figures?\"]}",
+      "content": "{\"in_scope\":true,\"answer_markdown\":\"**Equity** drives the Portfolio's drift. It is 60.0% of the Portfolio against a 45.0% target, so it is 15.0 percentage points overweight. That is the largest drift of the three Asset Classes, and it equals the Portfolio Drift of 15.0 pp.\\n\\n- **Bond** is 10.0 pp underweight (35.0% actual against a 45.0% target), which is a breach.\\n- **Cash** is 5.0 pp underweight (5.0% actual against a 10.0% target), which is a warning.\\n\\nThe tolerance band for this moderate Risk Profile is 3.0 pp for a warning and 5.0 pp for a breach.\",\"claims\":[{\"text\":\"Equity is 60.0% of the Portfolio against a 45.0% target, a drift of 15.0 pp. This is the largest Asset Class drift and equals the Portfolio Drift of 15.0 pp.\",\"asset\":null,\"citations\":[{\"kind\":\"engine\",\"figure\":\"drift.equity.actual_pct\"},{\"kind\":\"engine\",\"figure\":\"drift.equity.target_pct\"},{\"kind\":\"engine\",\"figure\":\"drift.equity.drift_pp\"},{\"kind\":\"engine\",\"figure\":\"portfolio_drift_pp\"}]},{\"text\":\"Bond is 10.0 pp underweight, with 35.0% actual against a 45.0% target.\",\"asset\":null,\"citations\":[{\"kind\":\"engine\",\"figure\":\"drift.bond.drift_pp\"},{\"kind\":\"engine\",\"figure\":\"drift.bond.actual_pct\"},{\"kind\":\"engine\",\"figure\":\"drift.bond.target_pct\"}]},{\"text\":\"Cash is 5.0 pp underweight, with 5.0% actual against a 10.0% target.\",\"asset\":null,\"citations\":[{\"kind\":\"engine\",\"figure\":\"drift.cash.drift_pp\"},{\"kind\":\"engine\",\"figure\":\"drift.cash.actual_pct\"},{\"kind\":\"engine\",\"figure\":\"drift.cash.target_pct\"}]},{\"text\":\"The tolerance band is 3.0 pp for a warning and 5.0 pp for a breach.\",\"asset\":null,\"citations\":[{\"kind\":\"engine\",\"figure\":\"tolerance_band.warn\"},{\"kind\":\"engine\",\"figure\":\"tolerance_band.breach\"}]}],\"follow_up_questions\":[\"Which holdings make up the equity overweight?\",\"Which Suitability rules are in breach?\",\"Why is Energy concentration flagged?\"]}",
       "part_kind": "text"
     }
   ],
   "prompt_version": "assistant_answer@v5",
   "task": "assistant_answer",
   "usage": {
-    "input_tokens": 934,
-    "output_tokens": 118
+    "details": {
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "is_byok": 0,
+      "reasoning_tokens": 0
+    },
+    "input_tokens": 8221,
+    "output_tokens": 848
   }
 }

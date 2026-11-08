@@ -1,15 +1,21 @@
 {
-  "model": "scripted-assistant-fixture-v5",
+  "model": "anthropic/claude-sonnet-5.5",
   "parts": [
     {
-      "content": "{\"in_scope\": true, \"answer_markdown\": \"Which asset class drives this Portfolio's drift?\\n\\ncash has the largest absolute Asset-Class Drift on this Portfolio.\\n\\n- drift.cash.actual_pct: 40.01.\\n- drift.cash.drift_pp: 25.01.\\n- drift.cash.signed_pp: 25.01.\\n- drift.cash.target_pct: 15.0.\", \"claims\": [{\"text\": \"drift.cash.actual_pct: 40.01.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.cash.actual_pct\"}]}, {\"text\": \"drift.cash.drift_pp: 25.01.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.cash.drift_pp\"}]}, {\"text\": \"drift.cash.signed_pp: 25.01.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.cash.signed_pp\"}]}, {\"text\": \"drift.cash.target_pct: 15.0.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"drift.cash.target_pct\"}]}], \"follow_up_questions\": [\"Which screen shows the supporting figures?\"]}",
+      "content": "{\"in_scope\":true,\"answer_markdown\":\"**Cash** drives the Portfolio Drift. It is 40.01% of the Portfolio against a 15.0% target, so it is 25.01 pp over. The Portfolio Drift is 25.01 pp, which equals the cash drift.\\n\\n**Bond** is almost as far off in the other direction. It is 40.01% against a 65.0% target, so it is 24.99 pp under.\\n\\n**Equity** is on target at 19.99% against 20.0%, a drift of 0.01 pp.\\n\\nCash and bond are both in breach. The breach band for a conservative Risk Profile is 4.0 pp. Most of the cash sits in SGOV, which is 40.01% of the Portfolio (weight 40.00586801149698%).\",\"claims\":[{\"text\":\"Cash drift is 25.01 pp, with an actual weight of 40.01% against a 15.0% target. This is the largest drift of the three asset classes.\",\"citations\":[{\"kind\":\"engine\",\"figure\":\"drift.cash.drift_pp\"},{\"kind\":\"engine\",\"figure\":\"drift.cash.actual_pct\"},{\"kind\":\"engine\",\"figure\":\"drift.cash.target_pct\"}]},{\"text\":\"Portfolio Drift is 25.01 pp.\",\"citations\":[{\"kind\":\"engine\",\"figure\":\"portfolio_drift_pp\"}]},{\"text\":\"Bond drift is 24.99 pp, with an actual weight of 40.01% against a 65.0% target.\",\"citations\":[{\"kind\":\"engine\",\"figure\":\"drift.bond.drift_pp\"},{\"kind\":\"engine\",\"figure\":\"drift.bond.actual_pct\"},{\"kind\":\"engine\",\"figure\":\"drift.bond.target_pct\"}]},{\"text\":\"Equity drift is 0.01 pp, with an actual weight of 19.99% against a 20.0% target.\",\"citations\":[{\"kind\":\"engine\",\"figure\":\"drift.equity.drift_pp\"},{\"kind\":\"engine\",\"figure\":\"drift.equity.actual_pct\"},{\"kind\":\"engine\",\"figure\":\"drift.equity.target_pct\"}]},{\"text\":\"The breach tolerance band is 4.0 pp.\",\"citations\":[{\"kind\":\"engine\",\"figure\":\"tolerance_band.breach\"}]},{\"text\":\"SGOV weighs 40.00586801149698% of the Portfolio.\",\"citations\":[{\"kind\":\"engine\",\"figure\":\"holding.SGOV.weight_pct\"}]}],\"follow_up_questions\":[\"Which holdings make up the bond asset class?\",\"Is there a Recommendation for this Portfolio?\",\"Are any Suitability rules in warning or breach?\"]}",
       "part_kind": "text"
     }
   ],
   "prompt_version": "assistant_answer@v5",
   "task": "assistant_answer",
   "usage": {
-    "input_tokens": 820,
-    "output_tokens": 118
+    "details": {
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "is_byok": 0,
+      "reasoning_tokens": 0
+    },
+    "input_tokens": 7788,
+    "output_tokens": 891
   }
 }
