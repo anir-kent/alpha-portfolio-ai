@@ -99,6 +99,7 @@ def test_the_model_card_lists_the_assistant_with_its_prompt_scope_and_limits(log
         "questions_per_hour": 20,
         "history_pairs": 6,
         "context_rows": 25,
+        "request_limit": 6,
     }
 
 

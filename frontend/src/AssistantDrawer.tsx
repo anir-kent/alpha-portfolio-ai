@@ -257,7 +257,8 @@ function TurnView({
         </div>
       )}
       {turn.outcome === "refused" && turn.answer && <p className="callout callout-warn">{turn.answer.markdown}</p>}
-      {turn.answer && turn.trajectory && (
+      {/* A failed turn shows its Trajectory too: a budget-exhausted one shows every request it used. */}
+      {turn.trajectory && (
         <details className="rounded-lg border border-line px-3 py-2 text-ink-3">
           <summary className="cursor-pointer text-ink">How I answered</summary>
           <ol className="mt-2 list-inside list-decimal space-y-1">

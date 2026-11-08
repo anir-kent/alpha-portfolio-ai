@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, ValidationError, field_validator
+from pydantic_ai import UsageLimitExceeded
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -33,11 +34,14 @@ OUT_OF_SCOPE_REFUSAL = (
 )
 FAILED_MESSAGE = "The Assistant couldn't answer, try again."
 REPLAY_MESSAGE = "Only Suggested Questions work in replay mode."
+BUDGET_MESSAGE = "That Question needed more lookups than one Answer may make. Try a narrower Question."
 
 Outcome = Literal["answered", "refused", "failed"]
 # Why a turn failed, on its `assistant.failed` Audit Event. The user sees FAILED_MESSAGE, except for a recorded-mode
-# miss (`replay_miss`), which says honestly that only Suggested Questions replay.
-FailureReason = Literal["llm_error", "unreadable_reply", "pii", "replay_miss"]
+# miss (`replay_miss`), which says honestly that only Suggested Questions replay, and a Trajectory stopped at its
+# request budget (`budget_exhausted`), which suggests a narrower Question.
+FailureReason = Literal["llm_error", "unreadable_reply", "pii", "replay_miss", "budget_exhausted"]
+FAILURE_MESSAGES: dict[str, str] = {"replay_miss": REPLAY_MESSAGE, "budget_exhausted": BUDGET_MESSAGE}
 
 
 class LimitExceeded(Exception):
@@ -94,7 +98,7 @@ def check_limits(db: Session, user: User, session: SessionRow, question: str, se
 
 
 def _failure_message(reason: str | None) -> str:
-    return REPLAY_MESSAGE if reason == "replay_miss" else FAILED_MESSAGE
+    return FAILURE_MESSAGES.get(reason or "", FAILED_MESSAGE)
 
 
 def _replay_miss(error: LlmError) -> bool:
@@ -285,6 +289,8 @@ def ask(
             reply = AssistantReply.model_validate(content)
         except PiiExposed:  # a rejected Answer is never checked, stored or shown
             outcome, reason = "failed", "pii"
+        except UsageLimitExceeded:  # the request beyond the budget was never sent; every one before it is anchored
+            outcome, reason = "failed", "budget_exhausted"
         except LlmError as e:  # includes a call capture could not record: it fails closed, no Answer reaches the user
             outcome, reason = "failed", "replay_miss" if _replay_miss(e) else "llm_error"
         except ValidationError:

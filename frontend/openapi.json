@@ -2327,6 +2327,10 @@
           "context_rows": {
             "type": "integer",
             "title": "Context Rows"
+          },
+          "request_limit": {
+            "type": "integer",
+            "title": "Request Limit"
           }
         },
         "type": "object",
@@ -2335,7 +2339,8 @@
           "questions_per_conversation",
           "questions_per_hour",
           "history_pairs",
-          "context_rows"
+          "context_rows",
+          "request_limit"
         ],
         "title": "AssistantLimits"
       },

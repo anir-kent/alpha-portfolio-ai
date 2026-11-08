@@ -1199,6 +1199,7 @@ LIMIT_ENV = {
     "APP_ASSISTANT_QUESTIONS_PER_HOUR": ("assistant_questions_per_hour", 5),
     "APP_ASSISTANT_HISTORY_PAIRS": ("assistant_history_pairs", 3),
     "APP_ASSISTANT_CONTEXT_ROWS": ("assistant_context_rows", 12),
+    "APP_ASSISTANT_REQUEST_LIMIT": ("assistant_request_limit", 4),
 }
 
 

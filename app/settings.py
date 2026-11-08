@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     assistant_questions_per_hour: PositiveInt = Field(
         default=20, description="Questions a user may ask in any rolling hour; then 429"
     )
+    assistant_request_limit: PositiveInt = Field(
+        default=6, description="Model requests one Answer may make, lookups and self-correction included; then it fails"
+    )
     assistant_eval_path: str = "data/assistant_eval.json"  # latest live eval results, shown on the model card
     seed_dir: str = "data/seed"
     cors_origins: list[str] = ["http://localhost:5173"]

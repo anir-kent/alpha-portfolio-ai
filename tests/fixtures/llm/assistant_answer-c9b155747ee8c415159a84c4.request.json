@@ -9,7 +9,7 @@
   "prompt_version": "assistant_answer@v5",
   "task": "assistant_answer",
   "usage": {
-    "input_tokens": 530,
+    "input_tokens": 538,
     "output_tokens": 28
   }
 }

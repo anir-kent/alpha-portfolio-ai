@@ -199,6 +199,7 @@ class AssistantLimits(BaseModel):
     questions_per_hour: int
     history_pairs: int  # earlier Question/Answer pairs sent with each Question
     context_rows: int  # rows of a list screen a Screen Context holds
+    request_limit: int  # model requests one Answer may make
 
 
 class AssistantCard(BaseModel):
@@ -231,6 +232,7 @@ def _assistant_card(settings: Settings) -> AssistantCard:
             questions_per_hour=settings.assistant_questions_per_hour,
             history_pairs=settings.assistant_history_pairs,
             context_rows=settings.assistant_context_rows,
+            request_limit=settings.assistant_request_limit,
         ),
         latest_eval=AssistantEvalSummary.model_validate(latest.model_dump(exclude={"results"})) if latest else None,
     )

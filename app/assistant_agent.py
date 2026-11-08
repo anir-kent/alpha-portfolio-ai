@@ -19,7 +19,6 @@ from app.routers.analysis import QueueFilters
 from app.screen_context import AuditFilters, ScreenContext, ScreenIdentity, ScreenKind
 from app.settings import Settings
 
-REQUEST_LIMIT = 6
 NOT_PERMITTED = "not found or not permitted for your role"
 
 
@@ -65,7 +64,7 @@ class AssistantDeps:
         return Trajectory(
             steps=steps,
             requests_used=len(self.exchanges),
-            request_limit=REQUEST_LIMIT,
+            request_limit=self.settings.assistant_request_limit,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
         )
@@ -264,12 +263,13 @@ def build_agent(model: Model, request: LlmRequest, review: Review) -> Agent[Assi
 
 
 def run_agent(model: Model, request: LlmRequest, deps: AssistantDeps, review: Review) -> dict:
+    """Raises UsageLimitExceeded rather than send a request beyond the turn's budget. Token limits are off."""
     return (
         build_agent(model, request, review)
         .run_sync(
             request.user,
             deps=deps,
-            usage_limits=UsageLimits(request_limit=REQUEST_LIMIT),
+            usage_limits=UsageLimits(request_limit=deps.settings.assistant_request_limit),
         )
         .output
     )

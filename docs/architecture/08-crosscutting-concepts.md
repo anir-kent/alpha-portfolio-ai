@@ -210,5 +210,6 @@ On start, the API process creates any missing tables. It then runs each migratio
 | `APP_ASSISTANT_QUESTION_MAX_CHARS` | 2000 | A longer Question is refused with 400 |
 | `APP_ASSISTANT_QUESTIONS_PER_CONVERSATION` | 50 | Questions a Conversation takes; then 429 until the next login |
 | `APP_ASSISTANT_QUESTIONS_PER_HOUR` | 20 | Questions a user may ask in any rolling hour; then 429 |
+| `APP_ASSISTANT_REQUEST_LIMIT` | 6 | Model requests one Answer may make, lookups and self-correction included; then it fails |
 
 <!-- END GENERATED: assistant-limits -->

@@ -294,6 +294,7 @@ const LIMITS: [keyof AssistantCard["limits"], string, string][] = [
   ["questions_per_hour", "Per user per hour", "Questions"],
   ["history_pairs", "History sent", "Question/Answer pairs"],
   ["context_rows", "List rows sent", "rows"],
+  ["request_limit", "Model requests per Answer", "requests"],
 ];
 
 function AssistantPanel({ assistant }: { assistant: AssistantCard }) {
