@@ -2,7 +2,6 @@
 
     uv run python -m tests.fixtures.regenerate             # go live for any request that has no recording
     uv run python -m tests.fixtures.regenerate --offline   # never go live; a request with no recording fails
-    uv run python -m tests.fixtures.regenerate --offline --migrate   # answer from the old format (once, ADR-0010)
 
 In order: the fixture Reports' extraction recordings (`tests.fixtures.llm_cases`, hand-authored replies), then the
 seeded demo's Analysis Run, every Suggested Question and the walkthrough (`tests.fixtures.suggested_questions`), which
@@ -17,7 +16,7 @@ from tests.fixtures import llm_cases, suggested_questions
 
 def main(argv: list[str]) -> int:
     llm_cases.regenerate()
-    return suggested_questions.record(offline="--offline" in argv, migrate="--migrate" in argv)
+    return suggested_questions.record(offline="--offline" in argv)
 
 
 if __name__ == "__main__":

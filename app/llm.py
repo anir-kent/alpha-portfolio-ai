@@ -3,21 +3,13 @@
 Callers only ever see `LlmClient.complete`, its request and response, and its errors. What the app serves behind it is
 `app.exchanges.build_llm`: pydantic-ai over the live or replay Model, wrapped in capture (ADR-0010). Every response
 carries the model and prompt version so the caller can log both to the audit chain.
-
-The hand-written client below (`OpenAICompatibleLlm`, `RecordedLlm` and the per-call recording format they share) is
-no longer on the default path. It stays only until ticket 06 deletes it; nothing new should use it.
 """
 
-import hashlib
 import json
 import re
-import time
 from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Protocol
-
-import httpx
 
 OPENROUTER_TITLE = "Portfolio Rebalancing"  # how OpenRouter attributes the calls
 
@@ -93,56 +85,6 @@ class LlmClient(Protocol):
     def complete(self, request: LlmRequest) -> LlmResponse: ...
 
 
-def recording_key(request: LlmRequest) -> str:
-    """Identity of a call: task, prompt version, exact input, system text and schema. Editing a prompt without a
-    version bump therefore misses the recording instead of silently replaying a stale one."""
-    parts = [
-        request.task,
-        request.prompt_version,
-        request.system,
-        json.dumps(request.schema, sort_keys=True),
-        request.user,
-    ]
-    digest = hashlib.sha256("\n".join(parts).encode()).hexdigest()
-    return digest[:20]
-
-
-def _recording_path(directory: Path, request: LlmRequest) -> Path:
-    return directory / f"{request.task}-{recording_key(request)}.json"
-
-
-def write_recording(directory: str | Path, request: LlmRequest, response: LlmResponse) -> Path:
-    directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=True)
-    path = _recording_path(directory, request)
-    path.write_text(
-        json.dumps(
-            {
-                "task": request.task,
-                "prompt_version": request.prompt_version,
-                "model": response.model,
-                "content": response.content,
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n"
-    )
-    return path
-
-
-class RecordedLlm:
-    def __init__(self, directory: str | Path):
-        self.directory = Path(directory)
-
-    def complete(self, request: LlmRequest) -> LlmResponse:
-        path = _recording_path(self.directory, request)
-        if not path.exists():
-            raise RecordingMissing(f"No recorded response for {request.task} ({request.prompt_version}): {path.name}")
-        data = json.loads(path.read_text())
-        return LlmResponse(content=data["content"], model=data["model"], prompt_version=request.prompt_version)
-
-
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 
 
@@ -165,96 +107,3 @@ def wire_schema(schema: object) -> object:
     if isinstance(schema, list):
         return [wire_schema(v) for v in schema]
     return schema
-
-
-class OpenAICompatibleLlm:
-    def __init__(
-        self,
-        *,
-        base_url: str,
-        api_key: str,
-        model: str,
-        record_dir: str | Path | None = None,
-        transport: httpx.BaseTransport | None = None,
-        timeout: float = 120.0,
-        temperature: float | None = None,
-    ):
-        self.model = model
-        self.temperature = temperature  # None: omitted, the provider's default (some models accept none)
-        self.record_dir = record_dir
-        self._api_key = api_key
-        # OpenRouter routes a model to any of several providers, and one may ignore `response_format`; asking it to
-        # require every parameter keeps the reply schema enforced. Other gateways get the plain protocol.
-        self._openrouter = httpx.URL(base_url).host == "openrouter.ai"
-        headers = {"Authorization": f"Bearer {api_key}"}
-        if self._openrouter:
-            headers["X-OpenRouter-Title"] = OPENROUTER_TITLE
-        self._http = httpx.Client(
-            base_url=base_url.rstrip("/") + "/", timeout=timeout, transport=transport, headers=headers
-        )
-
-    def complete(self, request: LlmRequest) -> LlmResponse:
-        messages = [
-            {
-                "role": "system",
-                "content": request.system + "\n\nJSON schema of the reply:\n" + json.dumps(request.schema),
-            },
-            {"role": "user", "content": request.user},
-        ]
-        body: dict = {
-            "model": self.model,
-            "messages": messages,
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {"name": request.task, "schema": wire_schema(request.schema)},
-            },
-        }
-        if self.temperature is not None:
-            body["temperature"] = self.temperature
-        if self._openrouter:
-            body["provider"] = {"require_parameters": True}
-        started = time.perf_counter()
-
-        def elapsed_ms() -> int:
-            return round((time.perf_counter() - started) * 1000)
-
-        def failure(message: str, *, raw_reply: str | None = None, usage: dict | None = None) -> LlmError:
-            # The key travels only in the request header, but a provider can echo anything back: never keep it.
-            if self._api_key:
-                message = message.replace(self._api_key, "[redacted]")
-                raw_reply = raw_reply.replace(self._api_key, "[redacted]") if raw_reply else raw_reply
-            return LlmError(message, messages=messages, raw_reply=raw_reply, usage=usage, latency_ms=elapsed_ms())
-
-        try:
-            r = self._http.post("chat/completions", json=body)
-        except httpx.HTTPError as e:
-            raise failure(f"LLM call failed: {type(e).__name__}: {e}") from e
-        if not r.is_success:
-            raise failure(f"LLM call failed: HTTP {r.status_code}: {r.text[:500]}", raw_reply=r.text or None)
-        latency_ms = elapsed_ms()
-        try:
-            payload = r.json()
-            reply = payload["choices"][0]["message"]["content"]
-            if not isinstance(reply, str):
-                raise TypeError(f"message content was {type(reply).__name__}, not text")
-        except (KeyError, IndexError, TypeError, ValueError) as e:
-            raise failure(f"LLM call failed: unexpected reply shape ({type(e).__name__}: {e})", raw_reply=r.text) from e
-        if self._api_key:
-            reply = reply.replace(self._api_key, "[redacted]")
-        usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else None
-        try:
-            content = parse_json_reply(reply)
-        except LlmError as e:
-            raise failure(str(e), raw_reply=reply, usage=usage) from e
-        response = LlmResponse(
-            content=content,
-            model=payload.get("model") or self.model,
-            prompt_version=request.prompt_version,
-            messages=messages,
-            raw_reply=reply,
-            usage=usage,
-            latency_ms=latency_ms,
-        )
-        if self.record_dir:
-            write_recording(self.record_dir, request, response)
-        return response

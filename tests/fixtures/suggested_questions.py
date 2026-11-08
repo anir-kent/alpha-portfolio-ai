@@ -3,8 +3,7 @@ mode; ai-portfolio-rebalancing ticket 15; ADR-0010: one recording per model requ
 `uv run python -m tests.fixtures.regenerate` (every committed recording) or `uv run python -m
 tests.fixtures.suggested_questions` (these only) after any change to a prompt, a Screen Context builder, the platform
 brief, the seeded data or the walkthrough; it needs `APP_LLM_API_KEY` (and the live endpoint and model settings, which
-must match RECORDED_MODEL and RECORDED_BASE_URL) in the environment or `.env`. `--offline` never goes live;
-`--migrate` first answers a missing request from its old-format recording (the one-off move to per-request recordings).
+must match RECORDED_MODEL and RECORDED_BASE_URL) in the environment or `.env`. `--offline` never goes live.
 
 The script seeds a fresh database exactly as the replay tests do and runs one Analysis Run, whose AI steps (priority
 narratives, Research Tilts, rationale and memo) replay what is recorded and go live, with recording on, for anything
@@ -16,19 +15,17 @@ timestamps, and each turn adds an event), so their Suggested Questions do not re
 re-recorded here: its recordings are keyed to the demo house view, not to the seed.
 """
 
-import contextlib
-import json
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
+from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.settings import ModelSettings
 
-from app.llm import RecordedLlm, RecordingMissing
+from app.llm import RecordingMissing
 from app.main import create_app
 from app.market_data import MarketData
 from app.prompts import ASSISTANT_ANSWER, PRIORITY_NARRATIVE, RECOMMENDATION_NARRATIVE, RESEARCH_TILT
@@ -124,17 +121,14 @@ def demo_screens(app) -> list[dict]:
 
 class ReplayOrRecord(Model):
     """Replays whatever is recorded. A request of a recorded task with no recording is answered by `live` and, with
-    `record` on, saved as its recording; every other task only replays. With `migrate` on, such a request is answered
-    by its old-format recording first, if it has one: the one-off move to per-request recordings, which ticket 06
-    deletes. It is off by default, so a regeneration after any change goes live rather than reusing an old reply.
+    `record` on, saved as its recording; every other task only replays.
     `used` names the recordings of recorded tasks that were asked for."""
 
-    def __init__(self, live: Model | None, *, record: bool = True, migrate: bool = False):
+    def __init__(self, live: Model | None, *, record: bool = True):
         self.replay = ReplayModel(RECORDINGS, model_name=RECORDED_MODEL)
         super().__init__(profile=self.replay.profile)
         self.live = live
         self.record = record
-        self.legacy = RecordedLlm(RECORDINGS) if migrate else None
         self.used: set[str] = set()
 
     @property
@@ -160,19 +154,14 @@ class ReplayOrRecord(Model):
         except RecordingMissing:
             if request.task not in RECORDED_TASKS:
                 raise
-            response = await self._unrecorded(request, messages, model_settings, model_request_parameters)
+            if self.live is None:
+                raise RecordingMissing(
+                    f"No recorded response for {request.task} ({request.prompt_version}), and offline"
+                ) from None
+            response = await self.live.request(messages, model_settings, model_request_parameters)
         if self.record:
             write_recording(RECORDINGS, request, key, response)
         return response
-
-    async def _unrecorded(self, request, messages, model_settings, model_request_parameters) -> ModelResponse:
-        if self.legacy is not None:
-            with contextlib.suppress(RecordingMissing):
-                old = self.legacy.complete(request)
-                return ModelResponse(parts=[TextPart(json.dumps(old.content))], model_name=old.model)
-        if self.live is None:
-            raise RecordingMissing(f"No recorded response for {request.task} ({request.prompt_version}), and offline")
-        return await self.live.request(messages, model_settings, model_request_parameters)
 
 
 def live_model() -> Model | None:
@@ -190,14 +179,13 @@ def live_model() -> Model | None:
     return build_live_model(env.model_copy(update={"llm_mode": "live"}))
 
 
-def record(*, offline: bool = False, migrate: bool = False) -> int:
+def record(*, offline: bool = False) -> int:
     """Records every request the demo makes that has no recording, and removes the recordings it no longer makes.
-    `offline`: nothing goes live, so a request with no recording fails. `migrate`: answer a missing request from its
-    old-format recording first (see `ReplayOrRecord`)."""
+    `offline`: nothing goes live, so a request with no recording fails."""
     live = None if offline else live_model()
     if live is None and not offline:
         return 1
-    client = ReplayOrRecord(live, migrate=migrate)
+    client = ReplayOrRecord(live)
     with tempfile.TemporaryDirectory() as tmp:
         app = create_app(lift_question_limits(replay_settings(Path(tmp))))
         app.state.llm.model = client
@@ -229,4 +217,4 @@ def record(*, offline: bool = False, migrate: bool = False) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(record(offline="--offline" in sys.argv[1:], migrate="--migrate" in sys.argv[1:]))
+    sys.exit(record(offline="--offline" in sys.argv[1:]))
