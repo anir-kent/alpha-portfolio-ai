@@ -1,6 +1,7 @@
 """Seam: Report ingestion, Insight approval and the LLM interface. All LLM calls replay committed recordings
 (tests/fixtures/llm); a live smoke test runs only with LLM_LIVE=1."""
 
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -82,6 +83,28 @@ def test_pdf_upload_keeps_page_references(login):
     assert r.json()["kind"] == "pdf" and r.json()["page_count"] == 2
     page = login("advisor").get(f"/api/reports/{r.json()['id']}/pages/2")
     assert "We prefer equities over bonds" in page.json()["text"]
+
+
+class OffLoopLlm:
+    """Replays recordings, but refuses to run on a thread with a running event loop, as `run_sync` would."""
+
+    def __init__(self, delegate):
+        self.delegate, self.calls = delegate, 0
+
+    def complete(self, request: LlmRequest):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            self.calls += 1
+            return self.delegate.complete(request)
+        raise AssertionError("LLM called on the event loop thread")
+
+
+def test_upload_runs_insight_extraction_off_the_event_loop(app, login):
+    app.state.llm = llm = OffLoopLlm(app.state.llm)
+    r = upload(login("research_analyst"))
+    assert r.status_code == 201, r.text
+    assert llm.calls == 1 and r.json()["extraction_status"] == "complete" and len(r.json()["insights"]) == 3
 
 
 def test_every_llm_call_logs_model_and_prompt_version_to_the_audit_chain(app, login):
