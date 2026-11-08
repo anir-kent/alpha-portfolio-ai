@@ -16,14 +16,6 @@ The components named in the lanes are described in [5.2 Level 2: API process com
 
 An Advisor or Relationship Manager (`analysis:run`) starts an Analysis Run. The run executes on a background thread, and its Run Step progress streams to the browser over server-sent events. Only one run is in flight per process ([ADR-0005](../adr/0005-run-step-progress-in-process.md)).
 
-The run commits in three phases, which are commit boundaries, not Run Steps ([ADR-0009](../adr/0009-analysis-run-recording-commits-per-audit-event.md)):
-
-1. **Scoring.** Loading inputs and scoring every Portfolio are one write transaction. It includes the Research Tilt LLM Exchanges, each stored under a savepoint.
-2. **Recording.** The `record_run` Run Step commits one Audit Event at a time.
-3. **Completion.** A final commit marks the run `completed`, and only then does it become the current result.
-
-The two narrative Run Steps run after that commit, so a failing LLM cannot undo a recorded run.
-
 ```mermaid
 sequenceDiagram
   autonumber
@@ -104,25 +96,11 @@ sequenceDiagram
   SPA->>SPA: refresh the Queue and Portfolio views
 ```
 
-On a failed narrative, no grounding check runs: the failed row and a `status: failed` event are written in its place. The run's outcome is `completed` only if every Run Step is done. It is `completed_with_warnings` if `record_run` is done but an AI step failed, and `failed` otherwise.
-
-| Failure path | What happens |
-| --- | --- |
-| A second start while a run is in flight | `409` with the in-flight run's snapshot. The SPA follows that run's progress; no second run starts. |
-| A Load inputs or Score Portfolios step fails | That Run Step is marked failed and every later one skipped. The transaction never commits, so nothing it wrote survives, the Research Tilt LLM Exchanges stored under its savepoints included. Only the run row remains, with outcome `failed`. |
-| The Research Tilt call fails, or a replay miss in recorded mode | An LLM Exchange with outcome `error` is still stored. That Portfolio gets no tilt. If a Recommendation is drafted, its `research_tilt_proposed` event records `status: failed`. Scoring carries on. |
-| A Research Tilt is assessed, but the rebalance plan yields no Trade Lines | No Recommendation is drafted, so no `research_tilt_proposed` event is written. The tilt's LLM Exchange still commits with the scoring transaction, but no Audit Event references it. This is a known gap in anchoring every LLM Exchange in the chain ([ADR-0004](../adr/0004-llm-exchanges-stored-separately-anchored-in-audit-chain.md)). |
-| A narrative call fails, or its reply fails the schema | The narrative row is stored as failed, with a `status: failed` Audit Event carrying the LLM Exchange reference. The Run Step is marked failed and the outcome is `completed_with_warnings`. The Queue shows "Narrative unavailable (AI step failed; scores are unaffected)." |
-| The process dies mid-run | At startup the run row is marked `interrupted`. If the process died during `record_run`, committed scoring rows and some Audit Events remain. The run is never current, but its Recommendations are visible. This is the gap that [ADR-0009](../adr/0009-analysis-run-recording-commits-per-audit-event.md) records. |
+[Detailed 6.1 analysis run controls and failure paths](appendices.md#e18-61-analysis-run-controls-and-failure-paths).
 
 ## 6.2 Tiered Decisions
 
 Every Recommendation starts at `pending_advisor`. The approvals policy decides which further steps it needs:
-
-- **Compliance** when its post-trade Suitability is in breach. The Compliance Officer approves a Suitability Exception or blocks the Recommendation.
-- **Investment Committee** when its turnover, or any single Trade Line, is at or above the configured threshold.
-
-The policy is a pure function of the Recommendation and the configuration in force at the moment of each Decision. A threshold change between steps therefore re-plans what remains. Each Decision is accepted only at the step the Recommendation is waiting at, so no step can be skipped. No LLM is called on this path, so no LLM Exchange is written. "Approved" means cleared to act outside the platform; nothing is executed.
 
 ```mermaid
 sequenceDiagram
@@ -179,12 +157,7 @@ sequenceDiagram
   Note over A,AU: Each Decision's Audit Event names the Recommendation's previous event as its parent,<br/>so lineage runs from the Analysis Run through every Decision.
 ```
 
-| Failure path | What happens |
-| --- | --- |
-| A Decision at the wrong step, or on a Recommendation already decided or superseded | `409`, naming the status the Recommendation is in. Nothing is written. |
-| A missing rationale (reject or modify at the Advisor step; every Compliance and Committee Decision) | `422`. Nothing is written. |
-| A modification with invalid Trade Lines (unknown Instrument or Account, a quantity that is not a positive whole number, a duplicate line, selling more than is held) | `422`, with the engine's validation message. |
-| A new Analysis Run while a Recommendation is open | The run supersedes it with a `recommendation_superseded` event, and any later Decision on it gets `409` (see [6.1](#61-analysis-run)). |
+[Detailed 6.2 tiered decisions controls and failure paths](appendices.md#e19-62-tiered-decisions-controls-and-failure-paths).
 
 ## 6.3 Report ingestion to Insight Review
 
@@ -242,23 +215,11 @@ sequenceDiagram
   G->>AU: grounding_checked (+ claim_ungrounded for a quote not on its page)
 ```
 
-| Failure path | What happens |
-| --- | --- |
-| Unreadable or oversized file | `413` over 20 MiB. `422` for a file that is not a PDF or UTF-8 text, a scanned PDF with no text, or more than 400,000 characters. Nothing is stored and no LLM call is made. |
-| The extraction call fails, or a replay miss in recorded mode | The Report is kept with extraction status `failed`. An LLM Exchange with outcome `error` and an `insight_extracted` event with outcome `failed` are written. The Analyst sees the failure on the Report. |
-| The LLM invents a subject, page or passage | That candidate is dropped before it becomes an Insight, and the reason is recorded on `insight_extracted`. |
-| A second Insight Review of the same Insight | `409`. The first review stands. |
-| A narrative misquotes an approved Report | The Grounding validator flags the Claim (`quote_not_found`) and writes `claim_ungrounded`. Only Grounded Claims reach a memo or summary. |
+[Detailed 6.3 report ingestion to insight review controls and failure paths](appendices.md#e20-63-report-ingestion-to-insight-review-controls-and-failure-paths).
 
 ## 6.4 Assistant Question
 
 Any role holding `assistant:use` can ask the Assistant about the screen in view. The browser sends only the Question and a screen identity (kind, entity ids, selected item), never screen data. The server rebuilds the Screen Context through the same service the screen itself uses, filtered by the user's permissions. The context carries Client ids only, never names or emails.
-
-The Assistant is a bounded, read-only agent ([ADR-0010](../adr/0010-assistant-is-a-bounded-read-only-agent-on-pydantic-ai.md)). When the Question needs data from another screen, the model asks for a lookup, and the server answers it with that screen's Screen Context, built by the same permission-checked builder. A lookup the user could not open on screen returns "not found or not permitted for your role", which does not say whether the item exists. Each draft reply passes an output validator. A draft that names a Client fails the turn at once. A draft with ungrounded Claims is sent back once with the failing Claims, and anything still ungrounded after that is kept and flagged. Every model request is captured as an LLM Exchange of one Trajectory, at most `APP_ASSISTANT_REQUEST_LIMIT` (6) per Answer. Every turn, whether answered, refused or failed, is stored append-only in the login session's Conversation with one Audit Event that anchors the whole Trajectory ([ADR-0006](../adr/0006-assistant-conversations-persisted-and-audited.md)).
-
-### Assistant Trajectory
-
-A cross-screen Question asked on the Queue ("What does Portfolio C004 hold, and which Restriction does it break?") takes one lookup and, if the first draft misstates a figure, one self-correction:
 
 ```mermaid
 sequenceDiagram
@@ -318,15 +279,4 @@ sequenceDiagram
   SPA-->>U: Answer with grounding marks, the Out-of-Scope Refusal, or the failure message
 ```
 
-Each model request of the Trajectory is stored before the next one is sent, so a turn that fails part-way still anchors every Exchange it made. The Exchanges page shows the Trajectory as one group, step k of n, to `llm:read` roles only. The Advisor sees the summary, never raw Exchanges. In recorded mode each request replays by a hash of the messages so far, so a changed lookup result misses rather than replaying a stale continuation.
-
-| Failure path | What happens |
-| --- | --- |
-| A usage limit is hit | `400` for an over-long Question. `429` once the Conversation reaches its Question limit (log out and back in to start a new one). `429` with `Retry-After` once the user reaches the hourly limit. Turns count whatever their outcome. Nothing is stored and the model is not called. |
-| The screen names something the user cannot read, or that does not exist | `refused`, without an LLM call. The user sees the same Out-of-Scope Refusal either way, so the reply does not reveal whether the item exists. |
-| A replay miss in recorded mode | `failed` with reason `replay_miss`. The user is told that only Suggested Questions work in recorded mode (the message says "replay mode"). Suggested Questions are sent without history, so their recordings replay whatever was asked before them. |
-| Guardrail refusal: the model judges the Question out of scope | `refused`. The model's text is discarded and the fixed Out-of-Scope Refusal is shown. The LLM Exchange keeps what the model said. |
-| The Trajectory reaches its request budget (`APP_ASSISTANT_REQUEST_LIMIT`, default 6) | `failed` with reason `budget_exhausted`. The request beyond the budget is never sent. Every Exchange made so far is anchored, in order, in `assistant.failed`. The user is told to try a narrower Question, and "How I answered" shows the requests used against the limit. |
-| The PII backstop fires | `failed` with reason `pii`. The Answer is not grounded, stored or shown. The Audit Event records the reason; the user sees only the generic failure message. |
-| An ungrounded Claim | The draft goes back to the model once, naming each failing Claim and its issues; "How I answered" shows the self-correction. A Claim still ungrounded after that is shown flagged, and a `claim_ungrounded` Audit Event is written. |
-| A lookup the user may not open, or of something that does not exist | The tool returns "not found or not permitted for your role" and the model is told to say so honestly, without guessing which. No data of that screen reaches the prompt. |
+[Detailed 6.4 assistant question controls and failure paths](appendices.md#e21-64-assistant-question-controls-and-failure-paths).

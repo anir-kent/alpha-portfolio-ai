@@ -139,7 +139,7 @@ def test_a_code_change_behind_a_generated_region_fails_check_until_regenerated(r
     assert f"stale generated region '{region}'" in out
 
     assert run(capsys, "regenerate", "--doc-dir", str(doc))[0] == 0
-    assert new_row in (doc / "08-crosscutting-concepts.md").read_text()
+    assert any(new_row in path.read_text() for path in doc.glob("*.md"))
     code, out = run(capsys, "check", "--doc-dir", str(doc), "--no-mermaid")
     assert code == 0, out
 
@@ -286,3 +286,28 @@ def test_build_prints_a_pdf_with_the_stamped_cover_and_the_diagrams_as_vector_te
     assert "Document control" in text
     assert "signs the stamped baseline" in text  # a Mermaid edge label as extractable text: vector, not raster
     assert "flowchart LR" not in text  # no diagram left as source
+    destinations = {
+        item.title: reader.get_destination_page_number(item) for item in reader.outline if not isinstance(item, list)
+    }
+    body_start = destinations["1. Introduction and Goals"]
+    appendix_start = destinations["Appendices"]
+    summary_start = destinations["Executive Summary"]
+    assert body_start is not None and appendix_start is not None and summary_start is not None
+    assert 15 <= appendix_start - body_start <= 20  # includes the production roadmap, excludes front matter
+    assert body_start - summary_start <= 2
+    matrix_page = next(
+        "".join(page.extract_text().split())
+        for page in reader.pages
+        if "Permissionrelationship_manager" in "".join(page.extract_text().split())
+    )
+    for role in (
+        "relationship_manager",
+        "advisor",
+        "portfolio_manager",
+        "research_analyst",
+        "compliance_officer",
+        "investment_committee",
+        "auditor",
+        "platform_owner",
+    ):
+        assert role in matrix_page  # every column must survive in the rendered matrix, including the rightmost one

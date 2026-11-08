@@ -758,32 +758,42 @@ def _cover(stamp: Stamp) -> str:
 
 
 STYLESHEET = """\
-@page { size: A4; margin: 18mm 18mm 20mm; }
-html { font: 9.5pt/1.45 -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; }
+@page { size: A4; margin: 14mm 15mm 20mm; }
+html { font: 9.5pt/1.3 -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif; color: #1a1a1a; }
 body { margin: 0; }
-section.section, section.index { break-before: page; }
+section.index, section[id="00-executive-summary"], section[id="01-introduction-and-goals"],
+section[id="appendices"] { break-before: page; }
 section.index > h1:first-child { display: none; }  /* the cover carries the title */
-h1 { font-size: 20pt; margin: 0 0 6mm; padding-bottom: 2mm; border-bottom: 1.5pt solid #1f3a5f; color: #1f3a5f; }
-h2 { font-size: 13.5pt; margin: 7mm 0 2mm; color: #1f3a5f; }
+h1 { font-size: 20pt; margin: 0 0 4mm; padding-bottom: 2mm; border-bottom: 1.5pt solid #1f3a5f; color: #1f3a5f; }
+h2 { font-size: 13.5pt; margin: 4mm 0 2mm; color: #1f3a5f; }
 h3 { font-size: 11pt; margin: 5mm 0 1.5mm; }
 h1, h2, h3, h4 { break-after: avoid; }
 p, li { orphans: 3; widows: 3; }
 a { color: #1f5fa8; text-decoration: none; }
-code { font: 8.5pt "SF Mono", Menlo, Consolas, monospace; background: #f2f4f7; padding: 0 1.5pt; border-radius: 2pt; }
+code { font: 8.5pt "SF Mono", Menlo, Consolas, monospace; background: #f2f4f7; padding: 0 1.5pt; border-radius: 2pt; overflow-wrap: anywhere; }
 pre { background: #f2f4f7; padding: 3mm; border-radius: 2pt; white-space: pre-wrap; break-inside: avoid; }
 pre code { background: none; padding: 0; }
-table { border-collapse: collapse; width: 100%; margin: 3mm 0; font-size: 8.5pt; }
-th, td { border: 0.5pt solid #c5ccd6; padding: 1.2mm 2mm; text-align: left; vertical-align: top; }
+table { border-collapse: collapse; table-layout: fixed; width: 100%; margin: 3mm 0; font-size: 8.5pt; overflow-wrap: break-word; }
+table:has(th:nth-child(2):last-child) th:first-child { width: 27%; }
+table:has(th:nth-child(3):last-child) th:first-child { width: 20%; }
+table:has(th:nth-child(3):last-child) th:nth-child(2) { width: 50%; }
+table:has(th:nth-child(5):last-child) th:first-child { width: 7%; }
+table:has(th:nth-child(6):last-child) th:first-child { width: 6%; }
+table:has(th:nth-child(6):last-child) th:nth-child(2) { width: 24%; }
+table:has(th:nth-child(6):last-child) th:nth-child(3) { width: 8%; }
+table:has(th:nth-child(9):last-child) th:first-child { width: 22%; }
+table:has(th:nth-child(9):last-child) th:not(:first-child) { width: 9.75%; }
+th, td { border: 0.5pt solid #c5ccd6; padding: 1mm 2mm; text-align: left; vertical-align: top; }
 thead th { background: #e8edf3; }
 tr { break-inside: avoid; }
 blockquote { margin: 3mm 0; padding: 1mm 4mm; border-left: 2pt solid #c5ccd6; color: #444; }
 figure.diagram { margin: 4mm 0; text-align: center; break-inside: avoid; }
-figure.diagram svg { max-width: 100%; height: auto; max-height: 230mm; }
+figure.diagram svg { max-width: 100%; height: auto; max-height: 165mm; }
 img { max-width: 100%; }
 section.cover { height: 245mm; display: flex; flex-direction: column; justify-content: center; }
 section.cover h1 { font-size: 28pt; border: none; line-height: 1.2; }
 section.cover .subtitle { font-size: 13pt; color: #555; margin: 0 0 12mm; }
-table.stamp { width: auto; font-size: 11pt; }
+table.stamp { table-layout: auto; width: auto; font-size: 11pt; }
 table.stamp th { background: #e8edf3; width: 30mm; }
 table.stamp td { min-width: 90mm; }
 table.stamp code { font-size: 10pt; }

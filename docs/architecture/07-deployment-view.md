@@ -1,6 +1,6 @@
 # 7. Deployment View
 
-This section describes the local demonstrator. There is no cloud deployment, container image or infrastructure-as-code baseline in the repository. The proposed production topologies are kept in the [Target / Production Roadmap](13-roadmap.md#logical-production-deployment).
+This section describes the local demonstrator. There is no cloud deployment, container image or infrastructure-as-code baseline in the repository. Proposed production topologies are preserved in [Appendix E](appendices.md#logical-production-deployment) and summarized in the [Roadmap](13-roadmap.md).
 
 ## 7.1 Logical deployment
 
@@ -51,4 +51,4 @@ The API reads the committed market snapshot and fund look-through files; it does
 
 ## 7.2 Reference deployment on Azure
 
-Azure is a proposed mapping, not an existing environment. The [Azure reference diagram and mapping](13-roadmap.md#azure-reference-deployment) and [cloud-agnostic production diagram](13-roadmap.md#logical-production-deployment) live in the Roadmap so that target services cannot be mistaken for deployed components.
+Azure is a proposed mapping, not an existing environment. The [Azure reference diagram and mapping](appendices.md#azure-reference-deployment) and [cloud-agnostic production diagram](appendices.md#logical-production-deployment) are preserved in Appendix E as proposed target services, with rollout gates summarized in the [Roadmap](13-roadmap.md).
