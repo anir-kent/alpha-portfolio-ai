@@ -1,6 +1,6 @@
 # Manual E2E checklist (one page)
 
-Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
+Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go. For a quick pass over the pydantic-ai Assistant work only, use `docs/sanity-test-pack.md`.
 
 ## Setup
 

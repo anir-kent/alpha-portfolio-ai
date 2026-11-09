@@ -29,6 +29,7 @@ source .venv/bin/activate
 rm -f data/app.db                      # fresh seed, so the recordings replay
 uv run python -m app.seeder            # 25 synthetic clients, deterministic
 uv run python -m app.research_seed     # 5 reports + human-verified approved insights
+uv run python -m app.market_refresh    # Refresh market data from twelve Data
 APP_LLM_MODE=recorded APP_LLM_RECORDINGS_DIR=tests/fixtures/llm \
   uv run uvicorn app.main:create_app --factory --port 8000   # Terminal 1
 cd frontend && npm run dev                                  # Terminal 2 -> http://localhost:5173
