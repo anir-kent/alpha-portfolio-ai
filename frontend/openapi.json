@@ -1146,6 +1146,41 @@
             }
           },
           {
+            "name": "trajectory_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trajectory Id"
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "trajectory",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`trajectory`: page by LLM Trajectory, newest first, so `total`, `limit` and `offset` count Trajectories and each one's matching Exchanges come together in position order.",
+              "title": "Group"
+            },
+            "description": "`trajectory`: page by LLM Trajectory, newest first, so `total`, `limit` and `offset` count Trajectories and each one's matching Exchanges come together in position order."
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -2327,6 +2362,10 @@
           "context_rows": {
             "type": "integer",
             "title": "Context Rows"
+          },
+          "request_limit": {
+            "type": "integer",
+            "title": "Request Limit"
           }
         },
         "type": "object",
@@ -2335,7 +2374,8 @@
           "questions_per_conversation",
           "questions_per_hour",
           "history_pairs",
-          "context_rows"
+          "context_rows",
+          "request_limit"
         ],
         "title": "AssistantLimits"
       },
@@ -2514,6 +2554,29 @@
           "unreferenced": {
             "type": "integer",
             "title": "Unreferenced"
+          },
+          "trajectories": {
+            "type": "integer",
+            "title": "Trajectories"
+          },
+          "assistant_turns": {
+            "type": "integer",
+            "title": "Assistant Turns"
+          },
+          "assistant_turns_with_lookups": {
+            "type": "integer",
+            "title": "Assistant Turns With Lookups"
+          },
+          "lookup_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lookup Share"
           }
         },
         "type": "object",
@@ -2522,7 +2585,11 @@
           "live",
           "recorded",
           "errors",
-          "unreferenced"
+          "unreferenced",
+          "trajectories",
+          "assistant_turns",
+          "assistant_turns_with_lookups",
+          "lookup_share"
         ],
         "title": "CaptureHealth"
       },
@@ -3457,6 +3524,28 @@
             ],
             "title": "Error"
           },
+          "trajectory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory Id"
+          },
+          "trajectory_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory Position"
+          },
           "hash": {
             "type": "string",
             "title": "Hash"
@@ -3474,6 +3563,13 @@
             },
             "type": "array",
             "title": "Grounding"
+          },
+          "trajectory_exchange_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Trajectory Exchange Ids"
           }
         },
         "type": "object",
@@ -3496,9 +3592,12 @@
           "telemetry",
           "outcome",
           "error",
+          "trajectory_id",
+          "trajectory_position",
           "hash",
           "used_by",
-          "grounding"
+          "grounding",
+          "trajectory_exchange_ids"
         ],
         "title": "ExchangeDetail"
       },
@@ -3610,6 +3709,32 @@
             ],
             "title": "Error"
           },
+          "trajectory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory Id"
+          },
+          "trajectory_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trajectory Position"
+          },
+          "trajectory_length": {
+            "type": "integer",
+            "title": "Trajectory Length"
+          },
           "hash": {
             "type": "string",
             "title": "Hash"
@@ -3650,6 +3775,9 @@
           "usage",
           "telemetry",
           "error",
+          "trajectory_id",
+          "trajectory_position",
+          "trajectory_length",
           "hash",
           "recommendation_id",
           "portfolio_id"
@@ -6250,6 +6378,107 @@
         ],
         "title": "TradeLineOut"
       },
+      "Trajectory": {
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/TrajectoryStep"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "requests_used": {
+            "type": "integer",
+            "title": "Requests Used"
+          },
+          "request_limit": {
+            "type": "integer",
+            "title": "Request Limit"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "title": "Output Tokens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "steps",
+          "requests_used",
+          "request_limit",
+          "input_tokens",
+          "output_tokens"
+        ],
+        "title": "Trajectory"
+      },
+      "TrajectoryStep": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "model_request",
+              "tool_call",
+              "self_correction"
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "arguments": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arguments"
+          },
+          "result_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Summary"
+          },
+          "issue_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issue Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "TrajectoryStep"
+      },
       "Turn": {
         "properties": {
           "seq": {
@@ -6325,6 +6554,16 @@
               }
             ],
             "title": "Exchange Hash"
+          },
+          "trajectory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Trajectory"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "grounding_check_id": {
             "anyOf": [

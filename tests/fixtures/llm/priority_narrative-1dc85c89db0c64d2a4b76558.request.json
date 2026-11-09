@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"claims\": [{\"asset\": null, \"citations\": [{\"figure\": \"priority_score\", \"kind\": \"engine\"}, {\"figure\": \"component.drift.points\", \"kind\": \"engine\"}, {\"figure\": \"component.risk.points\", \"kind\": \"engine\"}, {\"figure\": \"component.opportunity.points\", \"kind\": \"engine\"}, {\"figure\": \"component.urgency.points\", \"kind\": \"engine\"}], \"text\": \"The priority score is 55.96, built from drift contributing 11.96 points, risk 24.0 points and opportunity 20.0 points, with urgency adding 0.0 points.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.bond.actual_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.bond.target_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.bond.drift_pp\", \"kind\": \"engine\"}], \"text\": \"Bonds are the largest allocation drift, at 12.99% against a 10.0% target, which is 2.99 percentage points over.\"}, {\"asset\": \"Utilities\", \"citations\": [{\"figure\": \"exposure.sector.Utilities\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 3, \"quote\": \"Valuation levels are not attractive.\", \"report_id\": \"RPT-FID-Q2-2026\"}], \"text\": \"Utilities make up 15.28% of the portfolio, and research calls valuation levels not attractive for the sector, which adds risk.\"}, {\"asset\": \"Information Technology\", \"citations\": [{\"figure\": \"exposure.sector.Information Technology\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 3, \"quote\": \"Solid fundamentals and compelling valuations after a sell-off.\", \"report_id\": \"RPT-FID-Q2-2026\"}], \"text\": \"Information Technology is 20.26% of the portfolio, and research cites solid fundamentals and compelling valuations after a sell-off, though confidence is low.\"}]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative",
+  "usage": {}
+}

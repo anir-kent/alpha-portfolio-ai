@@ -6,6 +6,7 @@ touched. To show that a generated region follows the live code, a test changes t
 edit to the document could not show that."""
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -93,11 +94,11 @@ SOURCE_CHANGES = {  # region -> (a change to its source in code, a row only the 
             prompts,
             "ALL",
             tuple(
-                prompts.Prompt(prompt.name, "v4", prompt.system) if prompt.name == "assistant_answer" else prompt
+                prompts.Prompt(prompt.name, "v-next", prompt.system) if prompt.name == "assistant_answer" else prompt
                 for prompt in prompts.ALL
             ),
         ),
-        "| `assistant_answer` | `v4` | `assistant_answer@v4` |",
+        "| `assistant_answer` | `v-next` | `assistant_answer@v-next` |",
     ),
     "audit-event-types": (
         lambda mp: mp.setattr(audit, "EVENT_TYPES", (*audit.EVENT_TYPES, "chain_sealed")),
@@ -139,7 +140,7 @@ def test_a_code_change_behind_a_generated_region_fails_check_until_regenerated(r
     assert f"stale generated region '{region}'" in out
 
     assert run(capsys, "regenerate", "--doc-dir", str(doc))[0] == 0
-    assert new_row in (doc / "08-crosscutting-concepts.md").read_text()
+    assert any(new_row in path.read_text() for path in doc.glob("*.md"))
     code, out = run(capsys, "check", "--doc-dir", str(doc), "--no-mermaid")
     assert code == 0, out
 
@@ -232,6 +233,18 @@ def git(repo: Path, *args: str) -> str:
 @pytest.fixture
 def committed_doc(doc: Path) -> Path:
     """The `doc` copy, committed as the only commit of a fresh repository, so its working tree is clean."""
+    # Release metadata belongs to the fixture: publishing a new real export must not change these scenarios.
+    index = doc / "index.md"
+    text = re.sub(r"^\| Status \|.*$", "| Status | Draft |", index.read_text(), flags=re.MULTILINE)
+    before, history = text.split("### Version history", 1)
+    _, contents = history.split("## Contents", 1)
+    index.write_text(
+        before + "### Version history\n\n"
+        "| Version | Date | Commit | Status | Change |\n"
+        "| --- | --- | --- | --- | --- |\n"
+        "| 0.0 | 2026-11-07 | (this export) | Draft | Test baseline |\n\n"
+        "## Contents" + contents
+    )
     repo = doc.parents[1]
     git(repo, "init", "--quiet")
     git(repo, "add", "--all")
@@ -286,3 +299,28 @@ def test_build_prints_a_pdf_with_the_stamped_cover_and_the_diagrams_as_vector_te
     assert "Document control" in text
     assert "signs the stamped baseline" in text  # a Mermaid edge label as extractable text: vector, not raster
     assert "flowchart LR" not in text  # no diagram left as source
+    destinations = {
+        item.title: reader.get_destination_page_number(item) for item in reader.outline if not isinstance(item, list)
+    }
+    body_start = destinations["1. Introduction and Goals"]
+    appendix_start = destinations["Appendices"]
+    summary_start = destinations["Executive Summary"]
+    assert body_start is not None and appendix_start is not None and summary_start is not None
+    assert 15 <= appendix_start - body_start <= 20  # includes the production roadmap, excludes front matter
+    assert body_start - summary_start <= 2
+    matrix_page = next(
+        "".join(page.extract_text().split())
+        for page in reader.pages
+        if "Permissionrelationship_manager" in "".join(page.extract_text().split())
+    )
+    for role in (
+        "relationship_manager",
+        "advisor",
+        "portfolio_manager",
+        "research_analyst",
+        "compliance_officer",
+        "investment_committee",
+        "auditor",
+        "platform_owner",
+    ):
+        assert role in matrix_page  # every column must survive in the rendered matrix, including the rightmost one

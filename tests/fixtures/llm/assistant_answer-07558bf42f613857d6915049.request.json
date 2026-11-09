@@ -1,0 +1,15 @@
+{
+  "model": "scripted-assistant-fixture-v5",
+  "parts": [
+    {
+      "content": "{\"in_scope\": true, \"answer_markdown\": \"Portfolio C001's holdings and drift\\n\\nHoldings: AAPL, AGG, JNJ, JPM, LQD, MSFT, NVDA, SGOV, SPY, XLK.\\n\\n- portfolio.C001.portfolio_drift_pp: 0.02.\\n- portfolio.C001.total_value: 1748533.578564.\", \"claims\": [{\"text\": \"portfolio.C001.portfolio_drift_pp: 0.02.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"portfolio.C001.portfolio_drift_pp\"}]}, {\"text\": \"portfolio.C001.total_value: 1748533.578564.\", \"citations\": [{\"kind\": \"engine\", \"figure\": \"portfolio.C001.total_value\"}]}], \"follow_up_questions\": [\"Which screen shows the supporting figures?\"]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v5",
+  "task": "assistant_answer",
+  "usage": {
+    "input_tokens": 8741,
+    "output_tokens": 78
+  }
+}

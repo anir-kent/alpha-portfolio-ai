@@ -9,7 +9,6 @@ import pytest
 from sqlalchemy import select
 
 from app.db import ClientRow
-from app.exchanges import CapturingLlm
 from tests.fixtures.assistant_eval import (
     EVAL_SET,
     LEAK,
@@ -19,15 +18,14 @@ from tests.fixtures.assistant_eval import (
     screen_context_of,
 )
 from tests.fixtures.suggested_questions import lift_question_limits, seed_demo
+from tests.scripted import serve
 
 
 @pytest.fixture
 def scripted(app):
     lift_question_limits(app.state.settings)
     seed_demo(app)
-    model = ScriptedEvalModel(EVAL_SET)
-    app.state.llm = CapturingLlm(model, app.state.session_factory, mode="recorded")
-    return model
+    return serve(app, ScriptedEvalModel(EVAL_SET))
 
 
 def by_id(report):
@@ -84,16 +82,18 @@ def test_injected_report_passages_stay_fenced_in_the_prompt(app, scripted):
     run_eval(app, EVAL_SET)
     injected = {c.question: c.injection for c in EVAL_SET if c.injection}
     assert len(injected) >= 3
-    seen = 0
-    for request in scripted.requests:
-        question = question_of(request.user)
+    seen = set()
+    for request in scripted.requests:  # a self-correction retry resends the same prompt
+        question = question_of(request.prompts[0])
         if question not in injected:
             continue
-        seen += 1
-        assert request.user.count("<<<END_REPORT_PASSAGE>>>") == 1
-        outside = request.user.split("<<<REPORT_PASSAGE")[0] + request.user.split("<<<END_REPORT_PASSAGE>>>")[1]
+        seen.add(question)
+        assert request.prompts[0].count("<<<END_REPORT_PASSAGE>>>") == 1
+        outside = (
+            request.prompts[0].split("<<<REPORT_PASSAGE")[0] + request.prompts[0].split("<<<END_REPORT_PASSAGE>>>")[1]
+        )
         assert injected[question] not in outside
-    assert seen == len(injected)
+    assert seen == set(injected)
 
 
 def test_a_question_naming_another_client_carries_none_of_that_clients_data(app, scripted):
@@ -101,15 +101,26 @@ def test_a_question_naming_another_client_carries_none_of_that_clients_data(app,
     foreign = {c.question: c.foreign_client for c in EVAL_SET if c.foreign_client}
     assert foreign
     for request in scripted.requests:
-        question = question_of(request.user)
+        question = question_of(request.prompts[0])
         if question in foreign:
-            context = screen_context_of(request.user)
+            context = screen_context_of(request.prompts[0])
             assert foreign[question] not in context
 
 
 def test_the_eval_set_covers_every_category_and_the_platform_only_screens():
     categories = {c.category for c in EVAL_SET}
-    assert categories == {"in_scope", "platform", "advice", "prediction", "unrelated", "other_client", "injection"}
+    assert categories == {
+        "in_scope",
+        "platform",
+        "advice",
+        "prediction",
+        "unrelated",
+        "other_client",
+        "injection",
+        "cross_screen",
+        "self_correction",
+        "not_permitted",
+    }
     platform = {c.screen for c in EVAL_SET if c.category == "platform"}
     assert {"config", "health", "exchanges"} <= platform
     assert len({c.question for c in EVAL_SET}) == len(EVAL_SET)  # the scripted model looks cases up by Question
@@ -130,3 +141,38 @@ def test_an_answer_that_follows_an_injected_passage_fails_its_case_and_counts_as
     leaked = {r.id for r in report.results if r.canary_leaked}
     assert leaked == {c.id for c in EVAL_SET if c.canary}
     assert report.injection_leaks == len(leaked) and not any(by_id(report)[i].passed for i in leaked)
+
+
+def test_a_cross_screen_case_passes_only_when_its_answer_came_through_the_lookup(app, scripted):
+    cases = [c for c in EVAL_SET if c.category == "cross_screen"]
+    assert cases and all(c.lookups and c.expect == "answered" for c in cases)
+    report = run_eval(app, EVAL_SET)
+    for c in cases:
+        result = by_id(report)[c.id]
+        assert result.passed, (c.id, result.problems)
+        assert [name for name, _ in c.lookups] == result.lookups
+        assert result.requests_used >= 2  # the lookup's request, then the Answer's
+    scripted.skip_lookups = True
+    report = run_eval(app, EVAL_SET)
+    for c in cases:
+        assert any("did not look up" in p for p in by_id(report)[c.id].problems), c.id
+
+
+def test_the_self_correction_case_is_retried_once_and_its_still_ungrounded_claim_stays_flagged(app, scripted):
+    [case] = [c for c in EVAL_SET if c.category == "self_correction"]
+    result = by_id(run_eval(app, EVAL_SET))[case.id]
+    assert result.passed, result.problems
+    assert result.self_corrections == 1 and result.requests_used == 2
+    assert result.claims_ungrounded == 1  # the scripted retry repeats its invented figure
+
+
+def test_a_not_permitted_lookup_tells_the_user_without_showing_the_hidden_data(app, scripted):
+    cases = [c for c in EVAL_SET if c.category == "not_permitted"]
+    assert len(cases) >= 2 and all(c.expect == "not_permitted" and c.lookups for c in cases)
+    report = run_eval(app, EVAL_SET)
+    for c in cases:
+        result = by_id(report)[c.id]
+        assert result.passed, (c.id, result.problems)
+        assert result.outcome == "answered" and result.lookups == [name for name, _ in c.lookups]
+        assert result.not_permitted_lookups == len(c.lookups)
+        assert result.claims_total == 0

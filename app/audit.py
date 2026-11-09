@@ -150,38 +150,66 @@ class Verification:
     first_broken_exchange_id: int | None = None
 
 
-def exchange_reference(row_payload_json: str) -> tuple[int | None, str | None]:
-    """The (id, hash) of the LLM Exchange an event's payload references; (None, None) for a pre-capture event."""
+def exchange_references(row_payload_json: str) -> list[tuple[int, str | None]]:
+    """The (id, hash) of every LLM Exchange an event's payload anchors, in Trajectory order (ADR-0010). A legacy event's
+    single `exchange_id`/`exchange_hash` is a list of one; a pre-capture event anchors none."""
     payload = json.loads(row_payload_json)
-    return payload.get("exchange_id"), payload.get("exchange_hash")
+    if "exchanges" in payload:
+        return [(ref["exchange_id"], ref.get("exchange_hash")) for ref in payload["exchanges"]]
+    if payload.get("exchange_id") is not None:
+        return [(payload["exchange_id"], payload.get("exchange_hash"))]
+    return []
 
 
 def _exchange_problem(db: Session, row: AuditEventRow) -> tuple[int, str] | None:
-    """Recompute the Exchange an event references (ADR-0004). None if it is intact; events with no reference are
-    pre-capture and are not checked. The event's own hash covers the referenced hash, so a rewritten Exchange whose
-    hash was also recomputed still fails against the hash the chain pinned."""
+    """Recompute every Exchange an event anchors (ADR-0004 as amended by ADR-0010). None if its Trajectory is intact:
+    every Exchange present with the hash the chain pinned, all sharing one Trajectory at positions 0..n-1 in list order,
+    and no Exchange of that Trajectory left unanchored. Events with no reference are pre-capture and are not checked; a
+    legacy single reference, and a row written before Trajectories, each stand for a Trajectory of one. The event's own
+    hash covers the pinned hashes, so a rewritten Exchange whose hash was also recomputed still fails."""
     from app.exchanges import exchange_digest  # local: app.exchanges imports this module
 
-    exchange_id, pinned = exchange_reference(row.payload_json)
-    if exchange_id is None:
-        return None
-    try:
-        ex = db.get(LlmExchangeRow, exchange_id)
-    except OperationalError:  # the whole store is gone, which is the same finding as a missing row
-        ex = None
-    if ex is None:
-        return exchange_id, f"LLM Exchange #{exchange_id} referenced by this event is missing"
-    if exchange_digest(ex) != pinned or ex.hash != pinned:
-        return (
-            exchange_id,
-            f"LLM Exchange #{exchange_id} referenced by this event was altered (its hash no longer matches)",
-        )
+    refs = exchange_references(row.payload_json)
+    trajectory_id: str | None = None
+    for expected_position, (exchange_id, pinned) in enumerate(refs):
+        try:
+            ex = db.get(LlmExchangeRow, exchange_id)
+        except OperationalError:  # the whole store is gone, which is the same finding as a missing row
+            ex = None
+        if ex is None:
+            return exchange_id, f"LLM Exchange #{exchange_id} referenced by this event is missing"
+        if exchange_digest(ex) != pinned or ex.hash != pinned:
+            return (
+                exchange_id,
+                f"LLM Exchange #{exchange_id} referenced by this event was altered (its hash no longer matches)",
+            )
+        if expected_position == 0:
+            trajectory_id = ex.trajectory_id
+        # A row written before Trajectories has no id: it is a Trajectory of one, so it must be anchored alone.
+        if ex.trajectory_id != trajectory_id or (trajectory_id is None and len(refs) > 1):
+            return exchange_id, f"LLM Exchange #{exchange_id} belongs to a different Trajectory from this event's"
+        if trajectory_id is None:
+            continue
+        if ex.trajectory_position != expected_position:
+            return (
+                exchange_id,
+                f"LLM Exchange #{exchange_id} is out of order in this event's Trajectory "
+                f"(anchored at position {expected_position}, recorded at {ex.trajectory_position})",
+            )
+    if trajectory_id is not None:
+        unanchored = db.scalars(
+            select(LlmExchangeRow.id)
+            .where(LlmExchangeRow.trajectory_id == trajectory_id, LlmExchangeRow.id.not_in([i for i, _ in refs]))
+            .order_by(LlmExchangeRow.trajectory_position)
+        ).first()
+        if unanchored is not None:
+            return unanchored, f"LLM Exchange #{unanchored} of this event's Trajectory is not anchored by it"
     return None
 
 
 def verify(db: Session) -> Verification:
-    """Walk the chain in order and report the first broken link, or the first event whose referenced Exchange is
-    altered or missing."""
+    """Walk the chain in order and report the first broken link, or the first event whose anchored Trajectory has an
+    altered, missing, reordered or unanchored Exchange."""
     expected_prev = GENESIS_HASH
     checked = 0
     exchanges = 0
@@ -203,8 +231,7 @@ def verify(db: Session) -> Verification:
             return Verification(
                 False, checked, row.id, problem[1], exchanges_checked=exchanges, first_broken_exchange_id=problem[0]
             )
-        if exchange_reference(row.payload_json)[0] is not None:
-            exchanges += 1
+        exchanges += len(exchange_references(row.payload_json))
         expected_prev = row.hash
         checked += 1
     return Verification(True, checked, exchanges_checked=exchanges)

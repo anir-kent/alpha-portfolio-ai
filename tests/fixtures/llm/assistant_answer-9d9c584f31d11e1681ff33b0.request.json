@@ -1,0 +1,23 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "args": "{\"portfolio_id\": \"C001\"}",
+      "part_kind": "tool-call",
+      "tool_call_id": "toolu_01FNuZbNtNJZyWC8wKLbaxQt",
+      "tool_name": "look_up_portfolio"
+    }
+  ],
+  "prompt_version": "assistant_answer@v5",
+  "task": "assistant_answer",
+  "usage": {
+    "details": {
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "is_byok": 0,
+      "reasoning_tokens": 0
+    },
+    "input_tokens": 30458,
+    "output_tokens": 58
+  }
+}

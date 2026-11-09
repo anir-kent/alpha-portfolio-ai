@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"claims\": [{\"asset\": null, \"citations\": [{\"figure\": \"priority_score\", \"kind\": \"engine\"}, {\"figure\": \"portfolio_drift_pp\", \"kind\": \"engine\"}, {\"figure\": \"drift.bond.actual_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.bond.target_pct\", \"kind\": \"engine\"}], \"text\": \"Priority score is 78.2, driven mainly by portfolio drift of 7.05 pp, with the bond sleeve at 17.95% against a 25.0% target.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.equity.actual_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.equity.target_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.cash.actual_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.cash.target_pct\", \"kind\": \"engine\"}], \"text\": \"Equity is 74.91% versus a 70.0% target, and cash is 7.14% versus a 5.0% target, so the portfolio is overweight both.\"}, {\"asset\": \"Consumer Staples\", \"citations\": [{\"figure\": \"exposure.sector.Consumer Staples\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 1, \"quote\": \"We are negative on Consumer Staples.\", \"report_id\": \"RPT-HV-MERIDIAN-Q4-2026\"}], \"text\": \"Consumer Staples is 13.38% of the portfolio, and research flags it as a negative: \\\"We are negative on Consumer Staples.\\\"\"}, {\"asset\": \"Materials\", \"citations\": [{\"figure\": \"exposure.sector.Materials\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 3, \"quote\": \"Higher capital expenditures may weigh on the sector.\", \"report_id\": \"RPT-FID-Q2-2026\"}], \"text\": \"Materials is 20.92% of the portfolio, and research cautions that \\\"Higher capital expenditures may weigh on the sector.\\\"\"}]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative",
+  "usage": {}
+}

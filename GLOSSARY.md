@@ -114,6 +114,14 @@ _Avoid_: Log entry, trace, transcript
 The ordered LLM Exchanges, with the lookups the model asked for between them, that together produce one outcome such as one Answer; a single-call step is a Trajectory of one Exchange.
 _Avoid_: Trace, run, session, chain
 
+**Request budget**:
+The most model requests one Answer's LLM Trajectory may make, lookups and Self-correction included (a setting, default 6). A Trajectory that would go over it fails the turn with reason `budget_exhausted`; every Exchange it made stays anchored.
+_Avoid_: Step limit, max iterations, quota
+
+**Self-correction**:
+The one retry an Answer's first draft gets when grounding rejects some of its Claims: the model is told each failing Claim and its issues, and Claims still ungrounded in the second draft are kept, flagged. A draft exposing PII is never self-corrected.
+_Avoid_: Reflection, repair, regeneration
+
 ### Assistant
 
 **Assistant**:

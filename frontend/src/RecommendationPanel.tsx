@@ -324,7 +324,14 @@ function ResearchSection({ research }: { research: Research }) {
             </div>
           </>
         ))}
-      {exchangeId !== null && <ExchangeDrawer id={exchangeId} canLineage={false} onClose={() => setExchangeId(null)} />}
+      {exchangeId !== null && (
+        <ExchangeDrawer
+          id={exchangeId}
+          canLineage={false}
+          onClose={() => setExchangeId(null)}
+          onNavigate={setExchangeId}
+        />
+      )}
     </section>
   );
 }

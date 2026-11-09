@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"claims\": [{\"asset\": null, \"citations\": [{\"figure\": \"priority_score\", \"kind\": \"engine\"}, {\"figure\": \"component.drift.points\", \"kind\": \"engine\"}], \"text\": \"Priority score is 76.27, driven mainly by drift, which contributes 26.27 points.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.equity.actual_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.equity.target_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.equity.drift_pp\", \"kind\": \"engine\"}, {\"figure\": \"drift.bond.drift_pp\", \"kind\": \"engine\"}], \"text\": \"Equity is 51.57% against a 45.0% target, an overweight of 6.57 percentage points, while bonds are 4.84 points under target.\"}, {\"asset\": \"Utilities\", \"citations\": [{\"figure\": \"exposure.sector.Utilities\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 3, \"quote\": \"Valuation levels are not attractive.\", \"report_id\": \"RPT-FID-Q2-2026\"}], \"text\": \"Utilities is 23.35% of the portfolio, and research calls valuations unattractive, which supports reviewing this concentration.\"}, {\"asset\": \"Health Care\", \"citations\": [{\"figure\": \"exposure.sector.Health Care\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 1, \"quote\": \"Our Investment Committee is overweight Health Care.\", \"report_id\": \"RPT-HV-NORTHWIND-Q4-2026\"}], \"text\": \"Health Care is only 7.86% of the portfolio, while the Investment Committee is overweight the sector.\"}]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative",
+  "usage": {}
+}

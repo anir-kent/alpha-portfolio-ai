@@ -21,9 +21,12 @@ const STAGES: Record<Stage, string> = {
 const COLUMNS: Stage[][] = [["analysis", "report"], ["insight"], ["research_tilt"], ["recommendation"], ["decision"]];
 const COLUMN_TITLE = ["Report passage", "Insight", "Research Tilt", "Recommendation", "Decisions"];
 
-/** The Exchange an AI node's event points at, if the event was captured (pre-capture events carry none). */
+/** The final Exchange of the LLM Trajectory an AI node's event anchors, if the event was captured (pre-capture events
+ * carry none). Events written before Trajectories carry a single `exchange_id` instead of an `exchanges` list. */
 export function exchangeIdOf(n: Node): number | null {
-  const id = n.payload.exchange_id;
+  const anchored = n.payload.exchanges;
+  const last: unknown = Array.isArray(anchored) ? anchored[anchored.length - 1] : undefined;
+  const id = last && typeof last === "object" && "exchange_id" in last ? last.exchange_id : n.payload.exchange_id;
   return typeof id === "number" ? id : null;
 }
 
@@ -244,7 +247,9 @@ export function LineagePage({ canViewExchange = false }: { canViewExchange?: boo
           )}
         </Panel>
       )}
-      {exchangeId !== null && <ExchangeDrawer id={exchangeId} canLineage onClose={() => setExchangeId(null)} />}
+      {exchangeId !== null && (
+        <ExchangeDrawer id={exchangeId} canLineage onClose={() => setExchangeId(null)} onNavigate={setExchangeId} />
+      )}
     </div>
   );
 }

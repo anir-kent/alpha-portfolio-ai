@@ -1,12 +1,15 @@
 """Seam: the governance page's API (GET /api/governance, POST /api/governance/fixtures/run). Every figure is computed from
 stored audit and grounding data; the page is for the Auditor and Platform Owner only."""
 
+import json
+from pathlib import Path
+
 import pytest
 
-from app.exchanges import CapturingLlm
 from tests.conftest import ROLES
 from tests.fixtures.assistant_eval import EVAL_SET, ScriptedEvalModel, run_eval
 from tests.fixtures.suggested_questions import lift_question_limits, seed_demo
+from tests.scripted import serve
 from tests.test_grounding import check, ctx, report_cite  # noqa: F401  (ctx is a fixture)
 from tests.test_queue import seeded  # noqa: F401  (fixture ctx needs)
 
@@ -95,6 +98,7 @@ def test_the_model_card_lists_the_assistant_with_its_prompt_scope_and_limits(log
         "questions_per_hour": 20,
         "history_pairs": 6,
         "context_rows": 25,
+        "request_limit": 6,
     }
 
 
@@ -112,7 +116,7 @@ def test_an_unreadable_eval_results_file_leaves_the_model_card_without_eval_resu
 def test_the_model_card_shows_the_latest_live_eval_results(app, login, settings, tmp_path):
     lift_question_limits(settings)
     seed_demo(app)
-    app.state.llm = CapturingLlm(ScriptedEvalModel(EVAL_SET), app.state.session_factory, mode="recorded")
+    serve(app, ScriptedEvalModel(EVAL_SET))
     report = run_eval(app, EVAL_SET, model="scripted-eval-model")
     settings.assistant_eval_path = str(tmp_path / "assistant_eval.json")
     (tmp_path / "assistant_eval.json").write_text(report.model_dump_json())
@@ -129,6 +133,25 @@ def test_the_committed_live_eval_results_are_for_the_current_prompt_version(logi
     assistant = governance(login)["model_card"]["assistant"]
     assert assistant["latest_eval"] is not None, "run the live eval and commit data/assistant_eval.json"
     assert assistant["latest_eval"]["prompt_version"] == assistant["prompt_version"], "re-run the live eval"
+
+
+def test_governance_preserves_the_committed_live_eval_provenance_and_results(login):
+    committed = json.loads((Path(__file__).resolve().parents[1] / "data" / "assistant_eval.json").read_text())
+    latest = governance(login)["model_card"]["assistant"]["latest_eval"]
+    assert latest is not None
+    for field in (
+        "prompt_version",
+        "model",
+        "ran_at",
+        "cases",
+        "passed",
+        "claims_total",
+        "refusal_rate",
+        "ungrounded_claim_rate",
+        "failed_turns",
+        "injection_leaks",
+    ):
+        assert latest[field] == committed[field]
 
 
 # --- adversarial fixtures: latest run ---------------------------------------------------------------------------------

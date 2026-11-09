@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"claims\": [{\"asset\": null, \"citations\": [{\"figure\": \"priority_score\", \"kind\": \"engine\"}, {\"figure\": \"component.drift.points\", \"kind\": \"engine\"}], \"text\": \"Priority score is 87.15, driven mostly by drift, which contributes 31.73 points.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.equity.actual_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.equity.target_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.bond.actual_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.bond.target_pct\", \"kind\": \"engine\"}], \"text\": \"Equity is 77.07% against an 85.0% target, while bonds are 15.06% against 10.0%.\"}, {\"asset\": \"Energy\", \"citations\": [{\"figure\": \"exposure.sector.Energy\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 3, \"quote\": \"Indicators suggest negative risk-reward.\", \"report_id\": \"RPT-FID-Q2-2026\"}], \"text\": \"Energy is 21.04% of the portfolio, and research flags negative risk-reward for it.\"}, {\"asset\": \"Health Care\", \"citations\": [{\"figure\": \"exposure.sector.Health Care\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 1, \"quote\": \"Our Investment Committee is overweight Health Care.\", \"report_id\": \"RPT-HV-NORTHWIND-Q4-2026\"}], \"text\": \"Health Care is the largest holding at 23.99%, in line with an overweight stance from the Investment Committee.\"}]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative",
+  "usage": {}
+}

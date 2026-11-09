@@ -1,4 +1,4 @@
-"""The Assistant: one Question, one LLM call, one stored turn (sme-assistant spec, ADR-0006).
+"""The Assistant: one Question, one Agent run, one stored turn (sme-assistant spec, ADR-0006).
 
 A turn is answered, refused or failed. Whatever the outcome it is stored append-only in the login session's Conversation
 and writes an `assistant.<outcome>` Audit Event carrying the LLM Exchange reference, so chain verification covers the
@@ -11,14 +11,18 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, ValidationError, field_validator
+from pydantic_ai import UsageLimitExceeded
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import audit, grounding, prompts, screen_context
+from app.assistant_agent import AssistantDeps, PiiExposed, Trajectory, run_agent
 from app.db import AssistantTurnRow, ClientRow, ConversationRow, SessionRow, User
+from app.exchanges import ModelLlm
 from app.grounding import CheckSubject, Claim, ClaimResult
-from app.llm import LlmClient, LlmError, LlmRequest, LlmResponse, RecordingMissing, exchange_ref
+from app.llm import LlmError, LlmRequest, LlmResponse, RecordingMissing, exchange_ref
 from app.market_data import MarketData
+from app.pydantic_llm import tagged
 from app.screen_context import ScreenIdentity
 from app.settings import Settings
 from app.timeutil import as_utc
@@ -30,11 +34,14 @@ OUT_OF_SCOPE_REFUSAL = (
 )
 FAILED_MESSAGE = "The Assistant couldn't answer, try again."
 REPLAY_MESSAGE = "Only Suggested Questions work in replay mode."
+BUDGET_MESSAGE = "That Question needed more lookups than one Answer may make. Try a narrower Question."
 
 Outcome = Literal["answered", "refused", "failed"]
 # Why a turn failed, on its `assistant.failed` Audit Event. The user sees FAILED_MESSAGE, except for a recorded-mode
-# miss (`replay_miss`), which says honestly that only Suggested Questions replay.
-FailureReason = Literal["llm_error", "unreadable_reply", "pii", "replay_miss"]
+# miss (`replay_miss`), which says honestly that only Suggested Questions replay, and a Trajectory stopped at its
+# request budget (`budget_exhausted`), which suggests a narrower Question.
+FailureReason = Literal["llm_error", "unreadable_reply", "pii", "replay_miss", "budget_exhausted"]
+FAILURE_MESSAGES: dict[str, str] = {"replay_miss": REPLAY_MESSAGE, "budget_exhausted": BUDGET_MESSAGE}
 
 
 class LimitExceeded(Exception):
@@ -91,7 +98,7 @@ def check_limits(db: Session, user: User, session: SessionRow, question: str, se
 
 
 def _failure_message(reason: str | None) -> str:
-    return REPLAY_MESSAGE if reason == "replay_miss" else FAILED_MESSAGE
+    return FAILURE_MESSAGES.get(reason or "", FAILED_MESSAGE)
 
 
 def _replay_miss(error: LlmError) -> bool:
@@ -130,6 +137,7 @@ class Turn(BaseModel):
     context_label: str | None  # how the drawer names the context; None when nothing was readable
     exchange_id: int | None
     exchange_hash: str | None
+    trajectory: Trajectory | None = None
     grounding_check_id: str | None  # the check of this turn's Claims; None when it had none
 
 
@@ -213,6 +221,22 @@ def _contains_pii(db: Session, reply: AssistantReply) -> bool:
     )
 
 
+def _review(deps: AssistantDeps, content: dict) -> list[ClaimResult]:
+    """The guardrails on one candidate reply: raises PiiExposed when it names a Client, else returns the Claims
+    grounding rejects (a PII hit is never coached). Nothing is stored; `ask` checks and stores only the final Answer. A reply that does not
+    read as an AssistantReply, or is out of scope, passes through for `ask` to handle."""
+    try:
+        reply = AssistantReply.model_validate(content)
+    except ValidationError:
+        return []
+    if not reply.in_scope:
+        return []  # the model's text is discarded, so there is nothing to check
+    if _contains_pii(deps.db, reply):
+        raise PiiExposed
+    results = (grounding.validate_claim(deps.db, claim, i, deps.figures) for i, claim in enumerate(reply.claims))
+    return [r for r in results if not r.grounded]
+
+
 def _prompt(context: screen_context.ScreenContext, history: list[tuple[str, str]], question: str) -> LlmRequest:
     """The four labelled blocks. History is text only: earlier Screen Contexts are never resent."""
     blocks = [
@@ -232,7 +256,7 @@ def _prompt(context: screen_context.ScreenContext, history: list[tuple[str, str]
 
 def ask(
     db: Session,
-    llm: LlmClient,
+    llm: ModelLlm,
     market: MarketData,
     user: User,
     session: SessionRow,
@@ -247,9 +271,9 @@ def ask(
     outcome: Outcome
     answer: Answer | None = None
     model: str | None = None
-    called: LlmResponse | LlmError | None = None
     reply: AssistantReply | None = None
     reason: FailureReason | None = None
+    deps = AssistantDeps(user, db, market, settings, dict(context.figures) if context else {}, [])
     if context is None:  # nothing readable: refuse without calling the model or saying whether the entity exists
         outcome = "refused"
     else:
@@ -258,20 +282,23 @@ def ask(
         pairs = 0 if screen_context.is_suggested(screen.kind, question) else settings.assistant_history_pairs
         request = _prompt(context, _history(db, session, pairs), question)
         try:
-            called = llm.complete(request)
-            model = called.model
-            reply = AssistantReply.model_validate(called.content)
+            captured = llm.trajectory().capturing_model(request, deps.exchanges)
+            with tagged(request):
+                content = run_agent(captured, request, deps, _review)
+            model = deps.exchanges[-1].model if deps.exchanges else None
+            reply = AssistantReply.model_validate(content)
+        except PiiExposed:  # a rejected Answer is never checked, stored or shown
+            outcome, reason = "failed", "pii"
+        except UsageLimitExceeded:  # the request beyond the budget was never sent; every one before it is anchored
+            outcome, reason = "failed", "budget_exhausted"
         except LlmError as e:  # includes a call capture could not record: it fails closed, no Answer reaches the user
-            called, outcome, reason = e, "failed", "replay_miss" if _replay_miss(e) else "llm_error"
+            outcome, reason = "failed", "replay_miss" if _replay_miss(e) else "llm_error"
         except ValidationError:
             outcome, reason = "failed", "unreadable_reply"
+        except Exception:
+            outcome, reason = "failed", "llm_error"
         else:
-            if not reply.in_scope:
-                outcome = "refused"  # the model's text is discarded, so there is nothing to check
-            elif _contains_pii(db, reply):  # before grounding: a rejected Answer is never checked, stored or shown
-                outcome, reason = "failed", "pii"
-            else:
-                outcome = "answered"
+            outcome = "answered" if reply.in_scope else "refused"
 
     conv = _conversation(db, user, session)
     seq = (
@@ -284,14 +311,27 @@ def ask(
             check_id, claims = grounding.validate_figures(
                 db,
                 reply.claims,
-                context.figures,
+                deps.figures,
                 client_id=context.portfolio_id,
                 subject=CheckSubject(subject_kind="assistant_turn", subject_id=f"{conv.id}.{seq}"),
             )
         answer = Answer(markdown=reply.answer_markdown, claims=claims, follow_up_questions=reply.follow_up_questions)
     elif outcome == "refused":
         answer = Answer(markdown=OUT_OF_SCOPE_REFUSAL, claims=[], follow_up_questions=[])
-    ref = exchange_ref(called)
+    ref = exchange_ref(
+        [
+            LlmResponse(
+                content={},
+                model=row.model or "",
+                prompt_version=row.prompt_version,
+                exchange_id=row.id,
+                exchange_hash=row.hash,
+            )
+            for row in deps.exchanges
+        ]
+    )
+    trajectory = deps.summary() if context else None
+    final = (ref.get("exchanges") or [{}])[-1]  # the turn row and response name the request that produced the reply
     context_hash = context.hash if context else None
     db.add(
         AssistantTurnRow(
@@ -304,9 +344,10 @@ def ask(
             outcome=outcome,
             answer_json=answer.model_dump_json() if answer else None,
             grounding_check_id=check_id,
-            exchange_id=ref.get("exchange_id"),
-            exchange_hash=ref.get("exchange_hash"),
+            exchange_id=final.get("exchange_id"),
+            exchange_hash=final.get("exchange_hash"),
             failure_reason=reason,
+            trajectory_json=trajectory.model_dump_json() if trajectory else None,
         )
     )
     portfolio_id = context.portfolio_id if context else None
@@ -340,9 +381,10 @@ def ask(
         message=_failure_message(reason) if outcome == "failed" else None,
         screen=screen,
         context_label=context.label if context else None,
-        exchange_id=ref.get("exchange_id"),
-        exchange_hash=ref.get("exchange_hash"),
+        exchange_id=final.get("exchange_id"),
+        exchange_hash=final.get("exchange_hash"),
         grounding_check_id=check_id,
+        trajectory=trajectory,
     )
 
 
@@ -366,6 +408,7 @@ def _turn(row: AssistantTurnRow) -> Turn:
         exchange_id=row.exchange_id,
         exchange_hash=row.exchange_hash,
         grounding_check_id=row.grounding_check_id,
+        trajectory=Trajectory.model_validate_json(row.trajectory_json) if row.trajectory_json else None,
     )
 
 

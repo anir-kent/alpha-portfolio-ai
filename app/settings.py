@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # endpoint, so the default leaves it to the provider. Reported on the governance model card.
     llm_temperature: float | None = None
     llm_recordings_dir: str = "data/llm_recordings"
-    llm_record: bool = False  # live mode only: save each response as a recording
+    llm_record: bool = False  # live mode only: save each model request's reply as a recording
     llm_stream_poll_seconds: float = 1.0  # how often the Exchange stream looks for new rows
     llm_stream_max_seconds: float = 300.0  # a stream closes after this; the browser reconnects with its last event id
     # The Assistant's limits. Each description is the "Effect" column of the generated table in the architecture
@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     )
     assistant_questions_per_hour: PositiveInt = Field(
         default=20, description="Questions a user may ask in any rolling hour; then 429"
+    )
+    assistant_request_limit: PositiveInt = Field(
+        default=6, description="Model requests one Answer may make, lookups and self-correction included; then it fails"
     )
     assistant_eval_path: str = "data/assistant_eval.json"  # latest live eval results, shown on the model card
     seed_dir: str = "data/seed"

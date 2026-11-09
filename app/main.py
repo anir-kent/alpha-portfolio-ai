@@ -5,8 +5,7 @@ from sqlalchemy import select
 
 from app.analysis_runs import AnalysisRuns, mark_stranded_runs_interrupted
 from app.db import User, make_session_factory
-from app.exchanges import CapturingLlm, endpoint_host
-from app.llm import build_llm
+from app.exchanges import build_llm
 from app.rbac import ROLES
 from app.routers import (
     analysis,
@@ -38,17 +37,14 @@ def seed_users(session_factory, password: str) -> None:
         db.commit()
 
 
-def create_app(settings: Settings | None = None, *, llm_transport: httpx.BaseTransport | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, *, llm_transport: httpx.AsyncBaseTransport | httpx.BaseTransport | None = None
+) -> FastAPI:
     settings = settings or Settings()
     app = FastAPI(title="Alpha Portfolio AI", version="0.1.0")
     app.state.settings = settings
     app.state.session_factory = make_session_factory(settings.database_url)
-    app.state.llm = CapturingLlm(
-        build_llm(settings, llm_transport),
-        app.state.session_factory,
-        mode=settings.llm_mode,
-        endpoint_host=endpoint_host(settings),
-    )
+    app.state.llm = build_llm(settings, app.state.session_factory, llm_transport)
     # Before any run can start, a row with no outcome is from a process that died mid-run. One API process only (ADR-0005)
     mark_stranded_runs_interrupted(app.state.session_factory)
     app.state.analysis_runs = AnalysisRuns(app.state.session_factory)

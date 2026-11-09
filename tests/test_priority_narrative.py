@@ -7,7 +7,7 @@ per queue row that the grounding validator holds to citations; it can never chan
 import pytest
 
 from tests.runs import run_and_wait
-from tests.test_ai_recommendations import StubLlm, ai  # noqa: F401  (fixtures)
+from tests.test_ai_recommendations import ai  # noqa: F401  (fixture)
 from tests.test_queue import rows, seeded  # noqa: F401  (fixture)
 
 AUDIT = "/api/audit/events"

@@ -1,0 +1,15 @@
+{
+  "model": "scripted-assistant-fixture-v5",
+  "parts": [
+    {
+      "content": "{\"in_scope\": true, \"answer_markdown\": \"Why does the Assistant need an LLM Exchange selected to discuss it?\\n\\nSelect an Exchange to include its prompt and reply in the Assistant's context. Without a selection, the Assistant can explain the screen but cannot discuss a particular call.\", \"claims\": [], \"follow_up_questions\": [\"Which screen shows the supporting figures?\"]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v5",
+  "task": "assistant_answer",
+  "usage": {
+    "input_tokens": 280,
+    "output_tokens": 54
+  }
+}

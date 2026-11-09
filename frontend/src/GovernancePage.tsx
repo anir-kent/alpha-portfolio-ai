@@ -188,6 +188,18 @@ export function GovernancePage({ canRunFixtures }: { canRunFixtures: boolean }) 
             tone={ch.unreferenced > 0 ? "neg" : undefined}
           />
         </div>
+        <div className="grid grid-cols-2 divide-x divide-line border-t border-line sm:grid-cols-5">
+          <Kpi
+            label="Trajectories"
+            value={String(ch.trajectories)}
+            sub="ordered model requests, one per call or Answer"
+          />
+          <Kpi
+            label="Turns using lookups"
+            value={ch.lookup_share === null ? "—" : `${Math.round(ch.lookup_share * 100)}%`}
+            sub={`${ch.assistant_turns_with_lookups} of ${ch.assistant_turns} Assistant turns`}
+          />
+        </div>
       </Panel>
 
       <Panel
@@ -294,6 +306,7 @@ const LIMITS: [keyof AssistantCard["limits"], string, string][] = [
   ["questions_per_hour", "Per user per hour", "Questions"],
   ["history_pairs", "History sent", "Question/Answer pairs"],
   ["context_rows", "List rows sent", "rows"],
+  ["request_limit", "Model requests per Answer", "requests"],
 ];
 
 function AssistantPanel({ assistant }: { assistant: AssistantCard }) {

@@ -1,6 +1,6 @@
 # Manual E2E checklist (one page)
 
-Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
+Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go. For a quick pass over the pydantic-ai Assistant work only, use `docs/sanity-test-pack.md`.
 
 ## Setup
 
@@ -11,6 +11,27 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [x] `cd frontend && npm run dev` -> <http://localhost:5173>
 - [x] Log in with username = role name (`advisor`, `compliance_officer`, ...) and the `APP_SEED_USER_PASSWORD` password
 - [ ] LLM mode known: recorded replays the first Analysis Run's AI steps on a fresh seed (anything else shows "failed", the rest still works); live calls OpenRouter
+
+
+## Interviewer demo script: the bounded agent (ADR-0010), about 10 minutes
+
+One story, four beats: the Assistant gathers its own context, shows how it answered, the Auditor sees the same Trajectory raw, and the chain proves nothing was changed. Beats 1 to 3 work in recorded mode; the self-correction and budget beats need live mode (`APP_LLM_MODE=live`, OpenRouter). Talking points are in italics.
+
+1. **A cross-screen Question from the Queue** (advisor, after Run analysis)
+   - [ ] On `/queue`, open the Assistant and ask the Suggested Question "What are the holdings and drift of Portfolio C001?". C001's Holdings are not on the Queue screen. The Answer lists them, and its Claims cite `portfolio.C001.*` figures, marked grounded. _The model chose the lookup; the server built the result through the same permission-checked, PII-free builder the Portfolio screen uses, so it sees no more than the advisor could open._
+   - [ ] Live: from `/queue` ask "What does Portfolio C004 hold, and which Restriction does it break?". The Answer names the broken Restriction, citing looked-up figures
+2. **"How I answered"**
+   - [ ] Open "How I answered": model request 1, then `look_up_portfolio` with `portfolio_id: C001` and its result summary (holdings, drift), then model request 2. "Requests: 2 / 6" and the input and output tokens are shown. _Each step is a stored LLM Exchange, not a log line; six requests is the hard cap per Answer (`APP_ASSISTANT_REQUEST_LIMIT`)._
+   - [ ] Lookups are least privilege. Live: ask "What is waiting for a Compliance Decision right now?" on `/queue`. `look_up_approvals` reports "not found or not permitted for your role", and the Answer says so without guessing. _A missing item and a forbidden one get the same reply, so existence is never revealed._
+   - [ ] Self-correction. Live, from `/portfolios/C001`: "Roughly how many millions is this Portfolio worth?" (or "Quote the exact cash weight to two decimals and the drift of every Asset Class."). If the first draft rounds or misstates a figure, "How I answered" shows "Self-correction · N grounding issues sent back" between two model requests. A Claim still ungrounded after the one retry stays flagged. _Reflection is against a deterministic guardrail, the Grounding validator, not the model grading itself, and it is capped at one retry._
+   - [ ] Budget, optional, live with `APP_ASSISTANT_REQUEST_LIMIT=2`: "Compare the holdings and drift of Portfolios C001, C002 and C003." fails with "That Question needed more lookups than one Answer may make…" and "Requests: 2 / 2". _The request beyond the budget is never sent._
+3. **The same Trajectory on the LLM Exchanges page** (log in as auditor; advisors never see raw Exchanges)
+   - [ ] `/llm-exchanges` shows the Answer as one row, "▸ 2 steps", with summed tokens and latency; expand it to "step 1/2" and "step 2/2"
+   - [ ] Open step 2: the drawer reads "Step 2 of 2 in this Trajectory". Prompt's "Request messages" shows step 1's tool call and the tool result verbatim; Previous goes to step 1. _In live mode these are the bytes that crossed the wire, captured at the `httpx` transport; replays are labelled as replays._
+   - [ ] On `/audit`, the turn's `assistant.answered` event lists both Exchanges in `exchanges`, by id and hash, in position order
+4. **Chain verification**
+   - [ ] "Verify chain" reports OK, recomputing every Audit Event and every Exchange of every Trajectory. _Editing, deleting, reordering or orphaning any step would name the first broken record (QS-A1, QS-A2)._
+   - [ ] Governance: the model card's Assistant eval shows the latest live run for `assistant_answer@v5` and its pass count (the set includes cross-screen, self-correction and not-permitted cases; per-case results are in `data/assistant_eval.json`); capture health shows "Trajectories" and "Turns using lookups"
 
 ## Advisor: queue (C001-C005 are the planted scenarios)
 
@@ -27,7 +48,7 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] Stream refused (any non-200 on `events`): the modal shows "Live updates unavailable; checking every 1s" and keeps updating by polling the snapshot; if polling fails too (e.g. session cookie cleared) it shows "Could not load the run's progress. Retrying…"
 - [ ] Without an LLM configured, both narrative steps show skipped and the run ends Completed
 - [ ] On Completed the Queue behind refreshes (new run number in the subtitle); View updated queue closes the modal on it
-- [ ] Completed with warnings, recorded LLM mode: with approved research in place (`uv run python -m app.research_seed`), move every `data/llm_recordings/priority_narrative-*.json` aside, then Run analysis. Priority narratives shows failed with "Narrative unavailable (AI step failed; scores are unaffected).", Recommendation narratives still runs and shows done, the header reads "Completed with warnings", the Queue refreshes to the new run and View updated queue is offered. Put the recordings back
+- [ ] Completed with warnings, recorded LLM mode: with approved research in place (`uv run python -m app.research_seed`), move every `data/llm_recordings/priority_narrative-*.request.json` aside, then Run analysis. Priority narratives shows failed with "Narrative unavailable (AI step failed; scores are unaffected).", Recommendation narratives still runs and shows done, the header reads "Completed with warnings", the Queue refreshes to the new run and View updated queue is offered. Put the recordings back
 - [ ] Interrupted: with approved research in place and a live LLM (so the run is slow), Run analysis, then stop the API (Ctrl-C) during Score Portfolios and start it again. Reload the Queue: no pill, Run analysis is enabled and the Queue still shows the previous run number. Open `/api/analysis/runs/<id>` for the stopped run: `"outcome": "interrupted"`, every step `skipped`. A modal left open on the stopped run (stale tab) ends on "Interrupted" with "Run interrupted. The Queue still shows the previous run" and the Queue does not refresh. Run analysis again: a new run starts at once. (If the stop lands after Record run, the stopped run shows Load inputs, Score Portfolios and Record run done, the narratives skipped, and the Queue shows that run)
 - [ ] The modal header reads "Started by advisor at <time>" for your own run
 - [ ] Close and reopen (use a live LLM, or approved research in place, so the run is slow): Close (or Escape) mid-run; the header shows "Analysis running… View progress" and Run analysis reads "Analysis Run in progress". Either one reopens the modal on the same run, which has kept going (the steps moved on while it was hidden). Close it again and let the run finish: the pill goes, the button reads Run analysis again, and the Queue refreshes to the new run number without the modal open
@@ -58,7 +79,7 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] On `/portfolios/C001` the drawer header reads "Portfolio C001"; on a screen that publishes no context (e.g. a Recommendation's Lineage page) it reads "No context on this screen" and the Question box is disabled
 - [ ] Ask "Which asset class drives the drift?" on C001: "Thinking…" shows, then the Answer renders as Markdown (bold, lists) with no raw HTML; follow-up questions fill the Question box when clicked
 - [ ] Ask "Should I buy NVDA?": the fixed refusal shows ("I can only help with questions about this platform…"), never the model's text
-- [ ] As auditor, the turn's LLM Exchange (task `assistant_answer`, `assistant_answer@v3`) is listed on LLM Exchanges with no Client name or email in its prompt, an `assistant.answered` or `assistant.refused` Audit Event references it, and Verify chain passes
+- [ ] As auditor, the turn's LLM Exchange (task `assistant_answer`, `assistant_answer@v5`) is listed on LLM Exchanges with no Client name or email in its prompt, an `assistant.answered` or `assistant.refused` Audit Event references it, and Verify chain passes
 - [ ] Ask two Questions on C001, then reload the page: reopening the drawer shows both turns in order
 - [ ] Ask on C001, open `/portfolios/C002` and ask again: a "Context changed · Portfolio C002" divider separates the turns; the earlier turn still reads as asked on C001; a follow-up ("and why?") gets an Answer that uses the earlier turn (its Exchange prompt has a CONVERSATION SO FAR block with text only, no earlier Screen Context)
 - [ ] Switch role (logout) and log back in: the drawer is empty, and the first Question is turn 1 of a new Conversation
@@ -67,6 +88,13 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] Retry works: with the model unreachable (e.g. `APP_LLM_MODE=live` and a bad `APP_LLM_BASE_URL`, or a non-Suggested Question in recorded mode), ask on C001: the turn shows "The Assistant couldn't answer, try again." with no error detail and a Retry button. Fix the model, move to `/portfolios/C002` and click Retry: a new turn asks the same Question against C001 (a divider marks the context change back), the failed turn stays above it, and whatever is typed in the Question box is kept. As auditor, the failed turn has an `assistant.failed` Audit Event with `reason` `llm_error` that references the error LLM Exchange, and Verify chain passes
 
 ## Assistant (Queue and Recommendation screens)
+
+- [ ] On `/queue`, ask the Suggested Question "What are the holdings and drift of Portfolio C001?". The Answer cites looked-up Portfolio figures. "How I answered" starts collapsed; opening it shows the ordered model requests, `look_up_portfolio`, its `portfolio_id` argument, holdings/drift result summary, requests used against the limit, and input/output tokens. Reload and confirm the summary is retained.
+- [ ] Open "How I answered" on an Answer needing no lookup: it still shows the single model request and usage. As platform owner on Health, request Portfolio C001; the lookup reports "not found or not permitted for your role" and the Answer acknowledges this. A missing Portfolio gives the same lookup result.
+- [ ] In live mode, from `/portfolios/C001` ask "How many conservative Portfolios are on the Queue, and is anything waiting on Compliance?" as advisor: "How I answered" shows `look_up_queue` with its filter and a summary such as "queue: 8 rows", then `look_up_approvals` reporting "not found or not permitted for your role" (the advisor has no Approvals panel), and the Answer says so. Its `lookup.1.queue.total_rows` chip goes to `/queue`
+- [ ] In live mode, from `/portfolios/C001` ask "Quote the exact cash weight to two decimals and the drift of every Asset Class." as advisor. If the first draft cites a figure wrongly, "How I answered" shows "Self-correction · N grounding issues sent back" between two model requests, and any Claim still ungrounded after the retry is flagged. As auditor, the second LLM Exchange of that Trajectory carries the failing Claims and their issues verbatim, and the turn's grounding check holds only the final Answer. A first draft naming a Client fails the turn with `reason` `pii` after one request
+- [ ] In live mode with `APP_ASSISTANT_REQUEST_LIMIT=2`, from `/queue` ask "Compare the holdings and drift of Portfolios C001, C002 and C003." as advisor. The turn fails with "That Question needed more lookups than one Answer may make. Try a narrower Question." and a Retry button, and reads the same after a reload. "How I answered" shows "Requests: 2 / 2". As auditor, its `assistant.failed` Audit Event has `reason` `budget_exhausted` and both Exchanges in `exchanges`, and `/api/audit/verify` is valid. The Governance model card's Assistant limits show "Model requests per Answer: 2"
+- [ ] Ask "What does approved research say about Information Technology?": `list_approved_insights` lists only approved Insights (an Insight awaiting review or rejected on `/research` never appears), and the Report chip opens the quoted passage. Ask about a Recommendation by id from `/queue`: `look_up_recommendation` summarises "recommendation N: k trade lines, b breaches" and its chips go to that Recommendation's Portfolio. As auditor, `look_up_audit` and `look_up_governance` summarise "audit: N events, showing M" and "governance: model card"
 
 - [ ] On `/queue` the drawer header reads "Queue"; ask "Why is C003 ranked above C005?": the Answer explains it from the priority components, and its engine chips (e.g. `queue.C003.score`) go to `/queue`
 - [ ] Change the Queue's sort or filter and ask again: as auditor, the turn's Exchange prompt lists the rows in that order and filter; with `APP_ASSISTANT_CONTEXT_ROWS=10` it holds 10 rows and the note "showing 10 of 25", and the Answer says what it couldn't see
@@ -84,7 +112,7 @@ Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go.
 - [ ] As auditor on `/llm-exchanges`, open an Exchange: the header reads "LLM Exchange N"; ask "What did the model see?": the new turn's Exchange prompt holds the opened Exchange's system text, prompt and reply fenced between `<<<LLM_EXCHANGE ...>>>` and `<<<END_LLM_EXCHANGE>>>`. Closing the Exchange returns the header to "LLM Exchanges", and the prompt then carries no Exchange body
 - [ ] As platform_owner on `/governance`, ask "Which model and prompt versions are in use?": the Answer matches the model card
 - [ ] As platform_owner on `/config` and `/health`, ask "How does an Analysis Run work?": the Answer explains it from the platform brief, and the turn's Exchange prompt holds no config values or health figures, and the Answer has no Claims
-- [ ] As auditor on `/governance`, the Assistant panel shows `assistant_answer@v3`, the scope policy, the five limits, and the latest live eval (refusal rate, false refusals, ungrounded-Claim rate, failed turns, injection leaks) with no "run against" warning
+- [ ] As auditor on `/governance`, the Assistant panel shows `assistant_answer@v5`, the scope policy, the five limits, and the latest live eval (refusal rate, false refusals, ungrounded-Claim rate, failed turns, injection leaks) with a "run against" warning when the latest live eval used an earlier prompt; scripted replay fixtures do not replace a live eval
 
 ## Assistant (Suggested Questions and replay mode)
 
@@ -128,6 +156,7 @@ Setup: `APP_ASSISTANT_QUESTION_MAX_CHARS=40`, `APP_ASSISTANT_QUESTIONS_PER_CONVE
 - [ ] Lineage: report passage -> insight -> tilt -> recommendation -> decisions
 - [ ] Verify chain reports OK
 - [ ] Governance: model card, prompt log, AI quality panel
+- [ ] Governance capture health shows "Trajectories" (every pipeline call counts as one, each Assistant Answer as one) and "Turns using lookups" as a percentage with "N of M Assistant turns"; after one Question that makes a lookup and one that does not, it reads 50% and "1 of 2"
 - [ ] Adversarial fixtures (fabricated quote, wrong number, uncited call) flagged or blocked
 
 ## LLM Exchanges
@@ -141,6 +170,8 @@ Setup: `APP_ASSISTANT_QUESTION_MAX_CHARS=40`, `APP_ASSISTANT_QUESTIONS_PER_CONVE
 - [ ] Live tail off: rows already shown stay; the list catches up on anything missed
 - [ ] Stop the API while tailing: pill goes to "Reconnecting…"; restart it and the tail resumes with nothing missing or doubled
 - [ ] Tail refused (e.g. session expired) falls back to the list with "Stream unavailable, showing list" and no rows lost
+- [ ] After a cross-screen Question from `/queue` (one lookup, then the Answer), the feed shows that Answer as one row reading "▸ 2 steps" with summed tokens and latency; expanding it shows its Exchanges as "step 1/2" then "step 2/2" in position order, and collapsing hides them. A pipeline call is still a single row with no step marker
+- [ ] "Show more" and the "Showing N of M Trajectories" count page by Trajectory, so no Trajectory is split across pages; with Outcome "Failed", a budget-exhausted or failed Answer still shows as one group, "failed at step k", with "n of m match" when only some steps failed
 
 ### Exchange drawer, download and lineage entry
 
@@ -151,6 +182,8 @@ Setup: `APP_ASSISTANT_QUESTION_MAX_CHARS=40`, `APP_ASSISTANT_QUESTIONS_PER_CONVE
 - [ ] Used by lists the referencing Audit Events and the grounding verdict, and links to the Recommendation's lineage
 - [ ] "Download JSON" saves `llm-exchange-<id>.json` containing the Exchange and its `hash`
 - [ ] A failed Exchange shows the error text and any raw reply that was captured
+- [ ] Open a step of a multi-step Trajectory: the drawer reads "Step k of n in this Trajectory"; Previous is disabled on step 1 and Next on step n, and each opens the neighbouring Exchange in place (the header and the Assistant's "LLM Exchange N" follow). An Exchange that is a Trajectory of one shows no step bar. Metadata shows the Trajectory id and position
+- [ ] On step 2 of a lookup Trajectory, Prompt's "Request messages" shows the step-1 tool call (name and arguments) and the tool result the model was given, verbatim
 - [ ] Lineage page, as a role with `llm:read`: AI nodes show "View LLM Exchange" and open the same drawer; as a role without `llm:read` the button is absent
 
 ### Advisor AI-step summary

@@ -1,20 +1,24 @@
 """Seam: AI-assisted Recommendations through the HTTP API (ADR-0001). The LLM proposes a Research Tilt from approved
 Insights and look-through exposure; the engine clips it to the configured bound before it moves any Trade Line, and
-writes rationale + memo that the grounding validator holds to citations. The LLM is a stub; the engine is real.
+writes rationale + memo that the grounding validator holds to citations. The LLM is a stub Model behind capture (Insight
+extraction replays, the other steps are scripted); the engine is real.
 
 Planted C003 (conservative, ~$ millions): equity 20% (SPY 10, XLV 5, XLP 5) vs 20% target; cash 40% vs 15%; bonds 40% vs 65%.
 Without a tilt there are no equity Trade Lines. Bound defaults to 2.0 pp (spec), so an equity tilt of +5 must trade ~2%.
 """
 
 import json
+from collections.abc import Callable
 
+import httpx
 import pytest
+from pydantic_ai.models import Model
 from sqlalchemy import select
 
 from app import research_tilt
 from app.db import AuditEventRow
-from app.llm import LlmError, LlmResponse
 from tests.runs import run_and_wait
+from tests.scripted import ByTask, ScriptedModel, serve
 from tests.test_portfolio import url
 from tests.test_queue import seeded  # noqa: F401  (fixture)
 from tests.test_research import upload
@@ -22,25 +26,34 @@ from tests.test_research import upload
 EQUITY_FUNDS = {"SPY", "XLV", "XLP", "XLK", "XLI"}
 
 
-class StubLlm:
-    """Replays Insight extraction from the committed recordings; tilt and narrative come from the test."""
+SCRIPTED_STEPS = {
+    "research_tilt": "tilt",
+    "recommendation_narrative": "narrative",
+    "priority_narrative": "priority_narrative",
+}
 
-    def __init__(self, delegate, tilt=None, narrative=None, priority_narrative=None):
-        self.delegate, self.tilt, self.narrative, self.calls = delegate, tilt, narrative, []
-        self.priority_narrative = priority_narrative
 
-    def complete(self, request):
-        self.calls.append(request)
-        handler = {
-            "research_tilt": self.tilt,
-            "recommendation_narrative": self.narrative,
-            "priority_narrative": self.priority_narrative,
-        }.get(request.task, "delegate")
-        if handler == "delegate":
-            return self.delegate.complete(request)
+class StubModel(ByTask):
+    """Replays Insight extraction from the committed recordings; the tilt and narratives are scripted by the test as a
+    handler from the request payload to the reply. A step with no handler fails as an unreachable provider does."""
+
+    def __init__(
+        self,
+        replay: Model,
+        tilt: Callable[[dict], dict] | None = None,
+        narrative: Callable[[dict], dict] | None = None,
+        priority_narrative: Callable[[dict], dict] | None = None,
+    ) -> None:
+        super().__init__(replay)
+        self.tilt, self.narrative, self.priority_narrative = tilt, narrative, priority_narrative
+
+    def script_for(self, task: str) -> Model | None:
+        if task not in SCRIPTED_STEPS:
+            return None
+        handler = getattr(self, SCRIPTED_STEPS[task])
         if handler is None:
-            raise LlmError(f"no stub for {request.task}")
-        return LlmResponse(handler(json.loads(request.user)), "stub-model-1", request.prompt_version)
+            return ScriptedModel(httpx.ConnectError(f"no stub for {task}"), model_name="stub-model-1")
+        return ScriptedModel(lambda request: handler(json.loads(request.user_prompt)), model_name="stub-model-1")
 
 
 @pytest.fixture
@@ -51,8 +64,8 @@ def ai(app, login, seeded):  # noqa: F811
     ids = {i["subject"]: i["id"] for i in report["insights"]}
     state = type("State", (), {})()
     state.ids, state.report_id, state.analyst, state.advisor = ids, report["id"], analyst, login("advisor")
-    state.stub = StubLlm(app.state.llm)
-    app.state.llm = state.stub
+    state.replay = app.state.llm.model
+    state.stub = serve(app, StubModel(state.replay))
 
     def approve(*subjects):
         for s in subjects:
@@ -220,7 +233,7 @@ def test_pending_and_rejected_insights_cannot_influence_a_tilt(app, ai):
 
 def test_no_llm_call_without_approved_insights(ai):
     rec = ai.run()
-    assert ai.stub.calls == [] or all(c.task == "insight_extraction" for c in ai.stub.calls)
+    assert set(ai.stub.tasks) <= {"insight_extraction"}
     assert rec["research"] is None
 
 
@@ -229,7 +242,7 @@ def test_no_llm_call_without_approved_insights(ai):
 
 def test_tilt_failure_falls_back_to_the_rule_based_recommendation_and_is_audited(app, ai):
     ai.approve("equity")
-    ai.stub.tilt = None  # raises LlmError
+    ai.stub.tilt = None  # the provider is unreachable
     rec = ai.run()
     assert equity_buy_pct(rec) == 0 and rec["research"]["tilt"]["status"] == "failed"
     assert rec["trade_lines"], "the Recommendation still exists"

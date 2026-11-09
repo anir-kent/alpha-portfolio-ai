@@ -104,10 +104,27 @@ const SCREEN_ROUTES: Record<Screen["kind"], (ids: Screen["entity_ids"]) => strin
   health: () => "/health",
 };
 
+/** The screens whose figures are named after them, wherever the Question was asked. */
+const FIGURE_ROUTES: [prefix: string, route: string][] = [
+  ["queue.", "/queue"],
+  ["approvals.", "/approvals"],
+  ["audit.", "/audit"],
+  ["model_card.", "/governance"],
+];
+
+/** Lookup figures retain their source screen even when the Question was asked elsewhere. A filtered lookup's figures
+ * are numbered by its place in the turn (`lookup.2.queue.total_rows`); a Recommendation's sit under its Portfolio. */
+function figureRoute(figure: string, screen: Screen): string {
+  const name = figure.replace(/^lookup\.\d+\./, "");
+  const portfolio = /^portfolio\.([^.]+)\./.exec(name);
+  if (portfolio) return `/portfolios/${encodeURIComponent(portfolio[1])}`;
+  const named = FIGURE_ROUTES.find(([prefix]) => name.startsWith(prefix));
+  return named ? named[1] : SCREEN_ROUTES[screen.kind](screen.entity_ids);
+}
+
 /** One Claim with its citation chips: a Report citation opens the quoted passage, an engine figure goes to the screen
  * it came from. A Claim that failed grounding stays in the Answer, marked in place with its reasons. */
 function ClaimView({ claim, screen }: { claim: ClaimResult; screen: Screen }) {
-  const route = SCREEN_ROUTES[screen.kind](screen.entity_ids);
   return (
     <li className={claim.grounded ? "" : "assistant-claim-ungrounded"}>
       <span className="text-ink">{claim.text}</span>{" "}
@@ -127,7 +144,12 @@ function ClaimView({ claim, screen }: { claim: ClaimResult; screen: Screen }) {
               quote={citation.quote}
             />
           ) : (
-            <Link key={n} className="chip chip-engine" to={route} title={`Engine figure from ${route}`}>
+            <Link
+              key={n}
+              className="chip chip-engine"
+              to={figureRoute(citation.figure, screen)}
+              title={`Engine figure: ${citation.figure}`}
+            >
               <Icon name="spark" size={11} />
               {citation.figure}
             </Link>
@@ -235,6 +257,38 @@ function TurnView({
         </div>
       )}
       {turn.outcome === "refused" && turn.answer && <p className="callout callout-warn">{turn.answer.markdown}</p>}
+      {/* A failed turn shows its Trajectory too: a budget-exhausted one shows every request it used. */}
+      {turn.trajectory && (
+        <details className="rounded-lg border border-line px-3 py-2 text-ink-3">
+          <summary className="cursor-pointer text-ink">How I answered</summary>
+          <ol className="mt-2 list-inside list-decimal space-y-1">
+            {turn.trajectory.steps.map((step, index) => (
+              <li key={index}>
+                {step.kind === "model_request" ? (
+                  "Model request"
+                ) : step.kind === "self_correction" ? (
+                  <span className="font-medium text-ink">
+                    Self-correction · {step.issue_count} grounding issue{step.issue_count === 1 ? "" : "s"} sent back
+                  </span>
+                ) : (
+                  <>
+                    <span className="font-medium text-ink">{step.name}</span>
+                    {step.arguments &&
+                      ` (${Object.entries(step.arguments)
+                        .map(([key, value]) => `${key}: ${value}`)
+                        .join(", ")})`}
+                    {step.result_summary && ` · ${step.result_summary}`}
+                  </>
+                )}
+              </li>
+            ))}
+          </ol>
+          <p className="mt-2">
+            Requests: {turn.trajectory.requests_used} / {turn.trajectory.request_limit}
+            {" · "}Tokens: {turn.trajectory.input_tokens} in / {turn.trajectory.output_tokens} out
+          </p>
+        </details>
+      )}
       {turn.outcome === "failed" && (
         <FailedCallout message={turn.message ?? FAILED_MESSAGE} onRetry={() => onRetry(turn)} busy={busy} />
       )}

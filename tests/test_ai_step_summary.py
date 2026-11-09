@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from app.exchanges import CapturingLlm
+from tests.scripted import serve
 from tests.test_ai_recommendations import ai, tilt_for  # noqa: F401  (fixture)
 from tests.test_portfolio import url
 from tests.test_queue import seeded  # noqa: F401  (fixture)
@@ -16,7 +16,6 @@ def captured(app, ai):  # noqa: F811
     ai.approve("Information Technology", "equity")
     tilt_for(ai, equity=5.0)
     ai.stub.narrative = lambda payload: {"claims": []}
-    app.state.llm = CapturingLlm(ai.stub, app.state.session_factory, mode="recorded")
     return ai
 
 
@@ -58,7 +57,7 @@ def test_a_role_with_llm_read_also_gets_the_exchange_id_that_opens_the_exchange(
 
 
 def test_a_failed_step_shows_failed_with_its_transport_error_and_the_rule_based_result_stands(app, captured):
-    app.state.llm = CapturingLlm(captured.stub.delegate, app.state.session_factory, mode="recorded")  # no recordings
+    serve(app, captured.replay)  # the app's own replay path, which has no tilt or memo recordings
     rec = captured.run()
     got = steps(rec)
     assert {s["outcome"] for s in got.values()} == {"failed"}

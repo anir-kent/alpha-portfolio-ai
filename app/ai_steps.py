@@ -44,8 +44,8 @@ def summaries(db: Session, recommendation_id: int, *, include_exchange_id: bool)
         latest[STEP_OF_EVENT[ev.type]] = ev
     out = []
     for step, ev in latest.items():
-        exchange_id, _ = audit.exchange_reference(ev.payload_json)
-        exchange = db.get(LlmExchangeRow, exchange_id) if exchange_id is not None else None
+        refs = audit.exchange_references(ev.payload_json)
+        exchange = db.get(LlmExchangeRow, refs[-1][0]) if refs else None  # the step's final request
         if exchange is None:
             continue  # pre-capture event: nothing to summarise
         payload = json.loads(ev.payload_json)

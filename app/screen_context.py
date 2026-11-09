@@ -68,6 +68,16 @@ def _fence(tag: str, attrs: str, text: str) -> str:
     return f"<<<{tag} {attrs}>>>\n{body}\n<<<END_{tag}>>>"
 
 
+def _row_id(raw: str | None) -> int | None:
+    """A database id as a screen identity spells it (ASCII digits that fit a SQLite integer), else None."""
+    return int(raw) if raw and raw.isascii() and raw.isdigit() and len(raw) <= 18 else None
+
+
+def _prefixed(figures: dict[str, float], prefix: str) -> dict[str, float]:
+    """A lookup's figures under its own names, so they never overwrite the screen's or another lookup's."""
+    return {prefix + name: value for name, value in figures.items()}
+
+
 def _cut(rows: list, row_budget: int, total: int) -> tuple[list, dict]:
     """The first `row_budget` rows (by the screen's own order) and the note saying what was cut, if anything."""
     shown = rows[: max(row_budget, 0)]
@@ -79,11 +89,13 @@ def _cut(rows: list, row_budget: int, total: int) -> tuple[list, dict]:
 QUEUE_SUGGESTED = (
     "Why is the top Portfolio ranked above the second one?",
     "Which priority component contributes most to the scores on this Queue?",
-    "Which Portfolios have breached their review SLA?",
+    "What are the holdings and drift of Portfolio C001?",
 )
 
 
-def _queue(db: Session, user: User, screen: ScreenIdentity, row_budget: int) -> ScreenContext | None:
+def _queue(
+    db: Session, user: User, screen: ScreenIdentity, row_budget: int, *, figure_prefix: str = ""
+) -> ScreenContext | None:
     """The prioritised Portfolios, cut to `row_budget` rows by the Queue's own sort and filters, saying what it cut. A
     selected Portfolio is kept even when the cut drops its row, as long as it is on the Queue."""
     from app.routers.analysis import QueueFilters, queue_view  # local: the routers import this module's callers
@@ -103,6 +115,7 @@ def _queue(db: Session, user: User, screen: ScreenIdentity, row_budget: int) -> 
     figures: dict[str, float] = {"queue.total_rows": float(len(rows)), "queue.shown_rows": float(len(shown))}
     for row in shown + ([selected] if selected else []):
         figures |= _queue_row_figures(row)
+    figures = _prefixed(figures, figure_prefix)
     context = {
         "screen": "queue",
         "run_id": queue.run_id,
@@ -143,7 +156,9 @@ PORTFOLIO_SUGGESTED = (
 )
 
 
-def _portfolio(db: Session, market: MarketData, user: User, screen: ScreenIdentity) -> ScreenContext | None:
+def _portfolio(
+    db: Session, market: MarketData, user: User, screen: ScreenIdentity, *, figure_prefix: str = ""
+) -> ScreenContext | None:
     from app.routers.portfolios import portfolio_detail  # local: the router imports the analysis routers
 
     portfolio_id = screen.entity_ids.get("portfolio_id")
@@ -154,7 +169,7 @@ def _portfolio(db: Session, market: MarketData, user: User, screen: ScreenIdenti
         return None
     client = detail.client
     drift = detail.drift
-    figures = _portfolio_figures(detail)
+    figures = _prefixed(_portfolio_figures(detail), figure_prefix)
     context = {
         "screen": "portfolio",
         "portfolio_id": detail.portfolio_id,
@@ -238,16 +253,18 @@ RECOMMENDATION_SUGGESTED = (
 )
 
 
-def _recommendation(db: Session, user: User, screen: ScreenIdentity) -> ScreenContext | None:
+def _recommendation(
+    db: Session, user: User, screen: ScreenIdentity, *, figure_prefix: str = ""
+) -> ScreenContext | None:
     """The full rationale of one Recommendation: Trade Lines, post-trade Suitability, the Research Tilt, the linked
     Insights with their Report passages (fenced as untrusted data, outside the JSON) and the grounded Claims."""
     from app.config_service import get_config
     from app.routers.recommendations import to_out  # local: the router imports this module's callers
 
-    raw_id = screen.entity_ids.get("recommendation_id", "")
-    if not raw_id.isdigit() or not _can(user, "recommendation:read"):
+    rec_id = _row_id(screen.entity_ids.get("recommendation_id"))
+    if rec_id is None or not _can(user, "recommendation:read"):
         return None
-    row = db.get(RecommendationRow, int(raw_id))
+    row = db.get(RecommendationRow, rec_id)
     # The drawer also names the Portfolio the Recommendation sits on (to link figures back to it); it must be this one.
     if row is None or screen.entity_ids.get("portfolio_id", row.client_id) != row.client_id:
         return None
@@ -266,7 +283,7 @@ def _recommendation(db: Session, user: User, screen: ScreenIdentity) -> ScreenCo
     selected = _selected_recommendation_item(screen.selected_item, lines, insights)
     if screen.selected_item is not None and selected is None:
         return None  # not part of this Recommendation: refused like any entity the user cannot read
-    figures = grounding.engine_figures(db, row)
+    figures = _prefixed(grounding.engine_figures(db, row), figure_prefix)
     context = {
         "screen": "recommendation",
         "recommendation_id": rec.id,
@@ -333,16 +350,24 @@ def _recommendation(db: Session, user: User, screen: ScreenIdentity) -> ScreenCo
     return ScreenContext(label=label(screen), portfolio_id=rec.portfolio_id, text=text, figures=figures)
 
 
+def recommendation_figure_prefix(db: Session, recommendation_id: str) -> str:
+    """How a looked-up Recommendation names its figures: under its Portfolio (whose id is its Client's), so a citation
+    goes back to the screen that shows it. Naming only: whether the user may read it is the builder's decision."""
+    row = db.get(RecommendationRow, rec_id) if (rec_id := _row_id(recommendation_id)) is not None else None
+    return f"portfolio.{row.client_id}.recommendation.{row.id}." if row else ""
+
+
 def _selected_recommendation_item(item: str | None, lines: list[dict], insights: list[InsightRow]) -> dict | None:
     """`trade_line:<n>` (1-based, as the screen numbers them) or `insight:<id>` of an Insight linked to this
     Recommendation and readable by the user; None for anything else."""
-    kind, _, ref = (item or "").partition(":")
-    if not ref.isdigit():
+    kind, _, raw = (item or "").partition(":")
+    ref = _row_id(raw)
+    if ref is None:
         return None
-    if kind == "trade_line" and 1 <= int(ref) <= len(lines):
-        return {"trade_line": lines[int(ref) - 1]}
-    if kind == "insight" and int(ref) in {i.id for i in insights}:
-        return {"insight_id": int(ref)}
+    if kind == "trade_line" and 1 <= ref <= len(lines):
+        return {"trade_line": lines[ref - 1]}
+    if kind == "insight" and ref in {i.id for i in insights}:
+        return {"insight_id": ref}
     return None
 
 
@@ -355,6 +380,41 @@ def _fenced_passages(insights: list[InsightRow]) -> str:
     return "\n".join(blocks)
 
 
+# --- Approved Insights (an Assistant lookup, not a screen) -------------------------------------------------------------
+
+
+def approved_insights(db: Session, user: User, sector: str | None) -> ScreenContext | None:
+    """The Insights with an approved Insight Review, optionally for one sector, with their Report passages fenced as
+    untrusted data after the JSON so a Claim can quote them. Insights awaiting review or rejected are never included,
+    and neither is who decided or their note. None without `insight:read`, as the Insights list refuses."""
+    from app import reports  # local: the Report service imports the grounding this module imports
+
+    if not _can(user, "insight:read"):
+        return None
+    rows = [i for i in reports.approved_insights(db, subject=sector) if sector is None or i.subject_kind == "sector"]
+    context = {
+        "lookup": "approved_insights",
+        **({"sector": sector} if sector is not None else {}),
+        "total_insights": len(rows),
+        "insights": [
+            {
+                "id": i.id,
+                "report_id": i.report_id,
+                "page": i.page,
+                "subject_kind": i.subject_kind,
+                "subject": i.subject,
+                "direction": i.direction,
+                "confidence": i.confidence,
+                "passage": "in REPORT PASSAGES below",
+            }
+            for i in rows
+        ],
+        "figures": {},
+    }
+    text = serialise(context) + ("\n\n" + _fenced_passages(rows) if rows else "")
+    return ScreenContext(label="Approved Insights", portfolio_id=None, text=text, figures={})
+
+
 # --- Approvals --------------------------------------------------------------------------------------------------------
 
 APPROVALS_SUGGESTED = (
@@ -365,7 +425,7 @@ APPROVALS_SUGGESTED = (
 
 
 def _approvals(
-    db: Session, market: MarketData, user: User, screen: ScreenIdentity, row_budget: int
+    db: Session, market: MarketData, user: User, screen: ScreenIdentity, row_budget: int, *, figure_prefix: str = ""
 ) -> ScreenContext | None:
     """The items waiting on the steps the user decides, as the Approvals panel lists them, cut to `row_budget`. A
     selected item (a Recommendation id) must be on the panel and is kept even when the cut drops it."""
@@ -381,6 +441,7 @@ def _approvals(
     figures: dict[str, float] = {"approvals.total_items": float(len(items)), "approvals.shown_items": float(len(shown))}
     for item in shown + ([selected] if selected else []):
         figures |= _approval_figures(item)
+    figures = _prefixed(figures, figure_prefix)
     context = {
         "screen": "approvals",
         "total_items": len(items),
@@ -446,7 +507,7 @@ AUDIT_SUGGESTED = (
 )
 
 
-class _AuditFilters(BaseModel):
+class AuditFilters(BaseModel):
     """The Audit screen's search, as its API takes it; anything else is refused."""
 
     model_config = ConfigDict(extra="forbid")
@@ -461,7 +522,9 @@ class _AuditFilters(BaseModel):
     date_to: datetime | None = None
 
 
-def _audit(db: Session, user: User, screen: ScreenIdentity, row_budget: int) -> ScreenContext | None:
+def _audit(
+    db: Session, user: User, screen: ScreenIdentity, row_budget: int, *, figure_prefix: str = ""
+) -> ScreenContext | None:
     """The Audit Events the screen's search selects, newest first as the screen lists them, cut to `row_budget`. A
     selected event must match the search and is included in full even when the cut drops it."""
     from app.routers.audit import event_out  # local: the routers import this module's callers
@@ -469,16 +532,13 @@ def _audit(db: Session, user: User, screen: ScreenIdentity, row_budget: int) -> 
     if not _can(user, "audit:read"):
         return None
     try:
-        filters = _AuditFilters.model_validate(screen.entity_ids)
+        filters = AuditFilters.model_validate(screen.entity_ids)
     except ValidationError:
         return None
     selected = None
     if screen.selected_item is not None:  # it must be one of the events the screen's search selects
-        found = (
-            audit.search(db, **filters.model_dump(), event_id=int(screen.selected_item), limit=1)[0]
-            if screen.selected_item.isdigit()
-            else []
-        )
+        event_id = _row_id(screen.selected_item)
+        found = audit.search(db, **filters.model_dump(), event_id=event_id, limit=1)[0] if event_id is not None else []
         if not found:
             return None
         selected = event_out(found[0]).model_dump()
@@ -487,6 +547,7 @@ def _audit(db: Session, user: User, screen: ScreenIdentity, row_budget: int) -> 
     figures: dict[str, float] = {"audit.total_events": float(total), "audit.shown_events": float(len(shown))}
     for event in shown + ([selected] if selected else []):
         figures[f"audit.{event['id']}.id"] = float(event["id"])  # so a Claim naming "event 42" can cite it
+    figures = _prefixed(figures, figure_prefix)
     context = {
         "screen": "audit",
         "filters": filters.model_dump(mode="json", exclude_none=True),
@@ -519,7 +580,8 @@ def _exchanges(db: Session, user: User, screen: ScreenIdentity) -> ScreenContext
         return None
     if screen.selected_item is None:
         return _note_only(screen, "No LLM Exchange is selected, so none is included. Open one to ask about it.")
-    detail = exchange_detail(db, int(screen.selected_item)) if screen.selected_item.isdigit() else None
+    exchange_id = _row_id(screen.selected_item)
+    detail = exchange_detail(db, exchange_id) if exchange_id is not None else None
     if detail is None:
         return None
     figures: dict[str, float] = {"exchange.id": float(detail.id)}
@@ -578,7 +640,9 @@ HEALTH_SUGGESTED = (
 )
 
 
-def _governance(db: Session, user: User, screen: ScreenIdentity, settings: Settings) -> ScreenContext | None:
+def _governance(
+    db: Session, user: User, screen: ScreenIdentity, settings: Settings, *, figure_prefix: str = ""
+) -> ScreenContext | None:
     """The model card, as the Governance screen shows it; None without `governance:read`."""
     if not _can(user, "governance:read") or screen.selected_item is not None:
         return None
@@ -588,6 +652,7 @@ def _governance(db: Session, user: User, screen: ScreenIdentity, settings: Setti
         figures["model_card.temperature"] = card.temperature
     for key, value in card.assistant.limits.model_dump().items():
         figures[f"model_card.assistant.limits.{key}"] = float(value)
+    figures = _prefixed(figures, figure_prefix)
     # The latest eval results are left out: every live eval run rewrites them, and the governance prompt must stay
     # byte-identical for its Suggested Questions to replay.
     shown = card.model_dump(exclude={"assistant": {"latest_eval"}})
@@ -656,25 +721,26 @@ def label(screen: ScreenIdentity) -> str:
 
 
 def build(
-    db: Session, market: MarketData, user: User, screen: ScreenIdentity, settings: Settings
+    db: Session, market: MarketData, user: User, screen: ScreenIdentity, settings: Settings, *, figure_prefix: str = ""
 ) -> ScreenContext | None:
     """The Screen Context `user` may see for `screen`, or None when the screen names nothing the user can read, or a
-    selected item that is not part of it (the caller refuses without revealing whether it exists)."""
-    rows = settings.assistant_context_rows
+    selected item that is not part of it (the caller refuses without revealing whether it exists).
+    An Assistant lookup names its figures with `figure_prefix`, so they sit beside the screen's and other lookups'."""
+    rows, prefix = settings.assistant_context_rows, figure_prefix
     match screen.kind:
         case "queue":
-            return _queue(db, user, screen, rows)
+            return _queue(db, user, screen, rows, figure_prefix=prefix)
         case "portfolio":
-            return _portfolio(db, market, user, screen)
+            return _portfolio(db, market, user, screen, figure_prefix=prefix)
         case "recommendation":
-            return _recommendation(db, user, screen)
+            return _recommendation(db, user, screen, figure_prefix=prefix)
         case "approvals":
-            return _approvals(db, market, user, screen, rows)
+            return _approvals(db, market, user, screen, rows, figure_prefix=prefix)
         case "audit":
-            return _audit(db, user, screen, rows)
+            return _audit(db, user, screen, rows, figure_prefix=prefix)
         case "exchanges":
             return _exchanges(db, user, screen)
         case "governance":
-            return _governance(db, user, screen, settings)
+            return _governance(db, user, screen, settings, figure_prefix=prefix)
         case "config" | "health":
             return _platform_only(user, screen)

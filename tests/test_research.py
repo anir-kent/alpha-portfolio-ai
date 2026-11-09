@@ -4,17 +4,15 @@
 import json
 import os
 from pathlib import Path
-from typing import Any
 
-import httpx
 import pytest
 from sqlalchemy import select
 
 from app import audit
 from app.db import AuditEventRow
-from app.llm import LlmError, LlmRequest, OpenAICompatibleLlm, RecordedLlm
 from app.research_seed import seed_research
 from tests.conftest import ROLES
+from tests.scripted import ScriptedModel, serve
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -82,6 +80,30 @@ def test_pdf_upload_keeps_page_references(login):
     assert r.json()["kind"] == "pdf" and r.json()["page_count"] == 2
     page = login("advisor").get(f"/api/reports/{r.json()['id']}/pages/2")
     assert "We prefer equities over bonds" in page.json()["text"]
+
+
+def test_upload_runs_insight_extraction_off_the_event_loop(app, login):
+    model = serve(
+        app,
+        ScriptedModel(
+            {
+                "insights": [
+                    {
+                        "subject_kind": "sector",
+                        "subject": "Information Technology",
+                        "direction": "positive",
+                        "confidence": "high",
+                        "page": 1,
+                        "passage": "We are constructive on technology.",
+                    }
+                ]
+            }
+        ),
+    )
+    r = upload(login("research_analyst"))
+    assert r.status_code == 201, r.text
+    assert len(model.requests) == 1 and r.json()["extraction_status"] == "complete" and len(r.json()["insights"]) == 1
+    assert r.json()["insights"][0]["passage"] == "We are constructive on technology."
 
 
 def test_every_llm_call_logs_model_and_prompt_version_to_the_audit_chain(app, login):
@@ -228,125 +250,14 @@ def test_seeding_twice_adds_nothing(seeded_research):
     assert len(events(seeded_research)) == before
 
 
-# --- LLM interface ---------------------------------------------------------------------------------------------
-
-REQ = LlmRequest("insight_extraction", "insight_extraction@v1", "system", "user text", {"type": "object"})
-
-
-def test_recorded_llm_raises_when_nothing_was_recorded(tmp_path):
-    with pytest.raises(LlmError, match="No recorded response"):
-        RecordedLlm(tmp_path).complete(REQ)
-
-
-def test_openai_compatible_llm_parses_replies_and_can_record_them(tmp_path):
-    seen: dict[str, Any] = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen["url"], seen["auth"], seen["body"] = (
-            str(request.url),
-            request.headers["authorization"],
-            json.loads(request.content),
-        )
-        return httpx.Response(
-            200,
-            json={
-                "model": "claude-sonnet-5-5",
-                "choices": [{"message": {"content": '```json\n{"insights": []}\n```'}}],
-            },
-        )
-
-    llm = OpenAICompatibleLlm(
-        base_url="https://gw.example/v1",
-        api_key="k",
-        model="m",
-        record_dir=tmp_path,
-        transport=httpx.MockTransport(handler),
-    )
-    response = llm.complete(REQ)
-    assert response.content == {"insights": []} and response.model == "claude-sonnet-5-5"
-    assert seen["url"] == "https://gw.example/v1/chat/completions" and seen["auth"] == "Bearer k"
-    assert seen["body"]["messages"][1] == {"role": "user", "content": "user text"}
-    assert RecordedLlm(tmp_path).complete(REQ).content == {"insights": []}  # the recording replays
-
-
-def test_through_openrouter_a_call_only_reaches_providers_that_honour_the_reply_schema():
-    seen: list[dict] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.append({"body": json.loads(request.content), "title": request.headers.get("x-openrouter-title")})
-        return httpx.Response(200, json={"choices": [{"message": {"content": '{"insights": []}'}}]})
-
-    for base_url in ("https://openrouter.ai/api/v1/", "https://gw.example/v1"):
-        OpenAICompatibleLlm(base_url=base_url, api_key="k", model="m", transport=httpx.MockTransport(handler)).complete(
-            REQ
-        )
-    openrouter, other = seen
-    assert openrouter["body"]["provider"] == {"require_parameters": True}
-    assert openrouter["body"]["response_format"]["type"] == "json_schema"
-    assert openrouter["title"] == "Portfolio Rebalancing"
-    assert "provider" not in other["body"] and other["title"] is None  # other gateways get the plain protocol
-
-
-def test_reply_schemas_reach_the_provider_without_oneof_which_anthropic_rejects():
-    """A Pydantic discriminated union renders as `oneOf` + `discriminator`; Anthropic's structured outputs refuse both.
-    The wire schema says `anyOf` instead (equivalent here: `kind` already tells the shapes apart)."""
-    sent: list[dict] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        sent.append(json.loads(request.content)["response_format"]["json_schema"]["schema"])
-        return httpx.Response(200, json={"choices": [{"message": {"content": '{"insights": []}'}}]})
-
-    union = {
-        "oneOf": [{"$ref": "#/$defs/A"}, {"$ref": "#/$defs/B"}],
-        "discriminator": {"propertyName": "kind", "mapping": {"a": "#/$defs/A", "b": "#/$defs/B"}},
-    }
-    schema = {"type": "object", "properties": {"items": {"type": "array", "items": union}}}
-    request = LlmRequest(task="t", prompt_version="t@v1", system="s", user="u", schema=schema)
-    OpenAICompatibleLlm(
-        base_url="https://gw.example/v1", api_key="k", model="m", transport=httpx.MockTransport(handler)
-    ).complete(request)
-    items = sent[0]["properties"]["items"]["items"]
-    assert items == {"anyOf": [{"$ref": "#/$defs/A"}, {"$ref": "#/$defs/B"}]}
-    assert "oneOf" in request.schema["properties"]["items"]["items"]  # the request (and its recording key) is unchanged
-
-
-def test_temperature_is_sent_only_when_configured():
-    """Some models accept no temperature at all (and OpenRouter then finds no endpoint), so unset means omitted."""
-    bodies: list[dict] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        bodies.append(json.loads(request.content))
-        return httpx.Response(200, json={"choices": [{"message": {"content": '{"insights": []}'}}]})
-
-    for temperature in (None, 0.0):
-        OpenAICompatibleLlm(
-            base_url="https://gw.example/v1",
-            api_key="k",
-            model="m",
-            temperature=temperature,
-            transport=httpx.MockTransport(handler),
-        ).complete(REQ)
-    unset, zero = bodies
-    assert "temperature" not in unset and zero["temperature"] == 0.0
-
-
-def test_openai_compatible_llm_surfaces_provider_errors():
-    llm = OpenAICompatibleLlm(
-        base_url="https://gw.example/v1",
-        api_key="k",
-        model="m",
-        transport=httpx.MockTransport(lambda r: httpx.Response(500)),
-    )
-    with pytest.raises(LlmError):
-        llm.complete(REQ)
-
-
 @pytest.mark.skipif(not os.environ.get("LLM_LIVE"), reason="live smoke test: set LLM_LIVE=1 and APP_LLM_API_KEY")
-def test_live_smoke_extraction():
-    from app.llm import build_llm
+def test_live_smoke_extraction(tmp_path, allow_model_requests):
+    from app.db import make_session_factory
+    from app.exchanges import build_llm
     from app.reports import extract_pages, extraction_request
     from app.settings import Settings
 
     s = Settings(llm_mode="live")
     _, pages = extract_pages("v.txt", (FIXTURES / "house_view_demo.txt").read_bytes())
-    assert build_llm(s).complete(extraction_request(pages)).content["insights"]
+    store = make_session_factory(f"sqlite:///{tmp_path / 'smoke.db'}")
+    assert build_llm(s, store).complete(extraction_request(pages)).content["insights"]

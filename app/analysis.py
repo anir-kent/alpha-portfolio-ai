@@ -25,7 +25,7 @@ from app import (
 from app.config_service import get_config
 from app.db import AnalysisRunRow, ClientRow, PriorityResultRow, RestrictionRow, SuitabilityResultRow, TargetRow
 from app.drift import compute_drift
-from app.llm import LlmClient, build_llm
+from app.llm import LlmClient
 from app.market_data import MarketData
 from app.opportunity import opportunity_raw, relevant_insights
 from app.priority import score_portfolio
@@ -240,16 +240,14 @@ def run_analysis(
 
 def main(settings=None) -> int:
     from app.db import make_session_factory
-    from app.exchanges import CapturingLlm, endpoint_host
+    from app.exchanges import build_llm
     from app.settings import Settings
 
     settings = settings or Settings()
     market = MarketData.load(settings.market_data_snapshot_path, settings.fund_lookthrough_path)
     session_factory = make_session_factory(settings.database_url)
     # Wrapped exactly as the app wraps it, so a CLI run's AI steps are LLM Exchanges anchored in the chain (ADR-0004).
-    llm = CapturingLlm(
-        build_llm(settings), session_factory, mode=settings.llm_mode, endpoint_host=endpoint_host(settings)
-    )
+    llm = build_llm(settings, session_factory)
     with session_factory() as db:
         run_id, n = run_analysis(db, market, audit.Actor.system("cli"), llm)
     print(f"analysis run {run_id}: scored {n} portfolios")

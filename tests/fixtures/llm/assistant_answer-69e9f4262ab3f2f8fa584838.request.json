@@ -1,0 +1,15 @@
+{
+  "model": "scripted-assistant-fixture-v5",
+  "parts": [
+    {
+      "content": "{\"in_scope\": true, \"answer_markdown\": \"What does an Analysis Run do, step by step?\\n\\nAn Analysis Run values Holdings using the market snapshot, computes drift and Suitability, ranks the Queue and builds eligible Recommendations. It records AI steps and their audit evidence.\", \"claims\": [], \"follow_up_questions\": [\"Which screen shows the supporting figures?\"]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v5",
+  "task": "assistant_answer",
+  "usage": {
+    "input_tokens": 277,
+    "output_tokens": 51
+  }
+}

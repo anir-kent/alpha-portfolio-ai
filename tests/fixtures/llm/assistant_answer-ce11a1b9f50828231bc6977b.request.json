@@ -1,0 +1,29 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "I'm trying list_approved_insights next, since the lookup didn't return any passage text, and I'll call it without a sector filter.\n\n",
+      "part_kind": "thinking",
+      "signature": "CAQSpAYKEAgTGAI4AUIIdGhpbmtpbmcSDI194c+GEo8N5M1OFBoM/FtZr9c/Nr/2Zs6yIjABUha6FjiqIxAzTg7HJxUTq+VQiQmnWH1mwztWnE7SxPjUHaUBF8P/ZNmt11RhAlMqwQVazqEOhIvR+pSryAkuEN8hPSEoR9uMpS2oA+k31ftexm4hgsrrzKD5EfEDGA0HfO3GpdtMu24Zq5uSP1FwOZBh9WgFpcJfXi0LQOR3Xu2mipqLcZvsZkN+wY5Ew6+GRs0UAvziXhTsmafkoNvikI1KH/JdVb3f0qyXSAHTrn8uaoaaycRIN41nwIoOHFOiXJAdvXgRsCdouYpUOuHcPIDTw+t2vhAaBb13oa0a5h0OsSpSi8pLigNPG3F/JZWkF+4LebjJUTrS2/Fh1NN5V/+xLVALuL5/wGTGBPMkUz2CTx44HJH1zIXsbRkLW6xWXwZUFTCq/KOyyiVmp+PtHycEF8iIELjYlo3/zwhPFpnPIBMgzL5GDarXVPYh6xKJAOG8aKAC1vUVbVr37T3KE4UfivZZpcDP9cJN+W64u7PDbhmHCA/J+T/GSGJDba4gT221rs/S72sZOC6pKwxdItWAZb66Z5O2ysuxLLxCeuey0WPDY+98pYAS2kuPqGA62o+coiYoW4wCFs1KCUVPf+UjCLXAHxs26SZGDBoFSRQxTyrDDUV/y/A0xOcoS+MfV90T88b5YOPeJqFORos+hKS0s9TzP8XF4lZSjz7WCMZjd6RDze4C15rdjlijwpeGL5ytJvdnuLGNp0a38SgWvvfQgmCwByV8+UugnEsW+GUcGaCNo49smR5ZN722J72IBiCJ0rnVv1J+LHyE/bJE9XzrUvabtxTHhYET7BXxFRtqFadA97sjlWnuTVxPTGzGm5pt5pNyVoTHl4qKGV3pJQRP9GNZgHb7trvd2Exbe9vGeRKtSPT+GNCqG9tmgeGMME6yn4M7HY8k5CDdAdRJzGxBW2lfylxiaN3FAMbMZOklPatgwLVNFI8ZiZjXvceMs1UBNIuNebaK2Pajj9UTIrBesr3oew4/YEcH6v4V9fYCpzQYAQ==.eyJlbmRwb2ludF9zbHVnIjoiYW50aHJvcGljL2NsYXVkZS1zb25uZXQtNS41LTIwMjYwOTI4fGF6dXJlL2dsb2JhbCJ9"
+    },
+    {
+      "args": "{}",
+      "part_kind": "tool-call",
+      "tool_call_id": "toolu_019UCA8vcE5jrK6yWsCHb4Xd",
+      "tool_name": "list_approved_insights"
+    }
+  ],
+  "prompt_version": "assistant_answer@v5",
+  "task": "assistant_answer",
+  "usage": {
+    "details": {
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "is_byok": 0,
+      "reasoning_tokens": 54
+    },
+    "input_tokens": 22188,
+    "output_reasoning_tokens": 54,
+    "output_tokens": 85
+  }
+}

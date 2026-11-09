@@ -5,8 +5,8 @@ Four flows carry the platform's critical behaviour. Each diagram shows two kinds
 Some rules hold in all four flows:
 
 - **One appended event, one commit.** Every Audit Event is appended under a process-wide lock and committed on its own ([ADR-0002](../adr/0002-hash-chained-append-only-audit-log.md)). Business rows flushed before that event commit with it.
-- **The LLM Exchange comes first.** Every LLM call goes through one capturing wrapper. The wrapper stores the LLM Exchange, for a reply or an error, before the caller writes the Audit Event that references it by id and hash. If the LLM Exchange cannot be stored, the call fails ([ADR-0004](../adr/0004-llm-exchanges-stored-separately-anchored-in-audit-chain.md)).
-- **One call per LLM step.** Each step is a single, schema-bound request, with no agent loop and no retrieval ([ADR-0007](../adr/0007-llm-steps-are-single-schema-bound-calls.md)).
+- **The LLM Exchange comes first.** Every model request goes through one capturing wrapper. The wrapper stores the LLM Exchange, for a reply or an error, before the caller writes the Audit Event that references it by id and hash. If the LLM Exchange cannot be stored, the request fails ([ADR-0004](../adr/0004-llm-exchanges-stored-separately-anchored-in-audit-chain.md)).
+- **One call per pipeline step, a bounded Trajectory per Answer.** Insight extraction, the Research Tilt and both narratives are each a single, schema-bound request with no tools. Only an Assistant Answer may take several model requests: read-only lookups and at most one self-correction, within the request budget. Either way the step's one Audit Event anchors its whole LLM Trajectory, in order ([ADR-0010](../adr/0010-assistant-is-a-bounded-read-only-agent-on-pydantic-ai.md)).
 - **Replay misses fail.** In recorded mode a prompt with no recording raises a replay miss. It is never answered with a guess, and it fails the call like any other LLM error.
 - **Denials are audited.** A role that lacks the endpoint's permission gets `403`, and an `access_denied` Audit Event is written. The diagrams leave this out.
 
@@ -15,14 +15,6 @@ The components named in the lanes are described in [5.2 Level 2: API process com
 ## 6.1 Analysis Run
 
 An Advisor or Relationship Manager (`analysis:run`) starts an Analysis Run. The run executes on a background thread, and its Run Step progress streams to the browser over server-sent events. Only one run is in flight per process ([ADR-0005](../adr/0005-run-step-progress-in-process.md)).
-
-The run commits in three phases, which are commit boundaries, not Run Steps ([ADR-0009](../adr/0009-analysis-run-recording-commits-per-audit-event.md)):
-
-1. **Scoring.** Loading inputs and scoring every Portfolio are one write transaction. It includes the Research Tilt LLM Exchanges, each stored under a savepoint.
-2. **Recording.** The `record_run` Run Step commits one Audit Event at a time.
-3. **Completion.** A final commit marks the run `completed`, and only then does it become the current result.
-
-The two narrative Run Steps run after that commit, so a failing LLM cannot undo a recorded run.
 
 ```mermaid
 sequenceDiagram
@@ -33,7 +25,7 @@ sequenceDiagram
   participant R as AnalysisRuns + ProgressRegistry<br/>(process memory)
   participant W as Run thread<br/>(run_analysis)
   participant DB as SQLite: business rows
-  participant LLM as CapturingLlm → endpoint<br/>or recordings
+  participant LLM as ModelLlm (capture) → live<br/>or replay Model
   participant EX as LLM Exchanges
   participant AU as Audit chain
 
@@ -104,25 +96,11 @@ sequenceDiagram
   SPA->>SPA: refresh the Queue and Portfolio views
 ```
 
-On a failed narrative, no grounding check runs: the failed row and a `status: failed` event are written in its place. The run's outcome is `completed` only if every Run Step is done. It is `completed_with_warnings` if `record_run` is done but an AI step failed, and `failed` otherwise.
-
-| Failure path | What happens |
-| --- | --- |
-| A second start while a run is in flight | `409` with the in-flight run's snapshot. The SPA follows that run's progress; no second run starts. |
-| A Load inputs or Score Portfolios step fails | That Run Step is marked failed and every later one skipped. The transaction never commits, so nothing it wrote survives, the Research Tilt LLM Exchanges stored under its savepoints included. Only the run row remains, with outcome `failed`. |
-| The Research Tilt call fails, or a replay miss in recorded mode | An LLM Exchange with outcome `error` is still stored. That Portfolio gets no tilt. If a Recommendation is drafted, its `research_tilt_proposed` event records `status: failed`. Scoring carries on. |
-| A Research Tilt is assessed, but the rebalance plan yields no Trade Lines | No Recommendation is drafted, so no `research_tilt_proposed` event is written. The tilt's LLM Exchange still commits with the scoring transaction, but no Audit Event references it. This is a known gap in anchoring every LLM Exchange in the chain ([ADR-0004](../adr/0004-llm-exchanges-stored-separately-anchored-in-audit-chain.md)). |
-| A narrative call fails, or its reply fails the schema | The narrative row is stored as failed, with a `status: failed` Audit Event carrying the LLM Exchange reference. The Run Step is marked failed and the outcome is `completed_with_warnings`. The Queue shows "Narrative unavailable (AI step failed; scores are unaffected)." |
-| The process dies mid-run | At startup the run row is marked `interrupted`. If the process died during `record_run`, committed scoring rows and some Audit Events remain. The run is never current, but its Recommendations are visible. This is the gap that [ADR-0009](../adr/0009-analysis-run-recording-commits-per-audit-event.md) records. |
+[Detailed 6.1 analysis run controls and failure paths](appendices.md#e18-61-analysis-run-controls-and-failure-paths).
 
 ## 6.2 Tiered Decisions
 
 Every Recommendation starts at `pending_advisor`. The approvals policy decides which further steps it needs:
-
-- **Compliance** when its post-trade Suitability is in breach. The Compliance Officer approves a Suitability Exception or blocks the Recommendation.
-- **Investment Committee** when its turnover, or any single Trade Line, is at or above the configured threshold.
-
-The policy is a pure function of the Recommendation and the configuration in force at the moment of each Decision. A threshold change between steps therefore re-plans what remains. Each Decision is accepted only at the step the Recommendation is waiting at, so no step can be skipped. No LLM is called on this path, so no LLM Exchange is written. "Approved" means cleared to act outside the platform; nothing is executed.
 
 ```mermaid
 sequenceDiagram
@@ -179,12 +157,7 @@ sequenceDiagram
   Note over A,AU: Each Decision's Audit Event names the Recommendation's previous event as its parent,<br/>so lineage runs from the Analysis Run through every Decision.
 ```
 
-| Failure path | What happens |
-| --- | --- |
-| A Decision at the wrong step, or on a Recommendation already decided or superseded | `409`, naming the status the Recommendation is in. Nothing is written. |
-| A missing rationale (reject or modify at the Advisor step; every Compliance and Committee Decision) | `422`. Nothing is written. |
-| A modification with invalid Trade Lines (unknown Instrument or Account, a quantity that is not a positive whole number, a duplicate line, selling more than is held) | `422`, with the engine's validation message. |
-| A new Analysis Run while a Recommendation is open | The run supersedes it with a `recommendation_superseded` event, and any later Decision on it gets `409` (see [6.1](#61-analysis-run)). |
+[Detailed 6.2 tiered decisions controls and failure paths](appendices.md#e19-62-tiered-decisions-controls-and-failure-paths).
 
 ## 6.3 Report ingestion to Insight Review
 
@@ -197,7 +170,7 @@ sequenceDiagram
   participant API as API: reports router
   participant S as Research and Insights service
   participant DB as SQLite: business rows
-  participant LLM as CapturingLlm → endpoint<br/>or recordings
+  participant LLM as ModelLlm (capture) → live<br/>or replay Model
   participant EX as LLM Exchanges
   participant AU as Audit chain
   participant G as Grounding validator
@@ -242,76 +215,68 @@ sequenceDiagram
   G->>AU: grounding_checked (+ claim_ungrounded for a quote not on its page)
 ```
 
-| Failure path | What happens |
-| --- | --- |
-| Unreadable or oversized file | `413` over 20 MiB. `422` for a file that is not a PDF or UTF-8 text, a scanned PDF with no text, or more than 400,000 characters. Nothing is stored and no LLM call is made. |
-| The extraction call fails, or a replay miss in recorded mode | The Report is kept with extraction status `failed`. An LLM Exchange with outcome `error` and an `insight_extracted` event with outcome `failed` are written. The Analyst sees the failure on the Report. |
-| The LLM invents a subject, page or passage | That candidate is dropped before it becomes an Insight, and the reason is recorded on `insight_extracted`. |
-| A second Insight Review of the same Insight | `409`. The first review stands. |
-| A narrative misquotes an approved Report | The Grounding validator flags the Claim (`quote_not_found`) and writes `claim_ungrounded`. Only Grounded Claims reach a memo or summary. |
+[Detailed 6.3 report ingestion to insight review controls and failure paths](appendices.md#e20-63-report-ingestion-to-insight-review-controls-and-failure-paths).
 
 ## 6.4 Assistant Question
 
-Any role holding `assistant:use` can ask the Assistant about the screen in view. The browser sends only the Question and a screen identity (kind, entity ids, selected item), never screen data. The server rebuilds the Screen Context through the same service the screen itself uses, filtered by the user's permissions. The context carries Client ids only, never names or emails. Each Question gets exactly one LLM call. Every turn, whether answered, refused or failed, is stored append-only in the login session's Conversation, with one Audit Event ([ADR-0006](../adr/0006-assistant-conversations-persisted-and-audited.md)).
+Any role holding `assistant:use` can ask the Assistant about the screen in view. The browser sends only the Question and a screen identity (kind, entity ids, selected item), never screen data. The server rebuilds the Screen Context through the same service the screen itself uses, filtered by the user's permissions. The context carries Client ids only, never names or emails.
 
 ```mermaid
 sequenceDiagram
   autonumber
   actor U as Any role
   participant SPA as React SPA: Assistant drawer
-  participant API as API: assistant router
   participant AS as Assistant service
-  participant SC as Screen Context builder
-  participant DB as SQLite: business rows
-  participant LLM as CapturingLlm → endpoint<br/>or recordings
+  participant SC as Screen Context builders
+  participant AG as Agent loop (pydantic-ai)<br/>read-only tools, output validator
+  participant LLM as Capture → live<br/>or replay Model
   participant EX as LLM Exchanges
   participant G as Grounding validator
   participant AU as Audit chain
 
   U->>SPA: ask a Question on the current screen
-  SPA->>API: POST /api/assistant/questions: Question + screen identity (assistant:use)
-  API->>AS: ask()
-  AS->>DB: count this Conversation's turns, and the user's turns in the last hour
-  break Question too long, or a usage limit is hit
-    AS-->>SPA: 400 over the length limit, 429 per-Conversation limit,<br/>or 429 per-user hourly limit with Retry-After
-    Note over AS,AU: Nothing stored, no LLM call, no Audit Event
-  end
+  SPA->>AS: POST /api/assistant/questions: Question + screen identity (assistant:use)
+  AS->>AS: usage limits: 400 or 429 stores nothing, calls nothing
   AS->>SC: build(screen identity, user)
-  SC->>DB: read through the screen's own service, filtered by the user's permissions,<br/>Client ids only, list screens capped at the configured row budget
   SC-->>AS: Screen Context (text, figures, hash), or none
   alt none: unknown, or not readable by this user
-    AS->>AS: outcome refused, without an LLM call (existence is not revealed)
+    AS->>AS: refused without a model request (existence is not revealed)
   else a Screen Context
-    AS->>LLM: one request: platform brief, Screen Context (data, not instructions),<br/>recent Questions and Answers (none for a Suggested Question), the Question
-    LLM->>EX: store Exchange (own DB session, commit). If storing fails, the call fails.
-    LLM-->>AS: reply with Exchange id and hash, or LlmError
-    alt LlmError
-      AS->>AS: failed: replay_miss ("Only Suggested Questions work in replay mode") or llm_error
-    else the reply fails the schema
-      AS->>AS: failed: unreadable_reply
-    else in_scope is false
-      AS->>AS: refused: the model's text is discarded, the Out-of-Scope Refusal is shown
-    else any Client's name or email in the reply
-      AS->>AS: failed: pii (the Answer is never checked, stored or shown)
-    else in scope and clean
-      opt the reply has Claims
-        AS->>G: check the Claims against the Screen Context's figures
-        G->>AU: grounding_checked (+ claim_ungrounded per flagged Claim)
-      end
-      AS->>AS: answered, every Claim with its grounding result
+    AS->>AG: run: platform brief, Screen Context (data, not instructions),<br/>recent Questions and Answers, the Question. Request budget 6
+    AG->>LLM: request 1 (tool definitions offered)
+    LLM->>EX: Exchange, Trajectory position 0 (own session, commit)
+    LLM-->>AG: tool call look_up_portfolio(C004)
+    AG->>SC: build the Portfolio screen for this user, figures named portfolio.C004.*
+    alt the user may open it
+      SC-->>AG: that screen's Screen Context, its figures join the citable set
+    else not permitted, or does not exist
+      SC-->>AG: "not found or not permitted for your role"
+    end
+    Note over AG: The step goes into the "How I answered" summary
+    AG->>LLM: request 2 (messages so far, tool result included)
+    LLM->>EX: Exchange, position 1
+    LLM-->>AG: draft reply
+    AG->>G: output validator: PII scan, then ground each Claim against<br/>the Screen Context's and every lookup's figures
+    alt a Client's name or email in the draft
+      G-->>AG: PII: the run ends, no retry
+    else ungrounded Claims, first draft
+      G-->>AG: the failing Claims and their issues
+      AG->>LLM: request 3: "These Claims are not grounded…" (self-correction, once)
+      LLM->>EX: Exchange, position 2
+      LLM-->>AG: corrected reply, accepted whatever its grounding
+    else grounded
+      G-->>AG: accepted
+    end
+    AG-->>AS: final reply, or PII, budget_exhausted, LlmError
+    opt answered with Claims
+      AS->>G: record the grounding of the final Claims
+      G->>AU: grounding_checked (+ claim_ungrounded per flagged Claim)
     end
   end
-  AS->>DB: append the turn: Question, screen identity, context hash, outcome, Answer, Exchange ref
-  AS->>AU: assistant.answered, assistant.refused or assistant.failed (commits with the turn)
-  AS-->>SPA: the turn (a failed turn carries only a fixed message)
+  AS->>AS: append the turn: outcome, Answer, final Exchange ref, Trajectory summary
+  AS->>AU: assistant.answered, .refused or .failed, anchoring exchanges [pos 0, 1, 2] by id and hash
+  AS-->>SPA: the turn, with "How I answered": lookups, self-correction, requests used of the budget, tokens
   SPA-->>U: Answer with grounding marks, the Out-of-Scope Refusal, or the failure message
 ```
 
-| Failure path | What happens |
-| --- | --- |
-| A usage limit is hit | `400` for an over-long Question. `429` once the Conversation reaches its Question limit (log out and back in to start a new one). `429` with `Retry-After` once the user reaches the hourly limit. Turns count whatever their outcome. Nothing is stored and the model is not called. |
-| The screen names something the user cannot read, or that does not exist | `refused`, without an LLM call. The user sees the same Out-of-Scope Refusal either way, so the reply does not reveal whether the item exists. |
-| A replay miss in recorded mode | `failed` with reason `replay_miss`. The user is told that only Suggested Questions work in recorded mode (the message says "replay mode"). Suggested Questions are sent without history, so their recordings replay whatever was asked before them. |
-| Guardrail refusal: the model judges the Question out of scope | `refused`. The model's text is discarded and the fixed Out-of-Scope Refusal is shown. The LLM Exchange keeps what the model said. |
-| The PII backstop fires | `failed` with reason `pii`. The Answer is not grounded, stored or shown. The Audit Event records the reason; the user sees only the generic failure message. |
-| An ungrounded Claim | The Answer is shown with that Claim flagged. A `claim_ungrounded` Audit Event is written. |
+[Detailed 6.4 assistant question controls and failure paths](appendices.md#e21-64-assistant-question-controls-and-failure-paths).

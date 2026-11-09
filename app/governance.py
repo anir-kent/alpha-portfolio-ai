@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app import audit, config_service, grounding, prompts
 from app.db import (
+    AssistantTurnRow,
     AuditEventRow,
     FixtureRunRow,
     GroundingResultRow,
@@ -78,6 +79,10 @@ class CaptureHealth(BaseModel):
     recorded: int  # replayed from recordings
     errors: int  # Exchanges whose call failed at the transport level
     unreferenced: int  # Exchanges no Audit Event points at: a step failed to anchor its call, or an event was removed
+    trajectories: int  # LLM Trajectories stored; a row written before Trajectories counts as a Trajectory of one
+    assistant_turns: int  # every Question asked, whatever its outcome
+    assistant_turns_with_lookups: int  # turns whose Trajectory made at least one tool call
+    lookup_share: float | None  # with_lookups / turns; None until a Question has been asked
 
 
 def capture_health(db: Session) -> CaptureHealth:
@@ -93,12 +98,30 @@ def capture_health(db: Session) -> CaptureHealth:
     for (raw,) in db.execute(
         select(AuditEventRow.payload_json).where(AuditEventRow.payload_json.contains('"exchange_id"'))
     ):
-        exchange_id = audit.exchange_reference(raw)[0]
-        if exchange_id is not None:
-            referenced.add(exchange_id)
+        referenced.update(exchange_id for exchange_id, _ in audit.exchange_references(raw))
     stored = set(db.scalars(select(LlmExchangeRow.id)))
+    trajectories, legacy = db.execute(
+        select(
+            func.count(func.distinct(LlmExchangeRow.trajectory_id)),
+            func.count().filter(LlmExchangeRow.trajectory_id.is_(None)),
+        )
+    ).one()
+    from app.assistant_agent import Trajectory  # local: the Assistant imports Screen Context, which imports this module
+
+    turns = with_lookups = 0
+    for (summary,) in db.execute(select(AssistantTurnRow.trajectory_json)):  # None: refused before the model was asked
+        turns += 1
+        with_lookups += summary is not None and Trajectory.model_validate_json(summary).made_lookups()
     return CaptureHealth(
-        total=total, live=live, recorded=recorded, errors=errors, unreferenced=len(stored - referenced)
+        total=total,
+        live=live,
+        recorded=recorded,
+        errors=errors,
+        unreferenced=len(stored - referenced),
+        trajectories=trajectories + legacy,
+        assistant_turns=turns,
+        assistant_turns_with_lookups=with_lookups,
+        lookup_share=with_lookups / turns if turns else None,
     )
 
 
@@ -138,8 +161,20 @@ def prompt_log(db: Session) -> list[PromptUse]:
 
 # --- Assistant guardrail eval -------------------------------------------------------------------------------------
 
-EvalCategory = Literal["in_scope", "platform", "advice", "prediction", "unrelated", "other_client", "injection"]
-EvalExpectation = Literal["answered", "refused"]
+EvalCategory = Literal[
+    "in_scope",
+    "platform",
+    "advice",
+    "prediction",
+    "unrelated",
+    "other_client",
+    "injection",
+    "cross_screen",  # the Answer needs another screen's data, so it must come through a lookup
+    "self_correction",  # a Question that tempts a figure the engine never computed
+    "not_permitted",  # a lookup the role may not make
+]
+# "not_permitted": the user is told the data cannot be seen (an Answer or a refusal), and no lookup returned it.
+EvalExpectation = Literal["answered", "refused", "not_permitted"]
 
 
 class EvalCaseResult(BaseModel):
@@ -153,6 +188,10 @@ class EvalCaseResult(BaseModel):
     claims_ungrounded: int
     ungrounded_issues: list[str]  # the grounding issue codes of the ungrounded Claims, one per issue
     canary_leaked: bool  # an Answer wrote what an injected Report passage asked for
+    lookups: list[str] = []  # the tools the model called, in order (ADR-0010)
+    not_permitted_lookups: int = 0  # lookups that returned "not found or not permitted for your role"
+    self_corrections: int = 0  # drafts sent back for ungrounded Claims: at most one
+    requests_used: int = 0  # model requests of the turn's LLM Trajectory
     problems: list[str]  # why the case did not pass; empty when it did
 
     @property
@@ -201,6 +240,7 @@ class AssistantLimits(BaseModel):
     questions_per_hour: int
     history_pairs: int  # earlier Question/Answer pairs sent with each Question
     context_rows: int  # rows of a list screen a Screen Context holds
+    request_limit: int  # model requests one Answer may make
 
 
 class AssistantCard(BaseModel):
@@ -233,6 +273,7 @@ def _assistant_card(settings: Settings) -> AssistantCard:
             questions_per_hour=settings.assistant_questions_per_hour,
             history_pairs=settings.assistant_history_pairs,
             context_rows=settings.assistant_context_rows,
+            request_limit=settings.assistant_request_limit,
         ),
         latest_eval=AssistantEvalSummary.model_validate(latest.model_dump(exclude={"results"})) if latest else None,
     )

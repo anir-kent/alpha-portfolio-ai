@@ -1,0 +1,15 @@
+{
+  "model": "scripted-assistant-fixture-v5",
+  "parts": [
+    {
+      "content": "{\"in_scope\": true, \"answer_markdown\": \"Which Asset Classes does a Target Allocation cover?\\n\\nTarget Allocation covers equity, bond and cash. Open Config to inspect the weights for a particular Risk Profile; the Health context includes no configuration values.\", \"claims\": [], \"follow_up_questions\": [\"Which screen shows the supporting figures?\"]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "assistant_answer@v5",
+  "task": "assistant_answer",
+  "usage": {
+    "input_tokens": 276,
+    "output_tokens": 47
+  }
+}

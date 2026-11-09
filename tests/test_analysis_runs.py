@@ -1,5 +1,6 @@
 """Seam: the Analysis Run lifecycle through the HTTP API (ADR-0005). A run starts in the background; its Run Steps are read
-back as snapshots. Timing is controlled only through the LLM the app is given."""
+back as snapshots. Timing is controlled only through the Model the app's LLM calls go to (a scripted Model behind
+capture)."""
 
 import json
 import logging
@@ -7,15 +8,16 @@ import shutil
 import sqlite3
 import threading
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
+from pydantic_ai.models import Model
 from sqlalchemy import func, select
 
 from app import audit
 from app.analysis import run_analysis
 from app.db import AuditEventRow, PriorityResultRow, RecommendationRow, SuitabilityResultRow
 from app.deps import get_market
-from app.llm import LlmError, LlmRequest, LlmResponse, RecordedLlm
 from app.main import create_app
 from app.market_data import MarketData
 from app.prompts import PRIORITY_NARRATIVE, RECOMMENDATION_NARRATIVE
@@ -23,6 +25,7 @@ from app.research_seed import seed_research
 from app.seeder import seed_clients
 from tests.conftest import ROLES, SEED_PASSWORD
 from tests.runs import RUNS, run_and_wait, start_and_wait, wait_for_outcome
+from tests.scripted import ByTask, ScriptedModel, ScriptedRequest, serve
 from tests.test_market_data import LOOKTHROUGH, SNAPSHOT
 from tests.test_queue import seeded  # noqa: F401  (fixture)
 
@@ -61,26 +64,26 @@ def test_a_run_ends_completed_with_every_run_step_done_and_timed(advisor):
     assert advisor.get("/api/queue").json()["run_id"] == snap["run_id"]
 
 
-class BlockingLlm:
-    """Holds the first LLM call until released. With approved research seeded, that is a Research Tilt inside Score
-    Portfolios, so the run freezes part-way through scoring. Every call then fails, which costs only the AI output: the
-    run ends Completed with warnings."""
+class BlockingModel(ScriptedModel):
+    """Holds the first model request until released. With approved research seeded, that is a Research Tilt inside
+    Score Portfolios, so the run freezes part-way through scoring. Every request then fails as an unreachable provider
+    does, which costs only the AI output: the run ends Completed with warnings."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.entered, self.release = threading.Event(), threading.Event()
+        super().__init__(then=self._hold)
 
-    def complete(self, request: LlmRequest) -> LlmResponse:
+    def _hold(self, request: ScriptedRequest) -> httpx.ConnectError:
         self.entered.set()
-        assert self.release.wait(30), "the test never released the LLM"
-        raise LlmError("no AI output in this test")
+        assert self.release.wait(30), "the test never released the model"
+        return httpx.ConnectError("no AI output in this test")
 
 
 @pytest.fixture
 def frozen(app, advisor):
     """A run started by `advisor` and frozen part-way through Score Portfolios; released on teardown."""
     seed_research(app.state.session_factory)
-    llm = BlockingLlm()
-    app.state.llm = llm
+    llm = serve(app, BlockingModel())
     r = advisor.post(RUNS)
     assert r.status_code == 202, r.text
     assert llm.entered.wait(30)
@@ -166,6 +169,15 @@ def test_roles_without_analysis_run_are_denied_every_run_endpoint_and_the_denial
     assert sorted(json.loads(e.payload_json)["path"] for e in denied) == sorted(p for _, p in paths)
 
 
+def without_exchange_hashes(payload: dict) -> dict:
+    """An event payload minus what differs between identical runs: Exchange hashes (each covers its fresh Trajectory
+    id) and grounding check ids."""
+    kept = {k: v for k, v in payload.items() if k not in ("exchange_hash", "check_id")}
+    if "exchanges" in kept:
+        kept["exchanges"] = [ref["exchange_id"] for ref in kept["exchanges"]]
+    return kept
+
+
 def run_events(app) -> list[tuple]:
     """The Audit Events from the first run's start on, comparable across databases: a parent is its position in that
     list, or for an earlier event (the seeded research) its type and payload. An Exchange hash covers the Exchange's own
@@ -180,7 +192,7 @@ def run_events(app) -> list[tuple]:
             e.actor_kind,
             e.actor_name,
             e.actor_role,
-            {k: v for k, v in json.loads(e.payload_json).items() if k not in ("exchange_hash", "check_id")},
+            without_exchange_hashes(json.loads(e.payload_json)),
             e.portfolio_id,
             e.client_id,
             e.recommendation_id,
@@ -312,33 +324,29 @@ def test_a_failed_run_logs_its_traceback_by_run_id_keeps_its_row_and_a_new_run_s
 NARRATIVES = (PRIORITY_NARRATIVE.name, RECOMMENDATION_NARRATIVE.name)
 
 
-class NarrativeFailingLlm:
-    """Replies from the recordings for a Research Tilt. Fails the way a provider does (LlmError) on the narrative tasks in
-    `failing`, or with `blow_up` raises an unexpected error that escapes the step; other narratives get a reply with no
-    claims."""
+class NarrativeFailingModel(ByTask):
+    """Replays a Research Tilt from the recordings. Fails the way an unreachable provider does on the narrative tasks in
+    `failing`; other narratives get a reply with no claims."""
 
-    def __init__(self, recordings_dir: str, failing=NARRATIVES, blow_up: bool = False):
-        self.recorded, self.failing, self.blow_up = RecordedLlm(recordings_dir), failing, blow_up
+    def __init__(self, replay: Model, failing: tuple[str, ...] = NARRATIVES) -> None:
+        super().__init__(replay)
+        self.failing = failing
 
-    def complete(self, request: LlmRequest) -> LlmResponse:
-        if request.task in self.failing:
-            if self.blow_up:
-                raise RuntimeError("secret internal detail: provider blew up")
-            raise LlmError("secret internal detail: provider is down")
-        if request.task in NARRATIVES:
-            return LlmResponse(content={"claims": []}, model="fake", prompt_version=request.prompt_version)
-        return self.recorded.complete(request)
+    def script_for(self, task: str) -> Model | None:
+        if task in self.failing:
+            return ScriptedModel(httpx.ConnectError("secret internal detail: provider is down"))
+        if task in NARRATIVES:
+            return ScriptedModel({"claims": []})
+        return None
 
 
 AI_STEP_FAILED = "Narrative unavailable (AI step failed; scores are unaffected)."
 
 
-def test_an_llm_failing_in_the_narrative_steps_ends_completed_with_warnings_and_the_queue_moves_on(
-    app, advisor, settings
-):
+def test_an_llm_failing_in_the_narrative_steps_ends_completed_with_warnings_and_the_queue_moves_on(app, advisor):
     seed_research(app.state.session_factory)
     previous = run_and_wait(advisor)
-    app.state.llm = NarrativeFailingLlm(settings.llm_recordings_dir)
+    serve(app, NarrativeFailingModel(app.state.llm.model))
     snap = start_and_wait(advisor)
     assert snap["outcome"] == "completed_with_warnings"
     assert outcomes(snap) == ["done", "done", "done", "failed", "failed"]
@@ -347,17 +355,27 @@ def test_an_llm_failing_in_the_narrative_steps_ends_completed_with_warnings_and_
     assert advisor.get("/api/queue").json()["run_id"] == snap["run_id"] != previous
 
 
-def test_recommendation_narratives_still_run_after_the_priority_narratives_step_blows_up(
-    app, advisor, settings, caplog
-):
+def test_recommendation_narratives_still_run_after_the_priority_model_raises_an_unexpected_error(app, advisor, login):
     seed_research(app.state.session_factory)
-    app.state.llm = NarrativeFailingLlm(settings.llm_recordings_dir, failing=(PRIORITY_NARRATIVE.name,), blow_up=True)
-    with caplog.at_level(logging.ERROR, logger="app.analysis_runs"):
-        snap = start_and_wait(advisor)
+    serve(
+        app,
+        ByTask(
+            app.state.llm.model,
+            priority_narrative=ScriptedModel(then=RuntimeError("secret internal detail: provider blew up")),
+            recommendation_narrative=ScriptedModel(then={"claims": []}),
+        ),
+    )
+    snap = start_and_wait(advisor)
     assert snap["outcome"] == "completed_with_warnings"
     assert outcomes(snap) == ["done", "done", "done", "failed", "done"]
     assert snap["steps"][3]["error"] == AI_STEP_FAILED and "secret" not in json.dumps(snap)
-    assert any(f"Analysis Run {snap['run_id']}" in r.getMessage() and r.exc_info for r in caplog.records)
+    auditor = login("auditor")
+    exchanges = auditor.get("/api/llm/exchanges", params={"task": "priority_narrative", "limit": 200}).json()
+    assert exchanges["total"] > 0
+    for exchange in exchanges["items"]:
+        detail = auditor.get(f"/api/llm/exchanges/{exchange['id']}").json()
+        assert detail["outcome"] == "error" and "RuntimeError" in detail["error"]
+    assert auditor.get("/api/audit/verify").json()["valid"]
 
 
 def strand_a_run(settings, *, completed: bool) -> int:

@@ -4,7 +4,7 @@ Run it with `uv run python -m scripts.walkthrough`. It builds a throwaway app on
 seeds it exactly as the replay tests do (synthetic Clients, research seeds, one Analysis Run by the advisor) and then
 plays each act as the role that owns it, printing every claim it checks with the evidence. It exits non-zero if any
 claim fails. Nothing touches the network or `data/app.db`: AI steps replay the committed recordings in
-`tests/fixtures/llm` (recorded with `uv run python -m tests.fixtures.suggested_questions`).
+`tests/fixtures/llm` (recorded with `uv run python -m tests.fixtures.regenerate`).
 
 The browser walkthrough of the same story is `docs/manual-e2e-guide.md`. The claims follow ADR-0001 (the engine owns
 every number), ADR-0002 (the hash-chained audit trail and its verification), ADR-0003 (real market data, synthetic
@@ -29,8 +29,8 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic_ai.models import Model
 
-from app.llm import LlmClient
 from app.main import create_app
 from app.seeder import PLANTED as PLANTED_IDS
 from tests.fixtures.suggested_questions import login, replay_settings, seed_demo
@@ -457,13 +457,13 @@ class Walkthrough:
         )
 
 
-def walk(llm: LlmClient | None = None, run_timeout: float = 60) -> list[Check]:
-    """Plays the walkthrough on a fresh, seeded throwaway app. `llm` replaces the replaying client (for recording),
-    which also needs a longer `run_timeout` for its live Analysis Runs."""
+def walk(model: Model | None = None, run_timeout: float = 60) -> list[Check]:
+    """Plays the walkthrough on a fresh, seeded throwaway app. `model` replaces the replay Model behind capture (for
+    recording), which also needs a longer `run_timeout` for its live Analysis Runs."""
     with tempfile.TemporaryDirectory() as tmp:
         app = create_app(replay_settings(Path(tmp)))
-        if llm is not None:
-            app.state.llm.inner = llm
+        if model is not None:
+            app.state.llm.model = model
         seed_demo(app, run_timeout)
         return Walkthrough(app, run_timeout).run()
 

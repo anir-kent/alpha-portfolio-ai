@@ -1,0 +1,15 @@
+{
+  "model": "claude-sonnet-5-5",
+  "parts": [
+    {
+      "content": "{\"insights\": [{\"subject_kind\": \"sector\", \"subject\": \"Energy\", \"direction\": \"positive\", \"confidence\": \"high\", \"page\": 1, \"passage\": \"Energy will double next year according to our model.\"}, {\"subject_kind\": \"sector\", \"subject\": \"Energy\", \"direction\": \"positive\", \"confidence\": \"high\", \"page\": 1, \"passage\": \"Energy stocks are guaranteed to outperform.\"}, {\"subject_kind\": \"sector\", \"subject\": \"Crypto\", \"direction\": \"positive\", \"confidence\": \"low\", \"page\": 1, \"passage\": \"Nothing else of note.\"}, {\"subject_kind\": \"asset_class\", \"subject\": \"bond\", \"direction\": \"negative\", \"confidence\": \"low\", \"page\": 9, \"passage\": \"Nothing else of note.\"}]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "insight_extraction@v1",
+  "task": "insight_extraction",
+  "usage": {
+    "input_tokens": 73,
+    "output_tokens": 77
+  }
+}

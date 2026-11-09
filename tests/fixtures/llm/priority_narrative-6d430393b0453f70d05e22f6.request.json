@@ -1,0 +1,12 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "parts": [
+    {
+      "content": "{\"claims\": [{\"asset\": null, \"citations\": [{\"figure\": \"priority_score\", \"kind\": \"engine\"}, {\"figure\": \"component.drift.points\", \"kind\": \"engine\"}, {\"figure\": \"component.drift.weight\", \"kind\": \"engine\"}], \"text\": \"The priority score is 56.42, driven mainly by drift, which contributes 10.7 points at a weight of 0.4.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"drift.cash.actual_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.cash.target_pct\", \"kind\": \"engine\"}, {\"figure\": \"drift.cash.drift_pp\", \"kind\": \"engine\"}], \"text\": \"Cash is the largest drift, at 12.68% against a 10.0% target, which is 2.68 percentage points over.\"}, {\"asset\": null, \"citations\": [{\"figure\": \"days_past_due\", \"kind\": \"engine\"}, {\"figure\": \"component.urgency.points\", \"kind\": \"engine\"}], \"text\": \"The review is 29.0 days past due, and urgency adds 9.67 points.\"}, {\"asset\": \"Financials\", \"citations\": [{\"figure\": \"exposure.sector.Financials\", \"kind\": \"engine\"}, {\"kind\": \"report\", \"page\": 1, \"quote\": \"We are positive on Financials.\", \"report_id\": \"RPT-HV-MERIDIAN-Q4-2026\"}], \"text\": \"Financials is 14.59% of the portfolio, and Meridian's house view is positive on the sector.\"}]}",
+      "part_kind": "text"
+    }
+  ],
+  "prompt_version": "priority_narrative@v1",
+  "task": "priority_narrative",
+  "usage": {}
+}

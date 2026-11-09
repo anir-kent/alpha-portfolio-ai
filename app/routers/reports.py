@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app import reports
 from app.audit import Actor
@@ -89,15 +90,23 @@ async def upload_report(
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(413, "Report file is too large")
     filename = file.filename or "report"
+    # Only the read happens on the event loop: ingestion calls the LLM, which may run its own loop (ADR-0010).
+    return await run_in_threadpool(
+        _ingest_and_render,
+        db,
+        llm,
+        title=title or filename,
+        filename=filename,
+        content=content,
+        uploader=Actor.user(user.username, user.role),
+    )
+
+
+def _ingest_and_render(
+    db: Session, llm: LlmClient, *, title: str, filename: str, content: bytes, uploader: Actor
+) -> ReportOut:
     try:
-        row, _ = reports.ingest(
-            db,
-            llm,
-            title=title or filename,
-            filename=filename,
-            content=content,
-            uploader=Actor.user(user.username, user.role),
-        )
+        row, _ = reports.ingest(db, llm, title=title, filename=filename, content=content, uploader=uploader)
     except reports.ReportError as e:
         raise HTTPException(422, str(e)) from e
     return _report(db, row)
