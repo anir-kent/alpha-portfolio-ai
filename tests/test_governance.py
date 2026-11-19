@@ -8,7 +8,7 @@ import pytest
 
 from tests.conftest import ROLES
 from tests.fixtures.assistant_eval import EVAL_SET, ScriptedEvalModel, run_eval
-from tests.fixtures.suggested_questions import lift_question_limits, seed_demo
+from tests.fixtures.demo import lift_question_limits, seed_demo
 from tests.scripted import serve
 from tests.test_grounding import check, ctx, report_cite  # noqa: F401  (ctx is a fixture)
 from tests.test_queue import seeded  # noqa: F401  (fixture ctx needs)
@@ -79,7 +79,7 @@ def test_prompt_log_is_empty_when_no_llm_call_was_made(login, app):
 
 def test_model_card_reports_configured_model_and_current_prompt_versions(login, settings):
     card = governance(login)["model_card"]
-    assert card["model"] == settings.llm_model and card["llm_mode"] == "recorded"
+    assert card["model"] == settings.llm_model and "llm_mode" not in card
     assert card["tilt_bound_pp"] == 2.0
     assert {"insight_extraction@v1", "research_tilt@v1", "recommendation_narrative@v1", "priority_narrative@v1"} <= set(
         card["current_prompt_versions"]

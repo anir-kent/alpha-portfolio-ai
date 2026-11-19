@@ -36,12 +36,7 @@ def anchor(app, outcomes) -> int:
 
 
 def capture(app) -> ModelLlm:
-    return ModelLlm(
-        app.state.llm.model,
-        app.state.session_factory,
-        mode="recorded",
-        chat_model=FakeChatModel(then=echo, model_name="echo-1"),
-    )
+    return ModelLlm(app.state.session_factory, chat_model=FakeChatModel(then=echo, model_name="echo-1"))
 
 
 def trajectory_of_three(app) -> tuple[int, list[int | None]]:

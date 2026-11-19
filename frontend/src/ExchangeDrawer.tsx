@@ -157,7 +157,6 @@ function Claims({ verdicts }: { verdicts: Verdict[] }) {
 
 function Body({ d, tab, canLineage }: { d: Detail; tab: Tab; canLineage: boolean }) {
   const t = tokens(d.usage);
-  const replayed = d.telemetry === "not_available_replayed";
   const rec = recommendationOf(d);
   switch (tab) {
     case "Prompt":
@@ -221,13 +220,10 @@ function Body({ d, tab, canLineage }: { d: Detail; tab: Tab; canLineage: boolean
           <Field label="Prompt version">{d.prompt_version}</Field>
           <Field label="Model">{d.model ?? "—"}</Field>
           <Field label="Endpoint host">{d.endpoint_host ?? "—"}</Field>
-          <Field label="Mode">{d.mode}</Field>
           <Field label="Outcome">{d.outcome}</Field>
-          <Field label="Latency">
-            {replayed ? "n/a (replayed)" : d.latency_ms === null ? "—" : `${d.latency_ms.toLocaleString("en-US")} ms`}
-          </Field>
-          <Field label="Tokens in">{replayed ? "n/a (replayed)" : (t.input?.toLocaleString("en-US") ?? "—")}</Field>
-          <Field label="Tokens out">{replayed ? "n/a (replayed)" : (t.output?.toLocaleString("en-US") ?? "—")}</Field>
+          <Field label="Latency">{d.latency_ms === null ? "—" : `${d.latency_ms.toLocaleString("en-US")} ms`}</Field>
+          <Field label="Tokens in">{t.input?.toLocaleString("en-US") ?? "—"}</Field>
+          <Field label="Tokens out">{t.output?.toLocaleString("en-US") ?? "—"}</Field>
           <Field label="Trajectory">{d.trajectory_id ?? "— (a Trajectory of one)"}</Field>
           <Field label="Position">{d.trajectory_position ?? 0}</Field>
           <Field label="Hash">{d.hash}</Field>
@@ -318,7 +314,6 @@ export function ExchangeDrawer({
       {d && (
         <>
           <div className="flex flex-wrap items-center gap-2">
-            <Pill tone={d.mode === "live" ? "pos" : "warn"}>{d.mode}</Pill>
             {d.outcome === "error" ? (
               <Pill tone="neg">
                 <Icon name="alert" size={10} />

@@ -9,4 +9,4 @@ All drift, priority, trade amounts and suitability pass/warning/breach outcomes 
 
 ## Consequences
 
-Rebalancing is rule-based and band-based, with a bounded, configurable Research Tilt. Tests can assert exact numbers on seeded scenarios, and the LLM can be swapped (or replayed from recordings) without changing any compliance outcome.
+Rebalancing is rule-based and band-based, with a bounded, configurable Research Tilt. Tests can assert exact numbers on seeded scenarios, and the LLM can be swapped (or replaced by a fake chat model in tests) without changing any compliance outcome.

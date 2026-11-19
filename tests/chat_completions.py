@@ -1,5 +1,5 @@
-"""Chat-completions replies as a provider sends them, for tests of the live Model over an `httpx.MockTransport`
-(ADR-0010: live capture stores the bytes that crossed the wire)."""
+"""Chat-completions replies as a provider sends them, for tests of the live chat model against a stand-in provider
+(ADR-0011)."""
 
 import httpx
 
@@ -7,8 +7,7 @@ REPLY_TEXT = '{"insights": []}'
 
 
 def completion(content=REPLY_TEXT, **extra) -> httpx.Response:
-    """A chat-completions reply as OpenRouter sends it (pydantic-ai's OpenRouter model requires `provider`, the OpenRouter
-    SDK `system_fingerprint`)."""
+    """A chat-completions reply as OpenRouter sends it (its SDK requires `provider` and `system_fingerprint`)."""
     return httpx.Response(
         200,
         json={

@@ -156,21 +156,8 @@ function StatusStrip({ permissions }: { permissions: string[] }) {
       )}
       {card ? (
         <span className="flex items-center gap-1.5">
-          <span
-            aria-hidden
-            className={`size-2 rounded-full ${card.llm_mode === "live" ? "bg-pos shadow-[0_0_8px_#2fb67a]" : "bg-warn shadow-[0_0_8px_#e3a42b]"}`}
-          />
+          <span aria-hidden className="size-2 rounded-full bg-pos shadow-[0_0_8px_#2fb67a]" />
           LLM <span className="mono text-ink">{card.model}</span>
-          <Pill
-            tone={card.llm_mode === "live" ? "pos" : "warn"}
-            title={
-              card.llm_mode === "live"
-                ? "Calls go to the live endpoint"
-                : "Replaying committed recordings; no live calls"
-            }
-          >
-            {card.llm_mode}
-          </Pill>
         </span>
       ) : canGov ? null : (
         <span className="text-ink-3">LLM status visible to Governance roles</span>

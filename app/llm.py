@@ -38,10 +38,6 @@ class LlmError(Exception):
         self.latency_ms = latency_ms
 
 
-class RecordingMissing(LlmError):
-    """Replay found no recording for the request: in recorded mode only recorded calls can be answered."""
-
-
 @dataclass(frozen=True)
 class LlmRequest:
     task: str
@@ -59,7 +55,7 @@ class LlmResponse:
     # Set by the capture wrapper once the Exchange is stored (ADR-0004).
     exchange_id: int | None = None
     exchange_hash: str | None = None
-    # Transport detail an adapter may know; absent for a replay.
+    # Transport detail the capture knows.
     messages: list[dict] | None = None
     raw_reply: str | None = None
     usage: dict | None = None

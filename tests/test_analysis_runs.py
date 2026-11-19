@@ -22,7 +22,7 @@ from app.prompts import PRIORITY_NARRATIVE, RECOMMENDATION_NARRATIVE
 from app.research_seed import seed_research
 from app.seeder import seed_clients
 from tests.conftest import ROLES, SEED_PASSWORD
-from tests.fake_chat import ByTask, ChatRequest, FakeChatModel, RecordedPipeline, serve_chat
+from tests.fake_chat import ByTask, ChatRequest, DemoPipeline, FakeChatModel, serve_chat
 from tests.runs import RUNS, run_and_wait, start_and_wait, wait_for_outcome
 from tests.test_market_data import LOOKTHROUGH, SNAPSHOT
 from tests.test_queue import seeded  # noqa: F401  (fixture)
@@ -345,7 +345,7 @@ AI_STEP_FAILED = "Narrative unavailable (AI step failed; scores are unaffected).
 def test_an_llm_failing_in_the_narrative_steps_ends_completed_with_warnings_and_the_queue_moves_on(app, advisor):
     seed_research(app.state.session_factory)
     previous = run_and_wait(advisor)
-    serve_chat(app, NarrativeFailingModel(fallback=RecordedPipeline()))
+    serve_chat(app, NarrativeFailingModel(fallback=DemoPipeline()))
     snap = start_and_wait(advisor)
     assert snap["outcome"] == "completed_with_warnings"
     assert outcomes(snap) == ["done", "done", "done", "failed", "failed"]
@@ -359,7 +359,7 @@ def test_recommendation_narratives_still_run_after_the_priority_model_raises_an_
     serve_chat(
         app,
         ByTask(
-            RecordedPipeline(),
+            DemoPipeline(),
             priority_narrative=FakeChatModel(then=RuntimeError("secret internal detail: provider blew up")),
             recommendation_narrative=FakeChatModel(then={"claims": []}),
         ),

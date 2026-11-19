@@ -8,30 +8,21 @@ Button labels below are taken from the code, not from a live run, and may differ
 
 ## 0. Before you start
 
-**LLM mode.** The repo ships recordings, made against `anthropic/claude-sonnet-5.5` through OpenRouter, for:
+**LLM.** Every AI step (Insight extraction, Research Tilts, rationale and memos, queue narratives) and the Assistant call the model live. Put `APP_LLM_API_KEY` (and, to change the provider, `APP_LLM_BASE_URL` and `APP_LLM_MODEL`) in `.env`. The default is `anthropic/claude-sonnet-5.5` through OpenRouter.
 
-- the first Analysis Run on a fresh seed (queue narratives, Research Tilts, rationale and memos);
-- the Assistant's Suggested Questions;
-- the demo house view's extraction.
-
-To replay them:
-
-- Start the API with `APP_LLM_MODE=recorded APP_LLM_RECORDINGS_DIR=tests/fixtures/llm`, and keep the default model settings.
-- Replay only works from a fresh seed, for the first Analysis Run. Recordings replay byte-identical prompts only.
-- Anything not recorded (a second run, a Report you upload, a Question you type) shows as a failed AI step with a short reason, and latency reads "n/a (replayed)". The deterministic parts (drift, suitability, approvals, audit) must still work, so a failed AI step is itself a useful check.
-
-For fresh AI output, use live mode instead (`APP_LLM_MODE=live` with your `APP_LLM_API_KEY`).
+- AI output varies from run to run: check that it is cited, grounded and bounded, not that it matches this guide word for word. Every number, and the approval route, comes from the engine.
+- With no key (or an unreachable provider) an AI step shows as failed with a short reason. The deterministic parts (drift, suitability, approvals, audit) must still work, so a failed AI step is itself a useful check.
+- The graphs behind the AI steps: the pipeline graph is `START → generate → END`; the Assistant graph has `agent`, `tools`, `validate` and `budget_exhausted` nodes (see `docs/llm_inter_explain.md`). Each model call is one LLM Exchange, tagged with its Graph Node.
 
 **Reset and start** (two terminals, from the repo root):
 
 ```bash
 source .venv/bin/activate
-rm -f data/app.db                      # fresh seed, so the recordings replay
+rm -f data/app.db                      # a fresh seed
 uv run python -m app.seeder            # 25 synthetic clients, deterministic
 uv run python -m app.research_seed     # 5 reports + human-verified approved insights
 uv run python -m app.market_refresh    # Refresh market data from twelve Data
-APP_LLM_MODE=recorded APP_LLM_RECORDINGS_DIR=tests/fixtures/llm \
-  uv run uvicorn app.main:create_app --factory --port 8000   # Terminal 1
+uv run uvicorn app.main:create_app --factory --port 8000   # Terminal 1
 cd frontend && npm run dev                                  # Terminal 2 -> http://localhost:5173
 ```
 
@@ -142,19 +133,14 @@ Log in as `auditor`.
 
 The Analyst's whole job runs in the UI: land on To review, upload a house view, review its Insights, and watch the outcome reach the Advisor. The tick list, in run order, is the Research Analyst section of the checklist.
 
-**Setup.** Start from a fresh seed (Section 0), and start the API with the committed extraction recordings, so the demo house view replays its extraction instead of calling an LLM:
+**Setup.** Start from a fresh seed (Section 0), with `APP_LLM_API_KEY` set.
 
-```bash
-APP_LLM_MODE=recorded APP_LLM_RECORDINGS_DIR=tests/fixtures/llm \
-  uv run uvicorn app.main:create_app --factory --port 8000
-```
-
-`tests/fixtures/house_view_demo.txt` then always lands with 3 Insights awaiting review: Information Technology (sector, positive, page 1), Utilities (sector, negative, page 1) and equity (Asset Class, positive, page 2). Any other new text has no recording, so its extraction fails, which is how the failure path is checked. The run uploads the demo house view four times; each copy is a separate Report with its own ID.
+`tests/fixtures/house_view_demo.txt` lands with a few Insights awaiting review: expect Information Technology (sector, positive, page 1), Utilities (sector, negative, page 1) and equity (Asset Class, positive, page 2), though the model decides the exact set. The failure path is checked with the key unset, or a file the model cannot extract Insights from. The run uploads the demo house view four times; each copy is a separate Report with its own ID.
 
 1. **Land.** Log in as `research_analyst`. You land on **Research → To review** (`/research`). On a fresh database it shows "All caught up" with Upload Report and Browse Reports, and the badge reads 0. The **Reports** tab lists the 5 seeded Reports, each marked "Human-verified seed". Open one to see the review layout read-only: the Insight list on the left, and on the right the selected Insight with its cited page, the passage highlighted.
 2. **Access.** As `advisor` or `auditor` there is no Research item in the nav, and `/research` returns them to their own first screen.
-3. **Upload failures first.** In **Upload Report**, try a `.png` (refused in the dialog, nothing sent), a 21 MB file (refused, nothing sent), an empty `.txt` (the server's 422 shows inline), then any new `.txt` (it uploads, its extraction fails, and its detail offers **Upload again**).
-4. **Copy 1 on Report detail.** Upload the demo house view titled "Demo house view, copy 1". The dialog shows "Extracting Insights from your Report…" and lands on the new Report with 3 Insights awaiting review. Note its ID. With the mouse:
+3. **Upload failures first.** In **Upload Report**, try a `.png` (refused in the dialog, nothing sent), a 21 MB file (refused, nothing sent) and an empty `.txt` (the server's 422 shows inline).
+4. **Copy 1 on Report detail.** Upload the demo house view titled "Demo house view, copy 1". The dialog shows "Extracting Insights from your Report…" and lands on the new Report with its Insights awaiting review (3 expected). Note its ID. With the mouse:
    - **Approve** Information Technology. The selection moves to Utilities.
    - **Reject…** Utilities. The dialog will not submit without a note, so write why (e.g. "Valuation call only; not a view we act on").
    - Expand "Approval note (optional)" on equity, write a note and **Approve**. The detail says "This Report is fully reviewed", and each Insight shows its read-only record: outcome, reviewer `research_analyst`, time and note.
@@ -182,5 +168,5 @@ Stop the server and edit one row's payload in `data/app.db` (copy the DB first).
 
 ## Things to note as you go
 
-- **Cost and latency:** live mode makes an LLM call per portfolio for the narrative, so the first run is slower and costs money. Recorded mode is instant and free.
-- **Provider:** live mode defaults to OpenRouter with `anthropic/claude-sonnet-5.5`. Changing `APP_LLM_MODEL` or `APP_LLM_BASE_URL` stops the committed recordings from replaying.
+- **Cost and latency:** the first Analysis Run makes an LLM call per portfolio for the narrative (and per Recommendation for the tilt and memo), so it takes minutes and costs money.
+- **Provider:** the default is OpenRouter with `anthropic/claude-sonnet-5.5`; `APP_LLM_MODEL` and `APP_LLM_BASE_URL` change it.

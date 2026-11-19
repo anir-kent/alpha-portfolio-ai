@@ -38,7 +38,7 @@ def test_an_exchange_stores_the_messages_raw_reply_usage_latency_and_graph_node(
     assert ex["raw_reply"] == json.dumps(REPLY) and ex["parsed_content"] == REPLY
     assert ex["usage"] == {"input_tokens": 11, "output_tokens": 7, "total_tokens": 18}
     assert isinstance(ex["latency_ms"], int) and ex["latency_ms"] >= 0
-    assert (ex["graph_node"], ex["mode"], ex["outcome"], ex["model"]) == ("generate", "live", "ok", "fake-model-1")
+    assert (ex["graph_node"], ex["outcome"], ex["model"]) == ("generate", "ok", "fake-model-1")
     assert (ex["task"], ex["prompt_version"]) == ("insight_extraction", "insight_extraction@v1")
 
 

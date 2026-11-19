@@ -15,8 +15,7 @@ from tests.fake_chat import ByTask, ChatRequest, FakeChatModel
 
 def llm(tmp_path: Path, chat_model: FakeChatModel) -> ModelLlm:
     store = make_session_factory(f"sqlite:///{tmp_path / 'exchanges.db'}")
-    # No Assistant Model: only the pipeline's `complete` is exercised.
-    return ModelLlm(None, store, mode="recorded", chat_model=chat_model)  # type: ignore[arg-type]
+    return ModelLlm(store, chat_model=chat_model)
 
 
 def step_call(task: str, user: str = "{}") -> LlmRequest:

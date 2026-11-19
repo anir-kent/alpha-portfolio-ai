@@ -110,7 +110,7 @@ SECTIONS: tuple[Section, ...] = (
             "8.1 Deterministic engine ownership",
             "8.2 Audit recording",
             "8.3 LLM call shape and prompt versioning",
-            "8.4 Recorded and live LLM modes",
+            "8.4 LLM provider and fake chat models",
             "8.5 SSE streaming",
             "8.6 Configuration service",
             "8.7 Idempotent migrations",

@@ -11,7 +11,6 @@ type Exchange = components["schemas"]["ExchangeSummary"];
 type Filters = {
   task: string;
   prompt_version: string;
-  mode: "" | "live" | "recorded";
   outcome: "" | "ok" | "error";
   date_from: string;
   date_to: string;
@@ -19,7 +18,7 @@ type Filters = {
 /** idle: tail off · connecting/live: stream open · reconnecting: dropped, the browser is resuming from the last id · unavailable: gave up, the list is authoritative. */
 type StreamState = "idle" | "connecting" | "live" | "reconnecting" | "unavailable";
 
-const EMPTY: Filters = { task: "", prompt_version: "", mode: "", outcome: "", date_from: "", date_to: "" };
+const EMPTY: Filters = { task: "", prompt_version: "", outcome: "", date_from: "", date_to: "" };
 const TASKS = [
   "insight_extraction",
   "research_tilt",
@@ -33,7 +32,6 @@ const STREAM_URL = "/api/llm/exchanges/stream";
 const toIso = (local: string) => (local ? new Date(local).toISOString() : undefined);
 /** A datetime-local value has minute precision; as an upper bound it must cover the whole minute. */
 const toIsoEnd = (local: string) => (local ? new Date(new Date(local).getTime() + 59_999).toISOString() : undefined);
-const NA = "n/a (replayed)";
 
 /** Prompt/completion tokens under either provider's key names; undefined when the call reported none. */
 export function tokenCounts(usage: Exchange["usage"]): { input?: number; output?: number } {
@@ -48,7 +46,6 @@ export function matches(x: Exchange, f: Filters): boolean {
   return (
     (!f.task || x.task === f.task) &&
     (!f.prompt_version || x.prompt_version === f.prompt_version) &&
-    (!f.mode || x.mode === f.mode) &&
     (!f.outcome || x.outcome === f.outcome) &&
     (!f.date_from || t >= Date.parse(toIso(f.date_from)!)) &&
     (!f.date_to || t <= Date.parse(toIsoEnd(f.date_to)!))
@@ -147,8 +144,7 @@ const STATE_PILL: Record<StreamState, { tone: "mute" | "pos" | "warn" | "info"; 
   },
 };
 
-function Figure({ value, replayed }: { value: number | undefined; replayed: boolean }) {
-  if (replayed) return <span className="text-ink-3">{NA}</span>;
+function Figure({ value }: { value: number | undefined }) {
   return <>{value === undefined ? "—" : value.toLocaleString("en-US")}</>;
 }
 
@@ -183,19 +179,7 @@ function Linked({ x, canLineage, canPortfolio }: { x: Exchange; canLineage: bool
 type RowLinks = { canLineage: boolean; canPortfolio: boolean };
 
 function Latency({ x }: { x: Exchange }) {
-  if (x.telemetry === "not_available_replayed") return <Figure value={undefined} replayed />;
   return x.latency_ms === null ? <>—</> : <>{x.latency_ms.toLocaleString("en-US")} ms</>;
-}
-
-function ModePill({ mode }: { mode: Exchange["mode"] }) {
-  return (
-    <Pill
-      tone={mode === "live" ? "pos" : "warn"}
-      title={mode === "live" ? "Sent to the live endpoint" : "Replayed from a committed recording"}
-    >
-      {mode}
-    </Pill>
-  );
 }
 
 /** One Exchange: a Trajectory of one, or one step of an expanded Trajectory (`step` set, the row indented). */
@@ -206,7 +190,6 @@ function ExchangeRow({
   canLineage,
   canPortfolio,
 }: { x: Exchange; step?: string; onOpen: (id: number) => void } & RowLinks) {
-  const replayed = x.telemetry === "not_available_replayed";
   const failed = x.outcome === "error";
   const t = tokenCounts(x.usage);
   return (
@@ -233,9 +216,6 @@ function ExchangeRow({
       <td className="mono">{x.prompt_version}</td>
       <td className="mono">{x.model ?? "—"}</td>
       <td>
-        <ModePill mode={x.mode} />
-      </td>
-      <td>
         {failed ? (
           <>
             <Pill tone="neg">
@@ -254,10 +234,10 @@ function ExchangeRow({
         <Latency x={x} />
       </td>
       <td className="num">
-        <Figure value={t.input} replayed={replayed} />
+        <Figure value={t.input} />
       </td>
       <td className="num">
-        <Figure value={t.output} replayed={replayed} />
+        <Figure value={t.output} />
       </td>
       <td>
         <Linked x={x} canLineage={canLineage} canPortfolio={canPortfolio} />
@@ -278,7 +258,6 @@ function TrajectoryRows({
   ...links
 }: { g: TrajectoryGroup; expanded: boolean; onToggle: () => void; onOpen: (id: number) => void } & RowLinks) {
   const first = g.steps[0];
-  const replayed = g.steps.every((x) => x.telemetry === "not_available_replayed");
   const failedAt = g.steps.find((x) => x.outcome === "error");
   const tokens = g.steps.map((x) => tokenCounts(x.usage));
   const latency = sum(g.steps.map((x) => x.latency_ms ?? undefined));
@@ -314,9 +293,6 @@ function TrajectoryRows({
         <td className="mono">{first.prompt_version}</td>
         <td className="mono">{first.model ?? "—"}</td>
         <td>
-          <ModePill mode={first.mode} />
-        </td>
-        <td>
           {failedAt ? (
             <Pill tone="neg">
               <Icon name="alert" size={10} />
@@ -326,20 +302,12 @@ function TrajectoryRows({
             <Pill tone="pos">ok</Pill>
           )}
         </td>
+        <td className="num">{latency === undefined ? "—" : `${latency.toLocaleString("en-US")} ms`}</td>
         <td className="num">
-          {replayed ? (
-            <Figure value={undefined} replayed />
-          ) : latency === undefined ? (
-            "—"
-          ) : (
-            `${latency.toLocaleString("en-US")} ms`
-          )}
+          <Figure value={sum(tokens.map((t) => t.input))} />
         </td>
         <td className="num">
-          <Figure value={sum(tokens.map((t) => t.input))} replayed={replayed} />
-        </td>
-        <td className="num">
-          <Figure value={sum(tokens.map((t) => t.output))} replayed={replayed} />
+          <Figure value={sum(tokens.map((t) => t.output))} />
         </td>
         <td>
           <Linked x={linked} {...links} />
@@ -389,7 +357,6 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
           query: {
             task: applied.task || undefined,
             prompt_version: applied.prompt_version || undefined,
-            mode: applied.mode || undefined,
             outcome: applied.outcome || undefined,
             date_from: toIso(applied.date_from),
             date_to: toIsoEnd(applied.date_to),
@@ -431,7 +398,7 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
     setLive([]);
     setLimit(PAGE);
   };
-  const pick = <K extends "mode" | "outcome">(k: K, v: Filters[K]) => {
+  const pick = <K extends "outcome">(k: K, v: Filters[K]) => {
     const next = { ...form, [k]: v };
     setForm(next);
     apply(next);
@@ -445,7 +412,7 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
     <div>
       <PageHeader
         title="LLM Exchanges"
-        sub="Every prompt sent to the model and every reply, as recorded, grouped by LLM Trajectory. Newest first."
+        sub="Every prompt sent to the model and every reply, as captured, grouped by LLM Trajectory. Newest first."
         actions={
           <>
             <span role="status" aria-live="polite">
@@ -498,22 +465,6 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
             placeholder="e.g. insight_extraction@v1"
           />
         </label>
-        <div className="label">
-          Mode
-          <div className="seg" role="group" aria-label="Mode">
-            {(
-              [
-                ["", "All"],
-                ["live", "Live"],
-                ["recorded", "Recorded"],
-              ] as const
-            ).map(([v, l]) => (
-              <button key={v} type="button" aria-pressed={form.mode === v} onClick={() => pick("mode", v)}>
-                {l}
-              </button>
-            ))}
-          </div>
-        </div>
         <div className="label">
           Outcome
           <div className="seg" role="group" aria-label="Outcome">
@@ -576,7 +527,6 @@ export function ExchangesPage({ permissions }: { permissions: string[] }) {
                 <th>Task</th>
                 <th>Prompt version</th>
                 <th>Model</th>
-                <th>Mode</th>
                 <th>Outcome</th>
                 <th className="num">Latency</th>
                 <th className="num">Tokens in</th>

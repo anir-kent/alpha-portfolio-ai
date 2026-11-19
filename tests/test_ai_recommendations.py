@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from app import research_tilt
 from app.db import AuditEventRow
-from tests.fake_chat import ByTask, FakeChatModel, RecordedPipeline, serve_chat
+from tests.fake_chat import ByTask, DemoPipeline, FakeChatModel, serve_chat
 from tests.runs import run_and_wait
 from tests.test_portfolio import url
 from tests.test_queue import seeded  # noqa: F401  (fixture)
@@ -57,7 +57,7 @@ def ai(app, login, seeded):  # noqa: F811
     ids = {i["subject"]: i["id"] for i in report["insights"]}
     state = type("State", (), {})()
     state.ids, state.report_id, state.analyst, state.advisor = ids, report["id"], analyst, login("advisor")
-    state.stub = serve_chat(app, StubModel(fallback=RecordedPipeline()))
+    state.stub = serve_chat(app, StubModel(fallback=DemoPipeline()))
 
     def approve(*subjects):
         for s in subjects:

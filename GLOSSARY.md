@@ -107,7 +107,7 @@ A Claim whose Report citations quote a real Report page verbatim, whose engine c
 ### Transparency
 
 **LLM Exchange**:
-One model call and its reply: the messages sent, reply schema, raw reply, model, prompt version, timing, token counts, outcome and the Graph Node that made the call. New Exchanges are live; older ones keep the recorded label they were written with. An Audit Event can point to the Exchange that produced it.
+One model call and its reply: the messages sent, reply schema, raw reply, model, prompt version, timing, token counts, outcome and the Graph Node that made the call. Every Exchange is a live call; rows written before recorded mode was removed keep the label they were written with. An Audit Event can point to the Exchange that produced it.
 _Avoid_: Log entry, trace, transcript
 
 **LLM Trajectory**:
@@ -153,7 +153,7 @@ The data and metadata behind the screen the user is on, rebuilt by the server fr
 _Avoid_: Page data, context window
 
 **Suggested Question**:
-A predefined Question offered on a screen. Its Answer is recorded so it also works when the Assistant replays recordings; the pipeline steps are always live.
+A predefined Question offered on a screen. A shortcut: asking one is asking an ordinary Question, and the Assistant answers it live like any other.
 _Avoid_: Canned question, FAQ
 
 **Out-of-Scope Refusal**:

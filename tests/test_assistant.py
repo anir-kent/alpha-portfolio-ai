@@ -530,7 +530,7 @@ def test_a_refused_turn_is_not_grounding_checked_even_if_the_model_sent_claims(a
     assert events(app, "grounding_checked") == []
 
 
-# --- failure, retry and the PII guard (ticket 05) ----------------------------------------------------------------
+# --- failure, retry and the PII guard ---------------------------------------------------------------------------
 
 FAILED = "The Assistant couldn't answer, try again."
 SECRET = "upstream 503 from gw-internal.example: key sk-live-123"
@@ -611,7 +611,7 @@ unwritable_store = sessionmaker(create_engine("sqlite:////nonexistent-dir/exchan
 
 def test_an_exchange_that_cannot_be_captured_fails_closed_and_no_answer_reaches_the_user(app, login, model):
     model.reply = answer("A perfectly good Answer.")
-    app.state.llm = ModelLlm(app.state.llm.model, unwritable_store, mode="recorded", chat_model=model)
+    app.state.llm = ModelLlm(unwritable_store, chat_model=model)
     advisor = login("advisor")
     r = ask(advisor, "Why?", portfolio_screen("C001"))
     turn = r.json()
@@ -1049,7 +1049,7 @@ def test_the_governance_prompt_holds_the_assistant_entry_without_the_eval_result
     assert f'"prompt_version":"{assistant["prompt_version"]}"' in prompt
     for rule in assistant["scope_policy"]:
         assert json.dumps(rule) in prompt
-    # Each live eval run rewrites the results; keeping them out keeps the governance prompt replayable.
+    # Each live eval run rewrites the results; keeping them out keeps the governance prompt stable.
     assert "latest_eval" not in prompt and "0.97" not in prompt
 
 

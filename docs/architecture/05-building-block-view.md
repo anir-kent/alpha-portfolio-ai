@@ -19,7 +19,7 @@ flowchart TB
     api["<b>API process</b><br/>[Container: Python, FastAPI, one process]<br/>Authentication, RBAC, deterministic engine, LLM steps,<br/>Decisions, audit chain, Assistant"]
     scripts["<b>Operator scripts</b><br/>[Container: Python CLI]<br/>Seed synthetic Clients and research;<br/>refresh the market snapshot"]
     db[("<b>SQLite database</b><br/>[Container: SQLite file]<br/>Users, sessions, config, Clients, Analysis Runs,<br/>Recommendations, Decisions, Reports, Insights,<br/>Audit Events, LLM Exchanges, Conversations")]
-    files[("<b>Committed data files</b><br/>[Container: JSON and text files in git]<br/>Market snapshot, fund look-through, seed Reports<br/>and Insights, LLM recordings, latest live eval")]
+    files[("<b>Committed data files</b><br/>[Container: JSON and text files in git]<br/>Market snapshot, fund look-through, seed Reports<br/>and Insights, latest live eval")]
   end
 
   llm["<b>LLM endpoint</b><br/>[External System]<br/>OpenAI-compatible chat completions"]
@@ -28,8 +28,8 @@ flowchart TB
   users -->|"Uses<br/>[HTTPS, browser]"| spa
   spa -->|"JSON under /api; SSE for Run Step progress<br/>and the LLM Exchange feed<br/>[HTTP, session cookie]"| api
   api -->|"Reads and writes<br/>[SQLAlchemy]"| db
-  api -->|"Reads the snapshot and look-through;<br/>replays the configured recordings in recorded mode<br/>[files]"| files
-  api -->|"One schema-bound request per pipeline step;<br/>a bounded Trajectory per Answer, live mode only<br/>[HTTPS, JSON]"| llm
+  api -->|"Reads the snapshot and look-through<br/>[files]"| files
+  api -->|"One schema-bound request per pipeline step;<br/>a bounded Trajectory per Answer<br/>[HTTPS, JSON]"| llm
   operator -->|"Runs by hand<br/>[shell]"| scripts
   scripts -->|"Seeds<br/>[SQLAlchemy]"| db
   scripts -->|"Reads seeds; writes the refreshed snapshot<br/>[files]"| files
@@ -77,7 +77,7 @@ flowchart TB
 
     subgraph evidence["Evidence"]
       direction TB
-      capture["<b>LLM client and Exchange capture</b><br/>pydantic-ai live / replay Models,<br/>fail-closed capture, Trajectories, Exchange feed"]
+      capture["<b>LLM client and Exchange capture</b><br/>LLM Graphs on a LangChain chat model,<br/>fail-closed capture callback, Trajectories, Exchange feed"]
       audit["<b>Audit chain</b><br/>Single write path, hash chain,<br/>lineage, verify"]
       governance["<b>Governance</b><br/>AI quality, prompt log, model card,<br/>adversarial fixtures"]
     end
@@ -112,8 +112,7 @@ flowchart TB
   assistant -->|"checks Claims"| grounding
   assistant -->|"a bounded Trajectory per Question"| capture
   assistant -->|"Screen Context and lookups through the<br/>screens' own read services"| recs
-  capture -->|"live mode"| llm
-  capture -->|"recorded mode"| files
+  capture -->|"model calls"| llm
   market -->|"reads"| files
   audit -->|"verify recomputes<br/>Exchange hashes"| capture
   recs -->|"Decisions, versions"| audit

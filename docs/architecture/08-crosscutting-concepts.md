@@ -16,7 +16,7 @@ The rules every component follows. Each subsection states the rule, where it is 
 
 ## 8.3 LLM call shape and prompt versioning
 
-**Rule.** Every LLM step runs on pydantic-ai through one captured interface, and its final reply is one JSON object held to the step's schema. The four pipeline steps are one request with no tools. The Assistant is the one agent: a bounded loop of read-only lookups and at most one self-correction, capped at `APP_ASSISTANT_REQUEST_LIMIT` requests. There are no write tools, no multi-agent delegation and no retrieval over a vector store ([ADR-0010](../adr/0010-assistant-is-a-bounded-read-only-agent-on-pydantic-ai.md), superseding ADR-0007).
+**Rule.** Every LLM step runs as an LLM Graph on one LangChain chat model, captured by one callback, and its final reply is one JSON object held to the step's schema. The four pipeline steps are one request with no tools (`START → generate → END`). The Assistant is the one agent: a graph of `agent`, `tools`, `validate` and `budget_exhausted` nodes, with read-only lookups and at most one self-correction, capped at `APP_ASSISTANT_REQUEST_LIMIT` requests. There are no write tools, no multi-agent delegation and no retrieval over a vector store ([ADR-0010](../adr/0010-assistant-is-a-bounded-read-only-agent.md), superseding ADR-0007; [ADR-0011](../adr/0011-llm-steps-are-langgraph-graphs-on-a-captured-transport.md)).
 
 [Detailed 8.3 llm call shape and prompt versioning implementation detail](appendices.md#e24-83-llm-call-shape-and-prompt-versioning-implementation-detail).
 
@@ -32,11 +32,11 @@ The rules every component follows. Each subsection states the rule, where it is 
 
 <!-- END GENERATED: prompt-versions -->
 
-## 8.4 Recorded and live LLM modes
+## 8.4 LLM provider and fake chat models
 
-**Rule.** The same code runs offline against recordings or online against an endpoint. `APP_LLM_MODE` chooses which, and both are captured the same way.
+**Rule.** Every LLM call is live, through `get_chat_model`, the one module that names a provider. The test suite runs the same graphs on LangChain fake chat models and never reaches a provider.
 
-[Detailed 8.4 recorded and live llm modes implementation detail](appendices.md#e25-84-recorded-and-live-llm-modes-implementation-detail).
+[Detailed 8.4 llm provider and fake chat models implementation detail](appendices.md#e25-84-llm-provider-and-fake-chat-models-implementation-detail).
 
 ## 8.5 SSE streaming
 

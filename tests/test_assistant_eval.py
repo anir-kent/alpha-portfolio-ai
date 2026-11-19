@@ -17,7 +17,7 @@ from tests.fixtures.assistant_eval import (
     run_eval,
     screen_context_of,
 )
-from tests.fixtures.suggested_questions import lift_question_limits, seed_demo
+from tests.fixtures.demo import lift_question_limits, seed_demo
 from tests.scripted import serve
 
 

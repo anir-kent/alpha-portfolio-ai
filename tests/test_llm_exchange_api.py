@@ -23,7 +23,7 @@ def add_exchange(
     ts,
     task="insight_extraction",
     version="insight_extraction@v1",
-    mode="recorded",
+    mode="live",
     outcome="ok",
     usage=None,
     latency=None,
@@ -85,13 +85,13 @@ def test_list_is_newest_first_summary_rows_with_the_linked_portfolio_and_paginat
     row = body["items"][1]
     assert not set(BULK) & set(row)  # summary rows only: no bulk text
     assert (row["portfolio_id"], row["recommendation_id"]) == ("P-1", "7")
-    assert (row["latency_ms"], row["usage"]["total_tokens"], row["task"], row["mode"], row["outcome"]) == (
+    assert (row["latency_ms"], row["usage"]["total_tokens"], row["task"], row["outcome"]) == (
         120,
         15,
         "insight_extraction",
-        "recorded",
         "ok",
     )
+    assert "mode" not in row and "telemetry" not in row
     assert body["items"][0]["portfolio_id"] is None and body["items"][0]["recommendation_id"] is None
 
     page = login("auditor").get("/api/llm/exchanges", params={"limit": 1, "offset": 1}).json()
@@ -117,11 +117,9 @@ def ids(c, **params):
     return [i["id"] for i in r.json()["items"]]
 
 
-def test_list_filters_combine_by_task_version_mode_outcome_and_date_range(app, login):
+def test_list_filters_combine_by_task_version_outcome_and_date_range(app, login):
     add_exchange(app, ts="2026-01-01T00:00:00.000000Z")
-    b = add_exchange(
-        app, ts="2026-01-02T00:00:00.000000Z", task="research_tilt", version="research_tilt@v2", mode="live"
-    )
+    b = add_exchange(app, ts="2026-01-02T00:00:00.000000Z", task="research_tilt", version="research_tilt@v2")
     c = add_exchange(
         app, ts="2026-01-03T00:00:00.000000Z", task="research_tilt", version="research_tilt@v1", outcome="error"
     )
@@ -130,19 +128,16 @@ def test_list_filters_combine_by_task_version_mode_outcome_and_date_range(app, l
         ts="2026-01-04T00:00:00.000000Z",
         task="research_tilt",
         version="research_tilt@v2",
-        mode="live",
         outcome="error",
     )
     auditor = login("auditor")
     assert ids(auditor, task="research_tilt") == [d, c, b]
     assert ids(auditor, prompt_version="research_tilt@v2") == [d, b]
-    assert ids(auditor, mode="live") == [d, b]
     assert ids(auditor, outcome="error") == [d, c]
-    assert ids(auditor, task="research_tilt", mode="live", outcome="error") == [d]
+    assert ids(auditor, task="research_tilt", prompt_version="research_tilt@v2", outcome="error") == [d]
     assert ids(auditor, date_from="2026-01-02T00:00:00Z", date_to="2026-01-03T12:00:00Z") == [c, b]
     assert ids(auditor, date_from="2026-01-02T00:00:00Z", outcome="ok") == [b]
     assert ids(auditor, task="nothing") == []
-    assert login("auditor").get("/api/llm/exchanges", params={"mode": "bogus"}).status_code == 422
 
 
 def add_grounding(app, check_id, grounded_flags):

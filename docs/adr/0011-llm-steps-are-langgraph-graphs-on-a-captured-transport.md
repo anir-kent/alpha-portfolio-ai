@@ -1,5 +1,5 @@
 ---
-status: accepted (pipeline steps); the Assistant follows in later tickets
+status: accepted
 supersedes: ADR-0010
 amends: ADR-0004
 ---
@@ -12,7 +12,7 @@ Every LLM step becomes an **LLM Graph**: a compiled LangGraph `StateGraph` whose
 
 **One provider seam.** `get_chat_model(settings)` (`app/chat_model.py`) is the only module that imports a provider package. An openrouter.ai base URL selects `init_chat_model("openrouter:<model>")`, i.e. `langchain-openrouter`'s `ChatOpenRouter`. It is given the app's attribution title and `openrouter_provider={"require_parameters": True}`, so OpenRouter routes only to an endpoint that honours the reply schema. Any other base URL selects `init_chat_model("openai:<model>", base_url=...)` (the OpenAI-compatible protocol, `langchain-openai`) with neither. Temperature is sent only when set. SDK retries are off: `max_retries=0`, and see the deviation below.
 
-**Live only for the pipeline.** `complete` never replays: every pipeline call goes to the configured provider. New pipeline Exchanges are always `live`. `APP_LLM_MODE`, `APP_LLM_RECORDINGS_DIR` and `APP_LLM_RECORD` now affect only the Assistant, which stays on pydantic-ai, `CapturingModel` and `ReplayModel` until it becomes an LLM Graph (tickets 03 to 05). Those settings, the recordings and the replay path are removed with it. The chat model is built on first use, so the app still starts without an API key. Without one, the pipeline steps fail through their existing failure outcomes.
+**Live only.** Every call goes to the configured provider, and new Exchanges are always stored as `live`. `APP_LLM_MODE`, `APP_LLM_RECORDINGS_DIR` and `APP_LLM_RECORD`, the committed recordings and the replay path are removed (ticket 05). The chat model is built on first use, so the app still starts without an API key. Without one, the steps fail through their existing failure outcomes, and an Assistant turn fails as `llm_error`. Exchanges written before the removal keep their stored mode, which is part of their hash, so chain verification still passes; nothing reads it, and the API and UI no longer show a mode.
 
 ## Amendment to ADR-0004
 
@@ -37,16 +37,16 @@ Each Exchange records its **Graph Node** in a new `graph_node` column (hand-writ
 
 ## Considered Options
 
-- **Keep pydantic-ai (ADR-0010)**: rejected. The Assistant's control flow (loop, tools, validator, one reflection retry, budget) is hidden inside the framework's agent loop rather than visible as a structure an Auditor can read.
+- **Keep the ADR-0010 agent framework**: rejected. The Assistant's control flow (loop, tools, validator, one reflection retry, budget) is hidden inside the framework's agent loop rather than visible as a structure an Auditor can read.
 - **`create_agent` or another higher-level wrapper**: rejected. LangGraph's docs recommend an explicit `StateGraph` when control flow is the point, and the pipeline needs no agent.
 - **Keep capture at the HTTP transport**: rejected. Each provider SDK has its own HTTP stack (OpenRouter's SDK uses `httpx`, the OpenAI SDK now `httpx2`), so a transport hook is per provider and fragile. The callback is LangChain's documented, provider-agnostic observation point, and the Graph Node is only known there.
 - **Two implementations behind `complete` (migrate one step first)**: rejected. All four steps share the seam, so migrating one would mean two capture paths behind one contract.
-- **Keep replay for the pipeline**: rejected. One runtime mode means no recordings to keep in sync with prompts, seeds and models. Tests stay offline on the fake chat model, which is a test double, not a runtime mode. Until the Assistant's recordings are removed (ticket 05), the default test double answers pipeline calls from the committed pipeline recordings, so that the seeded demo run, and with it the Screen Context the Assistant's recordings are keyed on, stays identical.
+- **Keep replay**: rejected. One runtime mode means no recordings to keep in sync with prompts, seeds and models. Tests stay offline on fake chat models, which are test doubles, not a runtime mode: `FakeChatModel` is scripted per request, and `DemoPipeline` gives the seeded demo run deterministic replies.
 - **Checkpointer, interrupts, LangSmith tracing**: rejected. State is per invocation, and the Conversation (ADR-0006) and the audit chain are the only records.
 
 ## Consequences
 
-`langgraph`, `langchain`, `langchain-openrouter` and `langchain-openai` are dependencies. `pydantic-ai-slim` stays until the Assistant moves. A provider is now a config change behind `get_chat_model`, with OpenRouter the default. Exchange `usage` now uses LangChain's keys (`input_tokens`, `output_tokens`, `total_tokens`), which the UI and the Assistant's trajectory summary already read alongside the older `prompt_tokens` and `completion_tokens`. The API exposes each Exchange's `graph_node`. A fresh app in the default `recorded` mode without an API key now runs its Analysis Runs with failed narratives and rule-based Recommendations, where it used to replay them. The demo needs a key, or the Assistant-only replay until ticket 05.
+`langgraph`, `langchain`, `langchain-openrouter` and `langchain-openai` are the LLM dependencies; the previous agent framework is no longer a dependency. A provider is now a config change behind `get_chat_model`, with OpenRouter the default. Exchange `usage` now uses LangChain's keys (`input_tokens`, `output_tokens`, `total_tokens`), which the UI and the Assistant's trajectory summary already read alongside the older `prompt_tokens` and `completion_tokens`. The API exposes each Exchange's `graph_node`. An app without an API key runs its Analysis Runs with failed narratives and rule-based Recommendations. The demo, the walkthrough script and the Assistant eval therefore need a key; the test suite does not.
 
 ## The Assistant graph (ticket 03)
 
@@ -59,4 +59,6 @@ The Assistant now runs as an LLM Graph, LangGraph's documented tool-calling agen
 - **Tools stay sync.** The graph runs with `invoke` on the router's worker thread, so there is no event loop to block and ADR-0010's async-tool guard has nothing to guard. The `ToolNode` has `handle_tool_errors=False`: a malformed tool call fails the turn, with no tool retry. The tools take turns under a lock, since `ToolNode` runs the calls of one reply on worker threads that share the turn's session.
 - **Reply format.** The agent's final message is the JSON reply, as the system prompt's schema asks. Native structured output together with tools is not used.
 
-Still open for ticket 05: removing pydantic-ai, `CapturingModel`/`ReplayModel`, recorded mode and the committed recordings.
+## Removal of the old stack (ticket 05)
+
+`app/pydantic_llm.py`, `CapturingModel`, the replay and recording Models, `RecordingMissing`, the `llm_mode`, `llm_recordings_dir` and `llm_record` settings and `tests/fixtures/llm` are deleted, and the dependency is out of `pyproject.toml` and `uv.lock`. The Exchange API, the Governance model card and capture health, the Health endpoint and a Recommendation's AI steps no longer report a mode, and the frontend drops the live/recorded pill and the "n/a (replayed)" text. Suggested Questions stay as plain shortcuts. `scripts.walkthrough` and the Assistant eval run live; `tests/test_walkthrough.py` plays the walkthrough on `DemoPipeline`. The `mode` column stays on `llm_exchanges`: it is part of every stored hash, and rewriting rows would break verification, so no migration is written.

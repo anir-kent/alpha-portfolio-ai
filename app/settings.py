@@ -14,15 +14,12 @@ class Settings(BaseSettings):
     market_data_snapshot_path: str = "data/market_snapshot.json"
     fund_lookthrough_path: str = "data/fund_lookthrough.json"
     twelve_data_api_key: str = ""  # only used by app.market_refresh
-    llm_mode: str = "recorded"  # recorded | live
     llm_api_key: str = ""
     llm_base_url: str = "https://openrouter.ai/api/v1/"  # any OpenAI-compatible endpoint (OpenRouter, LiteLLM, ...)
     llm_model: str = "anthropic/claude-sonnet-5.5"  # in the gateway's naming
     # Sent only when set. Claude 5 models accept no temperature, and through OpenRouter a request carrying one finds no
     # endpoint, so the default leaves it to the provider. Reported on the governance model card.
     llm_temperature: float | None = None
-    llm_recordings_dir: str = "data/llm_recordings"
-    llm_record: bool = False  # live mode only: save each model request's reply as a recording
     llm_stream_poll_seconds: float = 1.0  # how often the Exchange stream looks for new rows
     llm_stream_max_seconds: float = 300.0  # a stream closes after this; the browser reconnects with its last event id
     # The Assistant's limits. Each description is the "Effect" column of the generated table in the architecture

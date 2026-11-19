@@ -3,7 +3,7 @@
 The browser sends only a screen identity; the server rebuilds the context from the database through the same service
 the screen itself uses, filtered by the user's permissions, so the Assistant never sees more than the screen shows.
 Contexts carry Client ids only, never names or emails, even for users holding `client:pii` (ADR-0004). Serialisation is
-deterministic: the same screen and data give a byte-identical prompt, which recorded replays depend on.
+deterministic: the same screen and data give a byte-identical prompt.
 """
 
 import hashlib
@@ -499,7 +499,7 @@ def _approval_figures(item: dict) -> dict[str, float]:
 # --- Audit ------------------------------------------------------------------------------------------------------------
 
 # Audit Events carry wall-clock timestamps and chain hashes, and every Assistant turn adds one, so an Audit Screen Context
-# is never byte-identical across runs: these are served but cannot replay from a recording (sme-assistant ticket 08).
+# is never byte-identical across runs.
 AUDIT_SUGGESTED = (
     "What happened in these Audit Events?",
     "Which of these events were written by the LLM?",
@@ -653,8 +653,7 @@ def _governance(
     for key, value in card.assistant.limits.model_dump().items():
         figures[f"model_card.assistant.limits.{key}"] = float(value)
     figures = _prefixed(figures, figure_prefix)
-    # The latest eval results are left out: every live eval run rewrites them, and the governance prompt must stay
-    # byte-identical for its Suggested Questions to replay.
+    # The latest eval results are left out: every eval run rewrites them, and the governance prompt stays stable.
     shown = card.model_dump(exclude={"assistant": {"latest_eval"}})
     context = {"screen": "governance", "model_card": shown, "figures": figures}
     return ScreenContext(label=label(screen), portfolio_id=None, text=serialise(context), figures=figures)

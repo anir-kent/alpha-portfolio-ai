@@ -36,8 +36,8 @@ This section lists the known gaps, so a reviewer does not have to find them. The
 | <a id="td-03"></a>TD-03 | An unanchored Research Tilt LLM Exchange. | Low |
 | <a id="td-04"></a>TD-04 | Research Tilt Exchanges are rolled back with a failed scoring phase. | Medium |
 | <a id="td-05"></a>TD-05 | Analysis Run recording commits once per Audit Event | Medium |
-| <a id="td-06"></a>TD-06 | The recording key omits the model. | Low |
+| <a id="td-06"></a>TD-06 | Closed: the recording key omitted the model. | Closed |
 | <a id="td-07"></a>TD-07 | Hand-written migrations | Low |
-| <a id="td-08"></a>TD-08 | Recordings are brittle to tool-result changes. | Low |
+| <a id="td-08"></a>TD-08 | Closed: recordings were brittle to tool-result changes. | Closed |
 
 [Detailed technical debt register](appendices.md#e15-technical-debt-register) contains the impact, current controls and linked roadmap mitigation for each id.

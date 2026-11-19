@@ -40,8 +40,8 @@ def test_extraction_is_captured_and_anchored_in_the_audit_event(app, login):
     assert r.status_code == 200, r.text
     ex = r.json()
     assert ex["hash"] == payload["exchanges"][0]["exchange_hash"]
-    assert (ex["mode"], ex["outcome"], ex["task"], ex["graph_node"]) == ("live", "ok", "insight_extraction", "generate")
-    assert (ex["prompt_version"], ex["model"]) == ("insight_extraction@v1", "claude-sonnet-5-5")
+    assert (ex["outcome"], ex["task"], ex["graph_node"]) == ("ok", "insight_extraction", "generate")
+    assert (ex["prompt_version"], ex["model"]) == ("insight_extraction@v1", "demo-model")
     assert "We are constructive on technology." in ex["user_prompt"]
     assert ex["system_text"] and ex["reply_schema"]["properties"]["insights"]
     assert {i["subject"] for i in ex["parsed_content"]["insights"]} == {"Information Technology", "Utilities", "equity"}
@@ -49,15 +49,15 @@ def test_extraction_is_captured_and_anchored_in_the_audit_event(app, login):
         assert audit.verify(db).valid
 
 
-def test_a_call_with_no_recording_is_captured_as_an_error_exchange(app, login):
-    r = upload(login("research_analyst"), content=b"A report nobody recorded a reply for.\n")
-    assert r.json()["extraction_status"] == "failed" and "No recorded response" in r.json()["extraction_error"]
+def test_a_failed_call_is_captured_as_an_error_exchange(app, login):
+    r = upload(login("research_analyst"), content=b"A report the demo model has no reply for.\n")
+    assert r.json()["extraction_status"] == "failed" and "no reply for this Report" in r.json()["extraction_error"]
     payload = extraction_event(app, r.json()["id"])
     assert payload["outcome"] == "failed" and payload["insight_count"] == 0
 
     ex = login("auditor").get(f"/api/llm/exchanges/{payload['exchanges'][0]['exchange_id']}").json()
-    assert (ex["outcome"], ex["mode"]) == ("error", "live")
-    assert "No recorded response" in ex["error"]
+    assert ex["outcome"] == "error"
+    assert "no reply for this Report" in ex["error"]
     assert ex["hash"] == payload["exchanges"][0]["exchange_hash"]
     with app.state.session_factory() as db:
         assert audit.verify(db).valid
@@ -185,7 +185,7 @@ def test_governance_reports_capture_health(app, login):
     from app.exchanges import exchange_digest
 
     upload(login("research_analyst"))  # one ok exchange, referenced (the pipeline is always live)
-    upload(login("research_analyst"), content=b"A report nobody recorded a reply for.\n")  # one error, referenced
+    upload(login("research_analyst"), content=b"A report the demo model has no reply for.\n")  # one error, referenced
     with app.state.session_factory() as db:
         orphan = LlmExchangeRow(
             created_at="2026-01-01T00:00:00.000000Z",
@@ -207,8 +207,6 @@ def test_governance_reports_capture_health(app, login):
     assert r.status_code == 200
     assert r.json()["capture_health"] == {
         "total": 3,
-        "live": 3,
-        "recorded": 0,
         "errors": 1,
         "unreferenced": 1,
         "trajectories": 3,  # each a Trajectory of one
@@ -221,8 +219,6 @@ def test_governance_reports_capture_health(app, login):
 def test_capture_health_is_all_zero_on_an_empty_database(login):
     assert login("auditor").get("/api/governance").json()["capture_health"] == {
         "total": 0,
-        "live": 0,
-        "recorded": 0,
         "errors": 0,
         "unreferenced": 0,
         "trajectories": 0,

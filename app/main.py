@@ -1,4 +1,3 @@
-import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.language_models import BaseChatModel
@@ -41,16 +40,14 @@ def seed_users(session_factory, password: str) -> None:
 def create_app(
     settings: Settings | None = None,
     *,
-    llm_transport: httpx.AsyncBaseTransport | httpx.BaseTransport | None = None,
     chat_model: BaseChatModel | None = None,
 ) -> FastAPI:
-    """The app. `chat_model` replaces the one `get_chat_model(settings)` builds for the pipeline's LLM Graph, and
-    `llm_transport` the network under the Assistant's live Model (tests and scripts only)."""
+    """The app. `chat_model` replaces the one `get_chat_model(settings)` builds for every LLM Graph (tests only)."""
     settings = settings or Settings()
     app = FastAPI(title="Alpha Portfolio AI", version="0.1.0")
     app.state.settings = settings
     app.state.session_factory = make_session_factory(settings.database_url)
-    app.state.llm = build_llm(settings, app.state.session_factory, llm_transport, chat_model=chat_model)
+    app.state.llm = build_llm(settings, app.state.session_factory, chat_model=chat_model)
     # Before any run can start, a row with no outcome is from a process that died mid-run. One API process only (ADR-0005)
     mark_stranded_runs_interrupted(app.state.session_factory)
     app.state.analysis_runs = AnalysisRuns(app.state.session_factory)

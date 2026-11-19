@@ -5,9 +5,9 @@ Four flows carry the platform's critical behaviour. Each diagram shows two kinds
 Some rules hold in all four flows:
 
 - **One appended event, one commit.** Every Audit Event is appended under a process-wide lock and committed on its own ([ADR-0002](../adr/0002-hash-chained-append-only-audit-log.md)). Business rows flushed before that event commit with it.
-- **The LLM Exchange comes first.** Every model request goes through one capturing wrapper. The wrapper stores the LLM Exchange, for a reply or an error, before the caller writes the Audit Event that references it by id and hash. If the LLM Exchange cannot be stored, the request fails ([ADR-0004](../adr/0004-llm-exchanges-stored-separately-anchored-in-audit-chain.md)).
-- **One call per pipeline step, a bounded Trajectory per Answer.** Insight extraction, the Research Tilt and both narratives are each a single, schema-bound request with no tools. Only an Assistant Answer may take several model requests: read-only lookups and at most one self-correction, within the request budget. Either way the step's one Audit Event anchors its whole LLM Trajectory, in order ([ADR-0010](../adr/0010-assistant-is-a-bounded-read-only-agent-on-pydantic-ai.md)).
-- **Replay misses fail.** In recorded mode a prompt with no recording raises a replay miss. It is never answered with a guess, and it fails the call like any other LLM error.
+- **The LLM Exchange comes first.** Every model call is seen by one capture callback. The callback stores the LLM Exchange, for a reply or an error, before the caller writes the Audit Event that references it by id and hash. If the LLM Exchange cannot be stored, the request fails ([ADR-0004](../adr/0004-llm-exchanges-stored-separately-anchored-in-audit-chain.md)).
+- **One call per pipeline step, a bounded Trajectory per Answer.** Insight extraction, the Research Tilt and both narratives are each a single, schema-bound request with no tools. Only an Assistant Answer may take several model requests: read-only lookups and at most one self-correction, within the request budget. Either way the step's one Audit Event anchors its whole LLM Trajectory, in order ([ADR-0010](../adr/0010-assistant-is-a-bounded-read-only-agent.md), [ADR-0011](../adr/0011-llm-steps-are-langgraph-graphs-on-a-captured-transport.md)).
+- **A missing or unreachable provider fails the call.** With no API key, or a provider that cannot be reached, the call raises an `LlmError` like any other LLM failure; nothing is guessed.
 - **Denials are audited.** A role that lacks the endpoint's permission gets `403`, and an `access_denied` Audit Event is written. The diagrams leave this out.
 
 The components named in the lanes are described in [5.2 Level 2: API process components](05-building-block-view.md#52-level-2-api-process-components). Domain terms are defined in [`GLOSSARY.md`](../../GLOSSARY.md).
@@ -25,7 +25,7 @@ sequenceDiagram
   participant R as AnalysisRuns + ProgressRegistry<br/>(process memory)
   participant W as Run thread<br/>(run_analysis)
   participant DB as SQLite: business rows
-  participant LLM as ModelLlm (capture) → live<br/>or replay Model
+  participant LLM as ModelLlm: pipeline graph<br/>+ capture callback
   participant EX as LLM Exchanges
   participant AU as Audit chain
 
@@ -170,7 +170,7 @@ sequenceDiagram
   participant API as API: reports router
   participant S as Research and Insights service
   participant DB as SQLite: business rows
-  participant LLM as ModelLlm (capture) → live<br/>or replay Model
+  participant LLM as ModelLlm: pipeline graph<br/>+ capture callback
   participant EX as LLM Exchanges
   participant AU as Audit chain
   participant G as Grounding validator
@@ -185,7 +185,7 @@ sequenceDiagram
   S->>LLM: insight extraction, every page labelled [Page n]
   LLM->>EX: store Exchange (own DB session, commit)
   LLM-->>S: reply with Exchange id and hash, or LlmError
-  alt LlmError (replay miss included) or the reply fails the schema
+  alt LlmError or the reply fails the schema
     S->>DB: extraction_status failed, commit
     S->>AU: insight_extracted, outcome failed, carrying the Exchange ref
     API-->>RA: 201 Report marked extraction failed, no Insights
@@ -228,8 +228,8 @@ sequenceDiagram
   participant SPA as React SPA: Assistant drawer
   participant AS as Assistant service
   participant SC as Screen Context builders
-  participant AG as Agent loop (pydantic-ai)<br/>read-only tools, output validator
-  participant LLM as Capture → live<br/>or replay Model
+  participant AG as Assistant graph (LangGraph)<br/>agent, tools, validate
+  participant LLM as Chat model<br/>+ capture callback
   participant EX as LLM Exchanges
   participant G as Grounding validator
   participant AU as Audit chain
@@ -256,7 +256,7 @@ sequenceDiagram
     AG->>LLM: request 2 (messages so far, tool result included)
     LLM->>EX: Exchange, position 1
     LLM-->>AG: draft reply
-    AG->>G: output validator: PII scan, then ground each Claim against<br/>the Screen Context's and every lookup's figures
+    AG->>G: validate node: PII scan, then ground each Claim against<br/>the Screen Context's and every lookup's figures
     alt a Client's name or email in the draft
       G-->>AG: PII: the run ends, no retry
     else ungrounded Claims, first draft

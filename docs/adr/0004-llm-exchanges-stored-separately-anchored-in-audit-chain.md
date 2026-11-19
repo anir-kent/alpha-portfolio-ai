@@ -4,13 +4,13 @@ status: accepted, amended by ADR-0010 (Audit Events anchor an ordered list of Ex
 
 # LLM Exchanges are stored in their own append-only table and anchored in the audit chain by hash
 
-Every call through the LLM interface is captured as an LLM Exchange: live calls, replays from recordings (labelled as such) and failed calls. For a live call the Exchange stores exactly what crossed the wire: the messages sent, the raw reply text before parsing, token usage and latency; a replay can only know the request fields and the recorded content, and says so. Exchanges live in a separate append-only table rather than inside Audit Event payloads, because prompts carry report passages and portfolio figures and would bloat the chain. Each Exchange has a content hash, and the Audit Event that the calling code already writes references the Exchange by id and hash, so altering an Exchange breaks the chain check.
+Every call through the LLM interface is captured as an LLM Exchange: successful and failed calls alike, all live. The Exchange stores the messages sent, the raw reply text before parsing, token usage and latency (ADR-0011 captures them as LangChain sent and received them). Exchanges written before recorded mode was removed carry the stored mode "recorded" and no usage or latency; the mode stays in their hash so chain verification still passes. Exchanges live in a separate append-only table rather than inside Audit Event payloads, because prompts carry report passages and portfolio figures and would bloat the chain. Each Exchange has a content hash, and the Audit Event that the calling code already writes references the Exchange by id and hash, so altering an Exchange breaks the chain check.
 
 ## Considered Options
 
 - **Full prompt and reply inside the Audit Event payload**: rejected. Simpler, but it makes every chain write and the verify walk heavy, and it mixes business records with bulk text.
 - **Separate table with no link to the chain**: rejected. The Exchange would be editable without detection, which defeats the purpose of showing an Auditor what the model actually saw and said.
-- **Capture live calls only**: rejected. The default mode replays recordings, so the glass box would be empty exactly when the system is demonstrated.
+- **Capture live calls only**: this was rejected while a replay mode existed, so that the glass box would not be empty when the system was demonstrated. With replay removed (ADR-0011) every call is live and captured.
 
 ## Consequences
 

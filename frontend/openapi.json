@@ -509,7 +509,7 @@
           "assistant"
         ],
         "summary": "Suggested Questions",
-        "description": "The screen kind's three Suggested Questions. In recorded mode only these replay (from committed recordings).",
+        "description": "The screen kind's three Suggested Questions: shortcuts, each asked as an ordinary Question.",
         "operationId": "getSuggestedQuestions",
         "parameters": [
           {
@@ -1069,26 +1069,6 @@
                 }
               ],
               "title": "Prompt Version"
-            }
-          },
-          {
-            "name": "mode",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "live",
-                    "recorded"
-                  ],
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Mode"
             }
           },
           {
@@ -1942,14 +1922,6 @@
             ],
             "title": "Step"
           },
-          "mode": {
-            "type": "string",
-            "enum": [
-              "live",
-              "recorded"
-            ],
-            "title": "Mode"
-          },
           "latency_ms": {
             "anyOf": [
               {
@@ -1960,14 +1932,6 @@
               }
             ],
             "title": "Latency Ms"
-          },
-          "telemetry": {
-            "type": "string",
-            "enum": [
-              "measured",
-              "not_available_replayed"
-            ],
-            "title": "Telemetry"
           },
           "outcome": {
             "type": "string",
@@ -2025,9 +1989,7 @@
         "type": "object",
         "required": [
           "step",
-          "mode",
           "latency_ms",
-          "telemetry",
           "outcome",
           "reason",
           "grounded",
@@ -2539,14 +2501,6 @@
             "type": "integer",
             "title": "Total"
           },
-          "live": {
-            "type": "integer",
-            "title": "Live"
-          },
-          "recorded": {
-            "type": "integer",
-            "title": "Recorded"
-          },
           "errors": {
             "type": "integer",
             "title": "Errors"
@@ -2582,8 +2536,6 @@
         "type": "object",
         "required": [
           "total",
-          "live",
-          "recorded",
           "errors",
           "unreferenced",
           "trajectories",
@@ -3404,14 +3356,6 @@
             ],
             "title": "Model"
           },
-          "mode": {
-            "type": "string",
-            "enum": [
-              "live",
-              "recorded"
-            ],
-            "title": "Mode"
-          },
           "endpoint_host": {
             "anyOf": [
               {
@@ -3496,14 +3440,6 @@
               }
             ],
             "title": "Latency Ms"
-          },
-          "telemetry": {
-            "type": "string",
-            "enum": [
-              "measured",
-              "not_available_replayed"
-            ],
-            "title": "Telemetry"
           },
           "outcome": {
             "type": "string",
@@ -3590,7 +3526,6 @@
           "task",
           "prompt_version",
           "model",
-          "mode",
           "endpoint_host",
           "system_text",
           "user_prompt",
@@ -3600,7 +3535,6 @@
           "parsed_content",
           "usage",
           "latency_ms",
-          "telemetry",
           "outcome",
           "error",
           "trajectory_id",
@@ -3663,14 +3597,6 @@
             ],
             "title": "Model"
           },
-          "mode": {
-            "type": "string",
-            "enum": [
-              "live",
-              "recorded"
-            ],
-            "title": "Mode"
-          },
           "outcome": {
             "type": "string",
             "enum": [
@@ -3701,14 +3627,6 @@
               }
             ],
             "title": "Usage"
-          },
-          "telemetry": {
-            "type": "string",
-            "enum": [
-              "measured",
-              "not_available_replayed"
-            ],
-            "title": "Telemetry"
           },
           "error": {
             "anyOf": [
@@ -3781,11 +3699,9 @@
           "task",
           "prompt_version",
           "model",
-          "mode",
           "outcome",
           "latency_ms",
           "usage",
-          "telemetry",
           "error",
           "trajectory_id",
           "trajectory_position",
@@ -4572,16 +4488,11 @@
               "unavailable"
             ],
             "title": "Status"
-          },
-          "mode": {
-            "type": "string",
-            "title": "Mode"
           }
         },
         "type": "object",
         "required": [
-          "status",
-          "mode"
+          "status"
         ],
         "title": "LlmHealth"
       },
@@ -4665,10 +4576,6 @@
             "type": "string",
             "title": "Model"
           },
-          "llm_mode": {
-            "type": "string",
-            "title": "Llm Mode"
-          },
           "llm_endpoint": {
             "type": "string",
             "title": "Llm Endpoint"
@@ -4709,7 +4616,6 @@
         "type": "object",
         "required": [
           "model",
-          "llm_mode",
           "llm_endpoint",
           "temperature",
           "tilt_bound_pp",

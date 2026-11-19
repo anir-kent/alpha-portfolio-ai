@@ -1,5 +1,5 @@
 ---
-status: superseded by ADR-0011 (the pipeline steps already; the Assistant when it becomes an LLM Graph)
+status: superseded by ADR-0011 (every step is an LLM Graph; pydantic-ai, the replay Model and the recordings are removed)
 supersedes: ADR-0007
 amends: ADR-0004
 ---

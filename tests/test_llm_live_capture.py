@@ -98,7 +98,7 @@ def test_a_live_call_is_one_request_and_one_exchange_holding_what_was_sent_and_r
     assert ex["messages"][1] == {"role": "user", "content": ex["user_prompt"]}
     assert ex["raw_reply"] == '{"insights": []}' and ex["parsed_content"] == {"insights": []}
     assert (ex["usage"]["input_tokens"], ex["usage"]["output_tokens"], ex["usage"]["total_tokens"]) == (321, 45, 366)
-    assert (ex["mode"], ex["outcome"], ex["graph_node"]) == ("live", "ok", "generate")
+    assert (ex["outcome"], ex["graph_node"]) == ("ok", "generate")
     assert ex["endpoint_host"] == request.url.host
     assert ex["model"] == "anthropic/claude-sonnet-5.5"
     assert isinstance(ex["latency_ms"], int) and ex["latency_ms"] >= 0
@@ -156,7 +156,7 @@ def test_a_failing_http_response_is_one_request_and_one_error_exchange(live_app,
     assert report["extraction_status"] == "failed"
     assert len(wire) == 1  # nothing reached the provider that capture did not see
     ex = extraction_exchange(app, report)
-    assert (ex["outcome"], ex["mode"], ex["graph_node"]) == ("error", "live", "generate")
+    assert (ex["outcome"], ex["graph_node"]) == ("error", "generate")
     assert "LLM call failed" in ex["error"]
     assert ex["messages"] == json.loads(wire[0][0].content)["messages"]  # the request that was sent is on record
     assert ex["parsed_content"] is None
@@ -230,12 +230,7 @@ def test_inside_an_analysis_run_every_live_request_is_an_exchange_its_step_event
     for payload in events:
         (ref,) = payload["exchanges"]  # a Trajectory of one
         ex = auditor.get(f"/api/llm/exchanges/{ref['exchange_id']}").json()
-        assert (ex["hash"], ex["outcome"], ex["mode"], ex["graph_node"]) == (
-            ref["exchange_hash"],
-            "ok",
-            "live",
-            "generate",
-        )
+        assert (ex["hash"], ex["outcome"], ex["graph_node"]) == (ref["exchange_hash"], "ok", "generate")
         request, response = next(p for p in unmatched if json.loads(p[0].content)["messages"] == ex["messages"])
         unmatched.remove((request, response))
         assert ex["task"] == task_of(request) and ex["raw_reply"] == STEP_REPLIES[ex["task"]]

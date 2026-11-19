@@ -156,7 +156,6 @@ function StepSummary({ step, onOpen }: { step: AiStep; onOpen: (id: number) => v
   return (
     <li className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="font-medium text-ink">{STEP_LABEL[step.step]}</span>
-      <Pill tone={step.mode === "live" ? "ai" : "mute"}>{step.mode === "live" ? "live" : "recorded"}</Pill>
       {failed ? (
         <Pill tone="neg">
           <Icon name="alert" size={11} />
@@ -166,7 +165,7 @@ function StepSummary({ step, onOpen }: { step: AiStep; onOpen: (id: number) => v
         <Pill tone="pos">ok</Pill>
       )}
       <span className="mono text-ink-3">
-        {step.latency_ms === null ? "n/a (replayed)" : `${step.latency_ms} ms`}
+        {step.latency_ms === null ? "—" : `${step.latency_ms} ms`}
         {counts && !failed && ` · ${step.grounded} grounded · ${step.ungrounded} ungrounded`}
       </span>
       {failed && step.reason && <span className="text-ink-2">{step.reason}</span>}

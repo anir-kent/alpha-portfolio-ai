@@ -1,10 +1,10 @@
 """LLM Exchange capture (ADR-0004 as amended by ADR-0010 and ADR-0011).
 
 `ModelLlm`, what `build_llm` serves, is the step-facing `complete`, so every call site is captured without change. The
-call runs the pipeline's LLM Graph (`app.llm_graph`) on the chat model from `get_chat_model`, always live, with an
-`ExchangeCapture` callback that stores one Exchange per model call: the messages and reply as LangChain sent and
-received them, usage, latency and the Graph Node that made the call. The Assistant still runs on pydantic-ai over the
-live or replay Model, wrapped in `CapturingModel`, until it becomes an LLM Graph too (ADR-0011, tickets 03-05).
+call runs the pipeline's LLM Graph (`app.llm_graph`) on the chat model from `get_chat_model`, with an `ExchangeCapture`
+callback that stores one Exchange per model call: the messages and reply as LangChain sent and received them, usage,
+latency and the Graph Node that made the call. The Assistant's agent graph (`app.assistant_agent`) runs on the same chat
+model and is captured the same way, through `ModelLlm.exchange_capture` (ADR-0011).
 
 An immutable Exchange is stored as soon as the reply or error is in and before the caller writes its Audit Event, and
 the Exchange id and hash are handed back on the response or error so the event can reference them. If the Exchange
@@ -24,19 +24,12 @@ import uuid
 from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, datetime
 from typing import Any, Self
-from urllib.parse import urlparse
 from uuid import UUID
 
-import httpx
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, convert_to_openai_messages
 from langchain_core.outputs import LLMResult
-from pydantic_ai.exceptions import ModelHTTPError
-from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ModelResponse
-from pydantic_ai.models import Model, ModelRequestParameters
-from pydantic_ai.models.wrapper import WrapperModel
-from pydantic_ai.settings import ModelSettings
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.audit import format_ts
@@ -45,14 +38,6 @@ from app.chat_model import get_chat_model
 from app.db import LlmExchangeRow
 from app.llm import LlmError, LlmRequest, LlmResponse, parse_json_reply
 from app.llm_graph import run_pipeline
-from app.pydantic_llm import (
-    RecordingModel,
-    ReplayModel,
-    WireExchange,
-    build_live_model,
-    tagged,
-    wire_capture,
-)
 
 
 def _canonical(value) -> str:
@@ -95,15 +80,7 @@ def _dump(value) -> str | None:
     return None if value is None else _canonical(value)
 
 
-@dataclasses.dataclass(frozen=True)
-class Origin:
-    """Where an Exchange's call went: its mode and the host it was sent to (None when nothing was sent anywhere)."""
-
-    mode: str
-    endpoint_host: str | None = None
-
-
-LIVE_PIPELINE_MODE = "live"  # the pipeline graph never replays (ADR-0011)
+STORED_MODE = "live"  # every Exchange is a live call; rows from before recorded mode was removed keep "recorded"
 
 
 @dataclasses.dataclass
@@ -116,10 +93,8 @@ class _Capture:
     """Where and how Exchanges are stored: the session they go through and the Trajectory they join. `bind` and
     `trajectory` return views; the original is never changed, so one app-wide client serves every request."""
 
-    def __init__(self, session_factory: sessionmaker, *, mode: str, endpoint_host: str | None = None):
+    def __init__(self, session_factory: sessionmaker):
         self.session_factory = session_factory
-        self.mode = mode
-        self.endpoint_host = endpoint_host
         self._db: Session | None = None
         self._trajectory: _Trajectory | None = None
 
@@ -148,20 +123,18 @@ class _Capture:
         usage: dict | None,
         latency_ms: int | None,
         error: str | None,
-        origin: Origin | None = None,
+        endpoint_host: str | None = None,
         graph_node: str | None = None,
     ) -> LlmExchangeRow:
-        """Stores one Exchange. `origin` defaults to this client's (the Assistant's mode and host); the pipeline graph
-        passes its own, since it is always live."""
-        origin = origin or Origin(self.mode, self.endpoint_host)
+        """Stores one Exchange, the host it was sent to included (None when the chat model has no endpoint)."""
         trajectory = self._trajectory or _Trajectory()  # a call outside a Trajectory view is a Trajectory of one
         row = LlmExchangeRow(
             created_at=format_ts(datetime.now(UTC)),
             task=request.task,
             prompt_version=request.prompt_version,
             model=model,
-            mode=origin.mode,
-            endpoint_host=origin.endpoint_host,
+            mode=STORED_MODE,
+            endpoint_host=endpoint_host,
             system_text=request.system,
             user_prompt=request.user,
             reply_schema_json=_canonical(request.schema),
@@ -187,104 +160,6 @@ class _Capture:
             db.add(row)
             db.commit()
         return row
-
-
-def _failure_message(error: Exception, sent: WireExchange | None) -> str:
-    """What failed, in the provider's terms where the wire shows them: the HTTP status and reply text for any non-2xx
-    reply (a redirect included), or the transport error behind pydantic-ai's own (a timeout, a reset connection)."""
-    if isinstance(error, LlmError):  # already says what failed (a replay miss)
-        return str(error)
-    if sent is not None and sent.status_code is not None and not 200 <= sent.status_code < 300:
-        return f"LLM call failed: HTTP {sent.status_code}: {(sent.reply_text() or '')[:500]}"
-    if isinstance(error, ModelHTTPError):
-        return f"LLM call failed: HTTP {error.status_code}: {str(error.body or '')[:500]}"
-    cause: BaseException | None = error
-    while cause is not None and not isinstance(cause, httpx.HTTPError):
-        cause = cause.__cause__ or cause.__context__
-    error = cause if isinstance(cause, httpx.HTTPError) else error
-    return f"LLM call failed: {type(error).__name__}: {error}"
-
-
-class CapturingModel(WrapperModel):
-    """A pydantic-ai Model that stores one LLM Exchange for every model request it passes on, as soon as the reply or
-    error is known (ADR-0004 as amended by ADR-0010).
-
-    When the request crossed a `RecordingTransport`, the Exchange's messages and raw reply are that HTTP exchange's
-    bytes, with any credential the transport sent redacted. Otherwise (a replay or test Model) they come from the model
-    boundary. A reply that is not a JSON object is an error Exchange that keeps the raw reply; a reply a step later
-    rejects is still `ok`, since the outcome is transport-level. A failed save fails the request (fail closed)."""
-
-    def __init__(
-        self,
-        wrapped: Model,
-        capture: _Capture,
-        request: LlmRequest,
-        stored: list[LlmExchangeRow],
-        *,
-        capture_model_boundary: bool = False,
-    ):
-        super().__init__(wrapped)
-        self._capture = capture
-        self._llm_request = request
-        self._stored = stored
-        self._capture_model_boundary = capture_model_boundary
-
-    async def request(
-        self,
-        messages: list[ModelMessage],
-        model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters,
-    ) -> ModelResponse:
-        started = time.perf_counter()
-        with tagged(self._llm_request), wire_capture() as wire:
-            try:
-                response = await super().request(messages, model_settings, model_request_parameters)
-            except Exception as e:
-                message = wire.redact(_failure_message(e, wire.last())) or ""
-                detail = wire.detail(started)
-                if self._capture_model_boundary and wire.last() is None:
-                    detail["messages"] = ModelMessagesTypeAdapter.dump_python(messages, mode="json", exclude_none=True)
-                raise self._failed(detail, message) from e
-        detail = wire.detail(started)
-        if self._capture_model_boundary and wire.last() is None:
-            detail = {
-                "messages": ModelMessagesTypeAdapter.dump_python(messages, mode="json", exclude_none=True),
-                "raw_reply": response.text or ModelMessagesTypeAdapter.dump_json([response]).decode(),
-                "usage": dataclasses.asdict(response.usage),
-                "latency_ms": None,  # replay/scripted requests have no provider latency
-            }
-        if response.tool_calls:
-            try:
-                self._store(detail, model=response.model_name or self.wrapped.model_name)
-            except Exception as e:
-                raise LlmError(f"LLM exchange could not be recorded: {e}") from e
-            return response
-        if response.text is None:
-            raise self._failed(detail, "LLM call failed: the reply's message content was not text")
-        try:
-            content = parse_json_reply(response.text)
-        except LlmError as e:
-            raise self._failed({**detail, "raw_reply": detail["raw_reply"] or response.text}, str(e)) from e
-        try:
-            self._store(detail, model=response.model_name or self.wrapped.model_name, content=content)
-        except Exception as e:
-            raise LlmError(f"LLM exchange could not be recorded: {e}") from e
-        return response
-
-    def _store(
-        self, detail: dict, *, model: str | None, content: dict | None = None, error: str | None = None
-    ) -> LlmExchangeRow:
-        row = self._capture.persist(self._llm_request, model=model, content=content, error=error, **detail)
-        self._stored.append(row)
-        return row
-
-    def _failed(self, detail: dict, message: str) -> LlmError:
-        """The error to raise for a failed model request, pointing at the error Exchange now stored for it."""
-        try:
-            row = self._store(detail, model=self.wrapped.model_name, error=message)
-        except Exception:
-            return LlmError(f"{message} (the failed call could not be recorded)")
-        return LlmError(message, exchange_id=row.id, exchange_hash=row.hash)
 
 
 def _text(content: object) -> str:
@@ -314,7 +189,7 @@ class ExchangeCapture(BaseCallbackHandler):
     def __init__(self, capture: "_Capture", request: LlmRequest, *, endpoint_host: str | None, secret: str = ""):
         self._capture = capture
         self._request = request
-        self._origin = Origin(LIVE_PIPELINE_MODE, endpoint_host)
+        self._endpoint_host = endpoint_host
         self._secret = secret
         self._calls: dict[UUID, dict] = {}
         self.stored: list[LlmExchangeRow] = []
@@ -387,34 +262,28 @@ class ExchangeCapture(BaseCallbackHandler):
             usage=dict(usage) if usage else None,
             latency_ms=round((time.perf_counter() - call["started"]) * 1000),
             error=error,
-            origin=self._origin,
+            endpoint_host=self._endpoint_host,
             graph_node=call["graph_node"],
         )
         self.stored.append(row)
 
 
 class ModelLlm(_Capture):
-    """The step-facing `complete`: one run of the pipeline's LLM Graph on `chat_model`, always live, captured by an
-    `ExchangeCapture` callback (ADR-0011). The response and any error carry the stored Exchange's id and hash for the
-    Audit Event. `model` is the Assistant's pydantic-ai Model, wrapped in capture by `capturing_model` (ADR-0010)
-    until the Assistant is an LLM Graph too.
+    """The step-facing `complete`: one run of the pipeline's LLM Graph on `chat_model`, captured by an `ExchangeCapture`
+    callback (ADR-0011). The response and any error carry the stored Exchange's id and hash for the Audit Event.
 
     The chat model is built on first use from `chat_model_factory`, so the app starts without an API key; a test sets
     `chat_model` to a fake."""
 
     def __init__(
         self,
-        model: Model,
         session_factory: sessionmaker,
         *,
-        mode: str,
-        endpoint_host: str | None = None,
         chat_model: BaseChatModel | None = None,
         chat_model_factory: Callable[[], BaseChatModel] | None = None,
         secret: str = "",
     ):
-        super().__init__(session_factory, mode=mode, endpoint_host=endpoint_host)
-        self.model = model
+        super().__init__(session_factory)
         self._chat_model = chat_model
         self._chat_model_factory = chat_model_factory
         self._secret = secret
@@ -430,10 +299,6 @@ class ModelLlm(_Capture):
     @chat_model.setter
     def chat_model(self, model: BaseChatModel) -> None:
         self._chat_model = model
-
-    def capturing_model(self, request: LlmRequest, stored: list[LlmExchangeRow]) -> CapturingModel:
-        """Capture every model request of an Agent run in this view's Trajectory."""
-        return CapturingModel(self.model, self, request, stored, capture_model_boundary=True)
 
     def exchange_capture(self, request: LlmRequest) -> ExchangeCapture:
         """The callback that stores one Exchange per model call of an LLM Graph run, in this view's Trajectory."""
@@ -472,38 +337,11 @@ class ModelLlm(_Capture):
         )
 
 
-def endpoint_host(settings) -> str | None:
-    return urlparse(settings.llm_base_url).hostname if settings.llm_mode == "live" else None
-
-
-def build_model(settings, transport: httpx.AsyncBaseTransport | httpx.BaseTransport | None = None) -> Model:
-    """The Assistant's pydantic-ai Model `settings` select: the replay Model over the recordings directory in recorded
-    mode, or the live Model (over `transport`, the network when omitted), recording each request when `llm_record` is
-    set. `APP_LLM_MODE` and its recordings affect only the Assistant; the pipeline is always live (ADR-0011)."""
-    if settings.llm_mode == "recorded":
-        return ReplayModel(settings.llm_recordings_dir, model_name=settings.llm_model)
-    if settings.llm_mode == "live":
-        if not settings.llm_api_key:
-            raise RuntimeError("APP_LLM_API_KEY must be set when APP_LLM_MODE=live")
-        live = build_live_model(settings, transport)
-        return RecordingModel(live, settings.llm_recordings_dir) if settings.llm_record else live
-    raise RuntimeError(f"Unknown APP_LLM_MODE: {settings.llm_mode}")
-
-
-def build_llm(
-    settings,
-    session_factory: sessionmaker,
-    transport: httpx.AsyncBaseTransport | httpx.BaseTransport | None = None,
-    *,
-    chat_model: BaseChatModel | None = None,
-) -> ModelLlm:
-    """The step-facing LLM the app serves: the pipeline graph on `chat_model` (by default `get_chat_model(settings)`,
-    built on first use), and the Assistant's Model, both captured (ADR-0004, ADR-0010, ADR-0011)."""
+def build_llm(settings, session_factory: sessionmaker, *, chat_model: BaseChatModel | None = None) -> ModelLlm:
+    """The LLM the app serves, for the pipeline graph and the Assistant graph alike: `chat_model`, by default
+    `get_chat_model(settings)` built on first use, with every model call captured (ADR-0004, ADR-0011)."""
     return ModelLlm(
-        build_model(settings, transport),
         session_factory,
-        mode=settings.llm_mode,
-        endpoint_host=endpoint_host(settings),
         chat_model=chat_model,
         chat_model_factory=lambda: get_chat_model(settings),
         secret=settings.llm_api_key,

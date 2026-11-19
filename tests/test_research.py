@@ -112,7 +112,7 @@ def test_every_llm_call_logs_model_and_prompt_version_to_the_audit_chain(app, lo
     ingested, extracted = events(app, report_id=report["id"])
     assert (ingested.type, ingested.actor_role) == ("report_ingested", "research_analyst")
     assert extracted.type == "insight_extracted" and extracted.actor_kind == "system"
-    assert (extracted.model, extracted.prompt_version) == ("claude-sonnet-5-5", "insight_extraction@v1")
+    assert (extracted.model, extracted.prompt_version) == ("demo-model", "insight_extraction@v1")
     assert json.loads(extracted.parent_ids_json) == [ingested.id]
     with app.state.session_factory() as db:
         assert audit.verify(db).valid
@@ -129,11 +129,11 @@ def test_insights_failing_citation_or_taxonomy_checks_are_dropped_and_recorded(a
     }
 
 
-def test_report_without_a_recording_is_stored_with_failed_extraction(login):
-    r = upload(login("research_analyst"), content=b"A report nobody recorded a reply for.\n")
+def test_report_whose_extraction_fails_is_stored_with_failed_extraction(login):
+    r = upload(login("research_analyst"), content=b"A report the demo model has no reply for.\n")
     assert r.status_code == 201
     assert r.json()["extraction_status"] == "failed" and r.json()["insights"] == []
-    assert "No recorded response" in r.json()["extraction_error"]
+    assert "no reply for this Report" in r.json()["extraction_error"]
 
 
 @pytest.mark.parametrize(

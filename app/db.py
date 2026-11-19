@@ -65,7 +65,9 @@ class LlmExchangeRow(Base):
     task: Mapped[str] = mapped_column(String, index=True)
     prompt_version: Mapped[str] = mapped_column(String, index=True)
     model: Mapped[str | None] = mapped_column(String, nullable=True)
-    mode: Mapped[str] = mapped_column(String, index=True)  # live | recorded
+    mode: Mapped[str] = mapped_column(
+        String, index=True
+    )  # "live" for every Exchange now; rows from before recorded mode was removed say "recorded" and keep their hash
     endpoint_host: Mapped[str | None] = mapped_column(String, nullable=True)
     system_text: Mapped[str] = mapped_column(Text)
     user_prompt: Mapped[str] = mapped_column(Text)

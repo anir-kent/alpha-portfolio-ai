@@ -19,9 +19,8 @@ integration's own `json_schema` path: it binds the same `response_format` and pa
 parser, and the script just returns JSON content.
 
 `ByTask(fallback, research_tilt=FakeChatModel(...))` answers some pipeline tasks from their own fake and leaves the
-rest to another. `RecordedPipeline` answers every pipeline request from the committed recordings, so the seeded demo
-run produces what it always has and the Assistant's recordings, keyed on Screen Context, still replay. It is a bridge
-until those recordings are removed (ticket 05).
+rest to another. `DemoPipeline` answers every pipeline task with a deterministic reply built from the request, so the
+seeded demo run completes offline.
 """
 
 import json
@@ -237,9 +236,13 @@ class ByTask(FakeChatModel):
         return model._generate(messages, stop, run_manager, **kwargs)
 
 
-class RecordedPipeline(FakeChatModel):
-    """Answers each pipeline request with its committed recording, under the model name it was recorded with. A
-    request with no recording fails as `RecordingMissing`, as the replay did."""
+class DemoPipeline(FakeChatModel):
+    """Answers every pipeline task with a plausible, deterministic reply built from the request, so the seeded demo run
+    completes offline: the fixture Reports' hand-authored Insights, a small tilt per Insight by its direction, and
+    narratives of claims that cite the engine figures (and, where an Insight bears on a figure, its Report passage).
+    A task it cannot answer fails as an unreachable provider does."""
+
+    model_name: str = "demo-model"
 
     def _generate(
         self,
@@ -248,38 +251,67 @@ class RecordedPipeline(FakeChatModel):
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
-        from app.pydantic_llm import ReplayModel
-        from tests.fixtures.suggested_questions import RECORDED_MODEL, RECORDINGS
-
         request = self._received(messages, run_manager, kwargs)
-        content, model_name = pydantic_single_call(
-            ReplayModel(RECORDINGS, model_name=RECORDED_MODEL), request.step_call()
-        )
-        return ChatResult(generations=[ChatGeneration(message=_message(content, model_name or RECORDED_MODEL))])
+        reply = demo_reply(request)
+        return ChatResult(generations=[ChatGeneration(message=_message(reply, self.model_name))])
 
 
-def pydantic_single_call(model, call: LlmRequest) -> tuple[dict, str | None]:
-    """The reply object and model name of the single pydantic-ai call the pipeline made before ADR-0011 (native
-    structured output over the reply schema, no output retries), so the committed recordings' keys still match."""
-    from pydantic_ai import Agent, AgentRetries, NativeOutput, StructuredDict
+_TILT_PP = {"positive": 0.3, "negative": -0.3}
 
-    from app.llm import wire_schema
-    from app.llm_graph import system_prompt
-    from app.pydantic_llm import tagged
 
-    agent = Agent(
-        model,
-        instructions=system_prompt(call),
-        output_type=NativeOutput(
-            StructuredDict(wire_schema(call.schema), name=call.task),  # type: ignore[arg-type]
-            template=False,
-            strict=False,
-        ),
-        retries=AgentRetries(output=0),
-    )
-    with tagged(call):
-        result = agent.run_sync(call.user)
-    return result.output, result.response.model_name
+def demo_reply(request: ChatRequest) -> dict:
+    """The demo's reply object for one pipeline request."""
+    from tests.fixtures.llm_cases import EXTRACTION_REPLIES
+
+    task = request.task
+    if task == "insight_extraction":
+        if request.user_prompt not in EXTRACTION_REPLIES:
+            raise ConnectionError("the demo has no reply for this Report")
+        return EXTRACTION_REPLIES[request.user_prompt]
+    if task == "research_tilt":
+        tilts = []
+        for insight in request.payload["insights"]:
+            pp = _TILT_PP.get(insight["direction"], 0.0)
+            impact = "tailwind" if pp > 0 else "headwind" if pp < 0 else "neutral"
+            tilts.append({"insight_id": insight["id"], "impact": impact, "tilt_pp": pp})
+        return {"tilts": tilts}
+    if task in ("recommendation_narrative", "priority_narrative"):
+        return {"claims": _demo_claims(request.payload)}
+    raise ConnectionError(f"the demo has no reply for {task}")
+
+
+def _demo_claims(payload: dict) -> list[dict]:
+    """Up to two engine-figure claims, and one view on an Insight's subject that cites both its figure and passage."""
+    figures: dict[str, float] = payload["figures"]
+    plain = [name for name in figures if not any(c.isdigit() for c in name)]  # a figure name is no number in a claim
+    claims = [
+        {
+            "text": f"The {name.replace('_', ' ').replace('.', ' ')} is {figures[name]}.",
+            "asset": None,
+            "citations": [{"kind": "engine", "figure": name}],
+        }
+        for name in plain[:2]
+    ]
+    for insight in payload["insights"]:
+        figure = next((n for n in plain if n.endswith(f".{insight['subject']}")), None)
+        if figure:
+            claims.append(
+                {
+                    "text": f"Research is {insight['direction']} on {insight['subject']}.",
+                    "asset": insight["subject"],
+                    "citations": [
+                        {"kind": "engine", "figure": figure},
+                        {
+                            "kind": "report",
+                            "report_id": insight["report_id"],
+                            "page": insight["page"],
+                            "quote": insight["passage"],
+                        },
+                    ],
+                }
+            )
+            break
+    return claims
 
 
 def serve_chat[M: BaseChatModel](app: FastAPI, model: M) -> M:

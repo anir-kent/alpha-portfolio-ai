@@ -1,49 +1,46 @@
-# Sanity test pack: pydantic-ai LLM layer and the agentic Assistant
+# Sanity test pack: the LLM Graphs and the agentic Assistant
 
-A short browser pass over every change in `.scratch/pydantic-ai-agentic-assistant/` (ADR-0010). It is not exhaustive; the full list is `docs/manual-e2e-checklist.md`.
+A short browser pass over the LLM layer: the pipeline graph (`START → generate → END`) and the Assistant graph (`agent`, `tools`, `validate`, `budget_exhausted`; ADR-0010 and ADR-0011). It is not exhaustive; the full list is `docs/manual-e2e-checklist.md`.
 
-Recorded mode replays only Suggested Questions, so Parts A and B run offline. Part C (least privilege, self-correction, budget) needs live mode through OpenRouter.
+Every call is live, so the whole pack needs `APP_LLM_API_KEY` (OpenRouter by default). Model wording varies, so each row checks structure and guardrails, not exact text.
 
-## 0. Setup (recorded mode, fresh seed)
+## 0. Setup (fresh seed, live)
 
 ```bash
 source .venv/bin/activate
 rm -f data/app.db
 uv run python -m app.seeder
 uv run python -m app.research_seed
-APP_LLM_MODE=recorded APP_LLM_RECORDINGS_DIR=tests/fixtures/llm \
-  uv run uvicorn app.main:create_app --factory --port 8000      # terminal 1
+uv run uvicorn app.main:create_app --factory --port 8000       # terminal 1 (APP_LLM_API_KEY in .env)
 cd frontend && npm run dev                                       # terminal 2 -> http://localhost:5173
 ```
 
 - **Logins:** the username is the role name (`advisor`, `auditor`, `platform_owner`, `research_analyst`). The password is your `APP_SEED_USER_PASSWORD`.
 - **Browsers:** use one incognito window per role, or log out between roles.
-- **Fresh seed:** recordings only match a fresh seed and the **first** Analysis Run. If anything replays as "failed" unexpectedly, reset the seed before suspecting the code.
+- **Fresh seed:** start from a fresh seed so the planted scenarios are as documented. If an AI step shows "failed" unexpectedly, check the key and the endpoint before suspecting the code.
 
-## Part A: Stage 1, no regression in the pipeline steps (recorded)
+## Part A: the pipeline graph
 
 | # | Role | Steps | Expected |
 |---|---|---|---|
 | **1** | advisor | `/queue` → **Run analysis** | The modal runs Load inputs → Score Portfolios (25/25) → Record run → Priority narratives → Recommendation narratives, and every step ends **done**. The Queue shows scores and cited narratives, and C001-C004 rank above C005. |
-| **2** | advisor | Open the C003 Recommendation → AI contribution | Research Tilt and Rationale/memo each show a **recorded** pill, `ok`, and latency "n/a (replayed)". No prompt text is visible to the advisor. |
+| **2** | advisor | Open the C003 Recommendation → AI contribution | Research Tilt and Rationale/memo each show `ok` and a measured latency in ms. No prompt text is visible to the advisor. |
 | **3** | auditor | `/llm-exchanges` | The pipeline Exchanges from the run are listed as **single rows with no step marker**, one Exchange per step. |
-| **4** | research_analyst | `/research` → **Upload Report** → `tests/fixtures/house_view_demo.txt` | "Extracting Insights…", then the Report opens with **3 Insights awaiting review** (IT, Utilities, equity). There's no 500 and no hang. This checks that the async upload route no longer calls `run_sync` inside the event loop. |
-| **4b** | research_analyst | Upload any other new `.txt` | The upload succeeds, then shows "Extraction failed: No recorded response…" with **Upload again**. The failure is handled, not a crash. |
+| **4** | research_analyst | `/research` → **Upload Report** → `tests/fixtures/house_view_demo.txt` | "Extracting Insights…", then the Report opens with its Insights awaiting review (expect IT, Utilities and equity). There's no 500 and no hang. This checks that the async upload route no longer calls `run_sync` inside the event loop. |
+| **4b** | research_analyst | Restart the API without `APP_LLM_API_KEY`, then upload any new `.txt` | The upload succeeds, then shows "Extraction failed: …" with **Upload again**. The failure is handled, not a crash. |
 
-## Part B: Stage 2, agentic Assistant (recorded)
+## Part B: the Assistant graph
 
 | # | Role | Steps | Expected |
 |---|---|---|---|
-| **5** | advisor | On `/queue`, open the Assistant and click the Suggested Question **"What are the holdings and drift of Portfolio C001?"** | The Answer lists C001's holdings and drift, which are not on the Queue screen. The Claim chips cite `portfolio.C001.*` and are marked grounded. |
+| **5** | advisor | On `/queue`, open the Assistant and click the Suggested Question **"What are the holdings and drift of Portfolio C001?"** | The Answer lists C001's holdings and drift, which are not on the Queue screen (the `agent` → `tools` → `agent` edges). The Claim chips cite `portfolio.C001.*` and are marked grounded. |
 | **6** | advisor | Expand **"How I answered"** on that Answer | It starts collapsed. Open, it shows: model request 1 → `look_up_portfolio` (`portfolio_id: C001`) with a holdings/drift summary → model request 2, then **"Requests: 2 / 6"** and the input/output tokens. **Reload the page**: the summary is still there. |
 | **7** | advisor | On `/portfolios/C001`, click **"Which asset class drives this Portfolio's drift?"**, then expand "How I answered" | A **one-step** Trajectory: a single model request, no lookups, and usage shown. Single-step and multi-step Answers render the same way. |
-| **8** | advisor | Type **"Should I buy NVDA?"**, then type **"What colour is the sky?"** | First: the fixed Out-of-Scope refusal. Second: **"Only Suggested Questions work in replay mode."** with Retry. A replay miss must not return a guessed reply. |
+| **8** | advisor | Type **"Should I buy NVDA?"**, then type **"What colour is the sky?"** | First: the fixed Out-of-Scope refusal. Second: a short, in-scope-only reply or the same refusal; it never gives an unrelated answer. |
 | **9** | auditor | `/llm-exchanges` → find the test 5 Answer → open step 2 → `/audit` → **Verify chain** | The Answer shows as **one row, "▸ 2 steps"**, with summed tokens. It expands to step 1/2 and step 2/2. The step 2 drawer reads "Step 2 of 2 in this Trajectory", and Prompt → Request messages shows the step 1 **tool call and tool result verbatim**. Previous and Next work. The `assistant.answered` event's `exchanges` lists both Exchanges by id and hash, in order. Verify chain reports **OK**. |
 | **9b** | platform_owner | `/governance` | Capture health shows **Trajectories** and **Turns using lookups**. The Assistant panel shows `assistant_answer@v5` and "Model requests per Answer: 6". |
 
-## Part C: agentic guardrails (live mode, OpenRouter)
-
-Restart the API with `APP_LLM_MODE=live`. Recorded data no longer matters here.
+## Part C: agentic guardrails
 
 | # | Role | Steps | Expected |
 |---|---|---|---|
@@ -53,7 +50,7 @@ Restart the API with `APP_LLM_MODE=live`. Recorded data no longer matters here.
 
 ## Pass criteria
 
-- Tests **1-9b** must all pass. They are deterministic, so any failure is a bug, or a stale seed.
+- Tests **1-9b** must all pass. Their structure is deterministic, so a failure is a bug, a bad key or a stale seed.
 - Tests **10-12** depend on the model's behaviour, apart from these hard checks:
   - the "not permitted" lookup result
   - the budget message and `budget_exhausted`

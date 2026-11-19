@@ -174,7 +174,7 @@ function ContextDivider({ turn }: { turn: Turn }) {
   );
 }
 
-/** The current screen kind's three Suggested Questions; clicking one asks it. In replay mode only these are answered. */
+/** The current screen kind's three Suggested Questions; clicking one asks it like any other Question. */
 function SuggestedQuestions({
   kind,
   onAsk,

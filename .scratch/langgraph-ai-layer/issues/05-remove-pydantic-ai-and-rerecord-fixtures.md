@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 02, 04
 
 # Remove pydantic-ai, the direct HTTP client and recorded mode everywhere

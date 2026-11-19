@@ -1,10 +1,10 @@
 """The scripted demo walkthrough: the planted scenarios from the Queue to the Auditor's evidence, through the HTTP API.
 
-Run it with `uv run python -m scripts.walkthrough`. It builds a throwaway app on a fresh database in recorded mode,
-seeds it exactly as the replay tests do (synthetic Clients, research seeds, one Analysis Run by the advisor) and then
-plays each act as the role that owns it, printing every claim it checks with the evidence. It exits non-zero if any
-claim fails. Nothing touches the network or `data/app.db`: AI steps replay the committed recordings in
-`tests/fixtures/llm` (recorded with `uv run python -m tests.fixtures.regenerate`).
+Run it with `uv run python -m scripts.walkthrough`. It builds a throwaway app on a fresh database, seeds it
+(synthetic Clients, research seeds, one Analysis Run by the advisor) and then plays each act as the role that owns it,
+printing every claim it checks with the evidence. It exits non-zero if any claim fails. It runs live: the AI steps call
+the model `APP_LLM_API_KEY`, `APP_LLM_BASE_URL` and `APP_LLM_MODEL` name (in the environment or `.env`), so the Analysis
+Run takes minutes. It never touches `data/app.db`. `tests/test_walkthrough.py` plays the same acts on a fake chat model.
 
 The browser walkthrough of the same story is `docs/manual-e2e-guide.md`. The claims follow ADR-0001 (the engine owns
 every number), ADR-0002 (the hash-chained audit trail and its verification), ADR-0003 (real market data, synthetic
@@ -13,11 +13,11 @@ Clients) and ADR-0004 (every LLM call an Exchange anchored in the chain).
 Planted scenarios after the first Analysis Run (fixed by the seed and the committed market snapshot):
 - C001 heavy tech and C004 restricted XOM: Suitability breaches on what is held, drift in band, so no Recommendation.
 - C002 overweight energy: a Recommendation that stays in breach, so the Advisor's accept needs Compliance (and the
-  Investment Committee when its Research Tilt makes it high-impact, as the committed recordings do).
+  Investment Committee when it is also high-impact).
 - C003 cash drag: a clean but high-impact Recommendation, so the Advisor's accept needs the Investment Committee.
 - C005 clean: no breach, no drift, no Recommendation.
-The single-approver and Compliance-block cases are picked from the Queue by their approval route, since the recorded
-Research Tilts shape the Trade Lines of every other Portfolio.
+The single-approver and Compliance-block cases are picked from the Queue by their approval route, since the Research
+Tilts shape the Trade Lines of every other Portfolio.
 """
 
 import sys
@@ -29,12 +29,12 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pydantic_ai.models import Model
+from langchain_core.language_models import BaseChatModel
 
 from app.main import create_app
 from app.seeder import PLANTED as PLANTED_IDS
-from tests.fake_chat import RecordedPipeline
-from tests.fixtures.suggested_questions import login, replay_settings, seed_demo
+from app.settings import Settings
+from tests.fixtures.demo import demo_settings, login, seed_demo
 from tests.runs import run_and_wait
 
 PLANTED = tuple(PLANTED_IDS.values())
@@ -241,7 +241,7 @@ class Walkthrough:
 
     def first_with_route(self, route: list[str], exclude: tuple[str, ...]) -> tuple[str, dict]:
         """The highest-ranked Portfolio, outside `exclude`, whose open Recommendation needs exactly `route`. Chosen by
-        route, not by Client, because the recorded Research Tilts shape the Trade Lines and so the route."""
+        route, not by Client, because the Research Tilts shape the Trade Lines and so the route."""
         for item in self.get("advisor", "/api/queue")["items"]:
             cid = item["portfolio_id"]
             rec = None if cid in exclude else self.portfolio(cid)["recommendation"]
@@ -411,7 +411,7 @@ class Walkthrough:
         )
         g = self.get("auditor", "/api/governance")
         self.check(
-            "the model card names the model behind the recordings",
+            "the model card names the model and its endpoint",
             bool(g["model_card"]["model"]),
             f"{g['model_card']['model']} via {g['model_card']['llm_endpoint']}",
         )
@@ -458,20 +458,33 @@ class Walkthrough:
         )
 
 
-def walk(model: Model | None = None, run_timeout: float = 60) -> list[Check]:
-    """Plays the walkthrough on a fresh, seeded throwaway app. Its pipeline steps answer from the committed recordings
-    (`RecordedPipeline`, until the walkthrough runs live in ticket 05). `model` replaces the Assistant's replay Model
-    behind capture (for recording), which also needs a longer `run_timeout`."""
+LIVE_RUN_TIMEOUT = 1800.0  # seconds: a live Analysis Run makes ~40 LLM calls in turn
+
+
+def walk(chat_model: BaseChatModel | None = None, run_timeout: float = 60) -> list[Check]:
+    """Plays the walkthrough on a fresh, seeded throwaway app. Its LLM Graphs run on `chat_model` (a test's fake), or,
+    when omitted, live on the model the environment's settings name."""
     with tempfile.TemporaryDirectory() as tmp:
-        app = create_app(replay_settings(Path(tmp)), chat_model=RecordedPipeline())
-        if model is not None:
-            app.state.llm.model = model
+        settings = demo_settings(Path(tmp))
+        if chat_model is None:
+            env = Settings()
+            if not env.llm_api_key:
+                raise SystemExit("APP_LLM_API_KEY must be set: the walkthrough runs live")
+            settings = settings.model_copy(
+                update={
+                    "llm_api_key": env.llm_api_key,
+                    "llm_base_url": env.llm_base_url,
+                    "llm_model": env.llm_model,
+                    "llm_temperature": env.llm_temperature,
+                }
+            )
+        app = create_app(settings, chat_model=chat_model)
         seed_demo(app, run_timeout)
         return Walkthrough(app, run_timeout).run()
 
 
 def main() -> int:
-    checks = walk()
+    checks = walk(run_timeout=LIVE_RUN_TIMEOUT)
     act = None
     for c in checks:
         if c.act != act:

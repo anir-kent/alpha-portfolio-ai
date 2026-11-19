@@ -19,7 +19,7 @@ from app.assistant_agent import AssistantDeps, BudgetExhausted, PiiExposed, Traj
 from app.db import AssistantTurnRow, ClientRow, ConversationRow, SessionRow, User
 from app.exchanges import ModelLlm
 from app.grounding import CheckSubject, Claim, ClaimResult
-from app.llm import LlmError, LlmRequest, LlmResponse, RecordingMissing, exchange_ref
+from app.llm import LlmError, LlmRequest, LlmResponse, exchange_ref
 from app.market_data import MarketData
 from app.screen_context import ScreenIdentity
 from app.settings import Settings
@@ -31,15 +31,13 @@ OUT_OF_SCOPE_REFUSAL = (
     "discuss Clients or items you don't have access to."
 )
 FAILED_MESSAGE = "The Assistant couldn't answer, try again."
-REPLAY_MESSAGE = "Only Suggested Questions work in replay mode."
 BUDGET_MESSAGE = "That Question needed more lookups than one Answer may make. Try a narrower Question."
 
 Outcome = Literal["answered", "refused", "failed"]
-# Why a turn failed, on its `assistant.failed` Audit Event. The user sees FAILED_MESSAGE, except for a recorded-mode
-# miss (`replay_miss`), which says honestly that only Suggested Questions replay, and a Trajectory stopped at its
-# request budget (`budget_exhausted`), which suggests a narrower Question.
-FailureReason = Literal["llm_error", "unreadable_reply", "pii", "replay_miss", "budget_exhausted"]
-FAILURE_MESSAGES: dict[str, str] = {"replay_miss": REPLAY_MESSAGE, "budget_exhausted": BUDGET_MESSAGE}
+# Why a turn failed, on its `assistant.failed` Audit Event. The user sees FAILED_MESSAGE, except for a Trajectory stopped
+# at its request budget (`budget_exhausted`), which suggests a narrower Question.
+FailureReason = Literal["llm_error", "unreadable_reply", "pii", "budget_exhausted"]
+FAILURE_MESSAGES: dict[str, str] = {"budget_exhausted": BUDGET_MESSAGE}
 
 
 class LimitExceeded(Exception):
@@ -99,12 +97,6 @@ def _failure_message(reason: str | None) -> str:
     return FAILURE_MESSAGES.get(reason or "", FAILED_MESSAGE)
 
 
-def _replay_miss(error: LlmError) -> bool:
-    """Whether the call failed because replay had no recording for it. The capture wrapper re-raises the miss as a
-    plain LlmError caused by it."""
-    return isinstance(error, RecordingMissing) or isinstance(error.__cause__, RecordingMissing)
-
-
 class AssistantReply(BaseModel):
     """The reply schema of `assistant_answer@v3` (v3 declared the citation shapes; the fields are unchanged since v1)."""
 
@@ -130,7 +122,7 @@ class Turn(BaseModel):
     question: str
     outcome: Outcome
     answer: Answer | None  # None for a failed turn
-    message: str | None  # the safe message shown for a failed turn (the replay-mode message for a recorded miss)
+    message: str | None  # the safe message shown for a failed turn
     screen: ScreenIdentity
     context_label: str | None  # how the drawer names the context; None when nothing was readable
     exchange_id: int | None
@@ -275,8 +267,8 @@ def ask(
     if context is None:  # nothing readable: refuse without calling the model or saying whether the entity exists
         outcome = "refused"
     else:
-        # A Suggested Question goes without the Conversation so far: its prompt depends only on the screen and its data,
-        # so its recording replays whatever was asked before it (spec: Replay mode).
+        # A Suggested Question goes without the Conversation so far: it is a shortcut for one Question about the screen,
+        # whatever was asked before it.
         pairs = 0 if screen_context.is_suggested(screen.kind, question) else settings.assistant_history_pairs
         request = _prompt(context, _history(db, session, pairs), question)
         try:
@@ -289,8 +281,8 @@ def ask(
             outcome, reason = "failed", "pii"
         except BudgetExhausted:
             outcome, reason = "failed", "budget_exhausted"
-        except LlmError as e:  # includes a call capture could not record: it fails closed, no Answer reaches the user
-            outcome, reason = "failed", "replay_miss" if _replay_miss(e) else "llm_error"
+        except LlmError:  # includes a call capture could not record: it fails closed, no Answer reaches the user
+            outcome, reason = "failed", "llm_error"
         except ValidationError:
             outcome, reason = "failed", "unreadable_reply"
         except Exception:

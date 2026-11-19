@@ -5,7 +5,6 @@ import json
 import httpx
 import pytest
 
-from app.llm import RecordingMissing
 from tests.scripted import ScriptedModel, call, serve
 from tests.test_assistant import answer, ask, events, model  # noqa: F401 (imported fixtures)
 from tests.test_queue import seeded  # noqa: F401 (imported fixtures)
@@ -79,7 +78,6 @@ def test_forbidden_and_missing_lookups_return_the_same_safe_result(app, login, m
     "failure,reason",
     [
         (httpx.ConnectError("down"), "llm_error"),
-        (RecordingMissing("no recording"), "replay_miss"),
         ({"unexpected": "shape"}, "unreadable_reply"),
         ("not JSON", "llm_error"),
     ],
@@ -136,33 +134,6 @@ def test_lookup_keeps_screen_figures_and_other_portfolios_distinct(app, login, m
     serve(app, ScriptedModel(call("look_up_portfolio", portfolio_id="C002"), reply, reply))
     turn = ask(advisor, "Compare these Portfolios", portfolio_screen("C001")).json()
     assert [c["grounded"] for c in turn["answer"]["claims"]] == [True, True, False]
-
-
-@pytest.mark.skip(reason="recorded mode and the committed recordings are removed in ticket 05")
-def test_committed_suggested_lookup_replays_a_grounded_two_request_answer(app, login):
-    from tests.fixtures.suggested_questions import seed_demo
-
-    seed_demo(app)
-    advisor = login("advisor")
-    question = advisor.get("/api/assistant/suggested-questions", params={"kind": "queue"}).json()["questions"][2]
-    turn = ask(advisor, question, QUEUE).json()
-    assert turn["outcome"] == "answered", turn
-    assert turn["trajectory"]["requests_used"] == 2
-    assert turn["trajectory"]["steps"][1]["name"] == "look_up_portfolio"
-    assert turn["answer"]["claims"] and all(claim["grounded"] for claim in turn["answer"]["claims"])
-
-
-@pytest.mark.skip(reason="recorded mode and the committed recordings are removed in ticket 05")
-def test_committed_offline_restriction_answer_addresses_the_question(app, login):
-    from tests.fixtures.suggested_questions import seed_demo
-    from tests.test_assistant import portfolio_screen
-
-    seed_demo(app)
-    advisor = login("advisor")
-    question = advisor.get("/api/assistant/suggested-questions", params={"kind": "portfolio"}).json()["questions"][2]
-    turn = ask(advisor, question, portfolio_screen("C004")).json()
-    assert turn["outcome"] == "answered", turn
-    assert "Restrictions" in turn["answer"]["markdown"] and "XOM" in turn["answer"]["markdown"]
 
 
 def test_governance_capture_health_counts_trajectories_and_the_share_of_turns_that_used_lookups(app, login, model):
