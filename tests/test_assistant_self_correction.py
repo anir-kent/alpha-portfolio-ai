@@ -3,7 +3,6 @@ gets one retry; a draft exposing PII is rejected outright."""
 
 import json
 
-import pytest
 from sqlalchemy import select
 
 from app.db import ClientRow
@@ -12,8 +11,6 @@ from tests.scripted import ScriptedModel, serve
 from tests.test_assistant import answer, ask, events, model, portfolio_screen  # noqa: F401 (imported fixtures)
 from tests.test_portfolio import url
 from tests.test_queue import seeded  # noqa: F401 (imported fixtures)
-
-pytestmark = pytest.mark.skip(reason="remaining lookups, reflection, PII and budget move into the graph in ticket 04")
 
 PORTFOLIO_ID = PLANTED["restricted_breach"]
 RETRY_HINT = "Fix or remove"

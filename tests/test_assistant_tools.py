@@ -11,8 +11,6 @@ from tests.test_ai_recommendations import ai  # noqa: F401 (imported fixtures)
 from tests.test_assistant import answer, ask, model, pending, rec  # noqa: F401 (imported fixtures)
 from tests.test_queue import seeded  # noqa: F401 (imported fixtures)
 
-pytestmark = pytest.mark.skip(reason="remaining lookups, reflection, PII and budget move into the graph in ticket 04")
-
 NOT_PERMITTED = "not found or not permitted for your role"
 HEALTH: dict = {"kind": "health", "entity_ids": {}, "selected_item": None}
 APPROVALS: dict = {"kind": "approvals", "entity_ids": {}, "selected_item": None}
@@ -214,7 +212,7 @@ def run_tools(app, role, calls):
         user = db.scalars(select(User).where(User.username == role)).one()
         deps = AssistantDeps(user, db, app.state.market, app.state.settings, {}, [])
         with ThreadPoolExecutor(1) as worker:  # as the app runs it: in a worker thread, outside any event loop
-            worker.submit(run_assistant, script, request, deps, []).result()
+            worker.submit(run_assistant, script, request, deps, [], _no_review).result()
     return script.requests[1].tool_returns
 
 
@@ -295,3 +293,7 @@ def test_a_lookup_filter_the_screen_does_not_take_fails_the_turn_without_a_retry
     turn = ask(login("advisor"), "Look it up", QUEUE).json()
     assert turn["outcome"] == "failed"
     assert len(script.requests) == turn["trajectory"]["requests_used"] == 1
+
+
+def _no_review(deps, content):
+    return []

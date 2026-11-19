@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 03
 
 # All lookups, reflection edge, PII rejection and request budget
@@ -12,7 +12,7 @@ Blocked by: 03
 Check the APIs against current docs via Context7.
 
 ## Acceptance criteria
-- [ ] Behaviour matches ADR-0010 for permissions, grounding, PII and budget
-- [ ] Reflection, PII and budget paths are explicit edges in the graph
-- [ ] The async-tool guard is still enforced, if tools are async
-- [ ] Out-of-Scope Refusals are unchanged
+- [x] Behaviour matches ADR-0010 for permissions, grounding, PII and budget
+- [x] Reflection, PII and budget paths are explicit edges in the graph
+- [x] The async-tool guard is still enforced, if tools are async (tools are sync: nothing to guard, ADR-0011)
+- [x] Out-of-Scope Refusals are unchanged

@@ -111,9 +111,14 @@ Step = Any  # dict | str | AIMessage | BaseException | Callable[[ChatRequest], .
 
 def call(tool_name: str, **args: object) -> AIMessage:
     """A scripted reply that calls one tool."""
+    return calls({"name": tool_name, "args": args, "id": f"call-{tool_name}", "type": "tool_call"})
+
+
+def calls(*tool_calls: dict) -> AIMessage:
+    """A scripted reply that calls one or several tools at once."""
     return AIMessage(
         content="",
-        tool_calls=[{"name": tool_name, "args": args, "id": f"call-{tool_name}", "type": "tool_call"}],
+        tool_calls=list(tool_calls),
         response_metadata={"model_name": "scripted"},
         usage_metadata={"input_tokens": 11, "output_tokens": 7, "total_tokens": 18},
     )
@@ -123,7 +128,9 @@ def _message(step: object, model_name: str) -> AIMessage:
     if isinstance(step, BaseException):
         raise step
     if isinstance(step, AIMessage):
-        return step
+        return step.model_copy(update={"id": None})  # a repeated step is a new message, not an update of the old one
+    if isinstance(step, list):  # several tool calls in one reply
+        return calls(*(m.tool_calls[0] for m in step))
     if isinstance(step, dict):
         content = json.dumps(step)
     elif isinstance(step, str):

@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import audit, grounding, prompts, screen_context
-from app.assistant_agent import AssistantDeps, Trajectory, run_assistant
+from app.assistant_agent import AssistantDeps, BudgetExhausted, PiiExposed, Trajectory, run_assistant
 from app.db import AssistantTurnRow, ClientRow, ConversationRow, SessionRow, User
 from app.exchanges import ModelLlm
 from app.grounding import CheckSubject, Claim, ClaimResult
@@ -219,10 +219,6 @@ def _contains_pii(db: Session, reply: AssistantReply) -> bool:
     )
 
 
-class PiiExposed(Exception):
-    """A candidate reply named a Client. The run ends here: the draft is never coached, retried, stored or shown."""
-
-
 def _review(deps: AssistantDeps, content: dict) -> list[ClaimResult]:
     """The guardrails on one candidate reply: raises PiiExposed when it names a Client, else returns the Claims
     grounding rejects (a PII hit is never coached). Nothing is stored; `ask` checks and stores only the final Answer. A reply that does not
@@ -286,12 +282,13 @@ def ask(
         try:
             capture = llm.trajectory().exchange_capture(request)
             deps.exchanges = capture.stored
-            content = run_assistant(llm.chat_model, request, deps, [capture])
+            content = run_assistant(llm.chat_model, request, deps, [capture], _review)
             model = deps.exchanges[-1].model if deps.exchanges else None
-            _review(deps, content)  # PII only until the `validate` node takes the checks over (ticket 04)
             reply = AssistantReply.model_validate(content)
         except PiiExposed:  # a rejected Answer is never checked, stored or shown
             outcome, reason = "failed", "pii"
+        except BudgetExhausted:
+            outcome, reason = "failed", "budget_exhausted"
         except LlmError as e:  # includes a call capture could not record: it fails closed, no Answer reaches the user
             outcome, reason = "failed", "replay_miss" if _replay_miss(e) else "llm_error"
         except ValidationError:

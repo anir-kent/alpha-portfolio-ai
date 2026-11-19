@@ -13,7 +13,6 @@ from tests.test_queue import seeded  # noqa: F401 (imported fixtures)
 QUEUE = {"kind": "queue", "entity_ids": {"sort": "score"}, "selected_item": None}
 
 
-@pytest.mark.skip(reason="reflection, PII and budget move into the graph in ticket 04")
 def test_cross_screen_lookup_grounds_figures_and_preserves_the_trajectory(app, login, model):
     advisor = login("advisor")
     detail = advisor.get("/api/portfolios/C001").json()
@@ -96,9 +95,6 @@ def test_failure_on_the_second_request_anchors_both_exchanges(app, login, model,
     assert login("auditor").get("/api/audit/verify").json()["valid"]
 
 
-@pytest.mark.skip(
-    reason="tools are sync in the graph: no event loop to block, so the async-tool guard has nothing to guard (ADR-0011)"
-)
 def test_one_request_answer_has_a_summary_and_suggested_questions_drop_tool_history(app, login, model):
     script = serve(
         app, ScriptedModel(call("look_up_portfolio", portfolio_id="C001"), answer("Earlier answer"), answer())
@@ -200,7 +196,7 @@ def test_a_question_needing_one_lookup_is_a_two_request_agent_tools_agent_trajec
     assert "C001" in tool["result_summary"] and "holdings" in tool["result_summary"]
     assert trajectory["requests_used"] == 2
     assert trajectory["input_tokens"] > 0 and trajectory["output_tokens"] > 0
-    assert [tool.name for tool in script.requests[0].tools] == ["look_up_portfolio"]
+    assert "look_up_portfolio" in {tool.name for tool in script.requests[0].tools}
     assert '"portfolio_id":"C001"' in str(script.requests[1].tool_returns["look_up_portfolio"])
     auditor = login("auditor")
     exchanges = [e for e in events(app, "assistant.answered")[-1]["exchanges"]]
