@@ -23,3 +23,8 @@ frontend/dist/
 frontend/src/api/schema.d.ts
 
 specs/
+
+# Demo recording output and local editor settings: not part of the app (kept out of history)
+brag-output*/
+docs/demo_walkthrough_guide.md
+app/.vscode/
