@@ -151,9 +151,11 @@ def _result(
     return context.text
 
 
-def _next_lookup_prefix(deps: AssistantDeps) -> str:
-    """Filtered views differ in their totals, so each such lookup names its figures by its place in the turn."""
-    return f"lookup.{sum(step.kind == 'tool_call' for _, step in deps.steps) + 1}."
+def _lookup_prefix(runtime: ToolRuntime[AssistantContext]) -> str:
+    """Filtered views differ in their totals, so each such lookup names its figures by its place in the turn: the
+    position of its call among the turn's tool calls, which is fixed before the calls of one reply run in parallel."""
+    ids = [c["id"] for m in runtime.state["messages"] if isinstance(m, AIMessage) for c in m.tool_calls]
+    return f"lookup.{ids.index(runtime.tool_call_id) + 1}."
 
 
 def _counted(screen: str, total: int, shown: int, noun: str) -> str:
@@ -172,7 +174,7 @@ def look_up_queue(runtime: ToolRuntime[AssistantContext], filters: QueueFilters 
 
     with _TOOLS_TAKE_TURNS:
         deps, arguments = runtime.context.deps, _arguments(filters)
-        context = _screen(deps, "queue", arguments, _next_lookup_prefix(deps))
+        context = _screen(deps, "queue", arguments, _lookup_prefix(runtime))
         return _result(deps, "look_up_queue", arguments, context, summarise)
 
 
@@ -234,7 +236,7 @@ def look_up_audit(runtime: ToolRuntime[AssistantContext], filters: AuditFilters 
 
     with _TOOLS_TAKE_TURNS:
         deps, arguments = runtime.context.deps, _arguments(filters)
-        context = _screen(deps, "audit", arguments, _next_lookup_prefix(deps))
+        context = _screen(deps, "audit", arguments, _lookup_prefix(runtime))
         return _result(deps, "look_up_audit", arguments, context, summarise)
 
 
@@ -321,7 +323,7 @@ def validate(state: AssistantState, runtime: Runtime[AssistantContext]) -> dict:
         failing = context.review(context.deps, content)
     except PiiExposed:
         return {"ending": "pii"}
-    if failing and not state.get("retried"):
+    if failing and not state.get("retried") and not budget_spent(state, context):  # no request left: keep the draft
         context.deps.add_step(TrajectoryStep(kind="self_correction", issue_count=sum(len(r.issues) for r in failing)))
         return {"messages": [HumanMessage(retry_message(failing))], "retried": True}
     return {}
@@ -335,9 +337,13 @@ def route_validate(state: AssistantState, runtime: Runtime[AssistantContext]) ->
     return END
 
 
+def budget_spent(state: AssistantState, context: AssistantContext) -> bool:
+    return state.get("model_calls", 0) >= context.deps.settings.assistant_request_limit
+
+
 def route_to_agent(state: AssistantState, runtime: Runtime[AssistantContext]) -> str:
     """The request budget: checked in routing before each `agent` run."""
-    if state.get("model_calls", 0) >= runtime.context.deps.settings.assistant_request_limit:
+    if budget_spent(state, runtime.context):
         return BUDGET_EXHAUSTED
     return AGENT
 

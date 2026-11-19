@@ -67,3 +67,16 @@ def test_the_model_card_shows_the_request_limit(login, settings):
     settings.assistant_request_limit = 4
     card = login("auditor").get("/api/governance").json()["model_card"]
     assert card["assistant"]["limits"]["request_limit"] == 4
+
+
+def test_a_draft_still_ungrounded_when_no_request_is_left_is_kept_flagged_not_failed(app, login, model, settings):
+    settings.assistant_request_limit = 2
+    reply = answer("Total value")
+    reply["claims"] = [
+        {"text": "Total value is 987654321.", "citations": [{"kind": "engine", "figure": "portfolio.C001.total_value"}]}
+    ]
+    serve(app, ScriptedModel(call("look_up_portfolio", portfolio_id="C001"), reply))
+    turn = ask(login("advisor"), "Look up Portfolio C001", QUEUE).json()
+    assert turn["outcome"] == "answered", turn
+    assert [c["grounded"] for c in turn["answer"]["claims"]] == [False]
+    assert "self_correction" not in [s["kind"] for s in turn["trajectory"]["steps"]]
