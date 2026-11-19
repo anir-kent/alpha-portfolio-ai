@@ -11,18 +11,16 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, ValidationError, field_validator
-from pydantic_ai import UsageLimitExceeded
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import audit, grounding, prompts, screen_context
-from app.assistant_agent import AssistantDeps, PiiExposed, Trajectory, run_agent
+from app.assistant_agent import AssistantDeps, Trajectory, run_assistant
 from app.db import AssistantTurnRow, ClientRow, ConversationRow, SessionRow, User
 from app.exchanges import ModelLlm
 from app.grounding import CheckSubject, Claim, ClaimResult
 from app.llm import LlmError, LlmRequest, LlmResponse, RecordingMissing, exchange_ref
 from app.market_data import MarketData
-from app.pydantic_llm import tagged
 from app.screen_context import ScreenIdentity
 from app.settings import Settings
 from app.timeutil import as_utc
@@ -221,6 +219,10 @@ def _contains_pii(db: Session, reply: AssistantReply) -> bool:
     )
 
 
+class PiiExposed(Exception):
+    """A candidate reply named a Client. The run ends here: the draft is never coached, retried, stored or shown."""
+
+
 def _review(deps: AssistantDeps, content: dict) -> list[ClaimResult]:
     """The guardrails on one candidate reply: raises PiiExposed when it names a Client, else returns the Claims
     grounding rejects (a PII hit is never coached). Nothing is stored; `ask` checks and stores only the final Answer. A reply that does not
@@ -282,15 +284,14 @@ def ask(
         pairs = 0 if screen_context.is_suggested(screen.kind, question) else settings.assistant_history_pairs
         request = _prompt(context, _history(db, session, pairs), question)
         try:
-            captured = llm.trajectory().capturing_model(request, deps.exchanges)
-            with tagged(request):
-                content = run_agent(captured, request, deps, _review)
+            capture = llm.trajectory().exchange_capture(request)
+            deps.exchanges = capture.stored
+            content = run_assistant(llm.chat_model, request, deps, [capture])
             model = deps.exchanges[-1].model if deps.exchanges else None
+            _review(deps, content)  # PII only until the `validate` node takes the checks over (ticket 04)
             reply = AssistantReply.model_validate(content)
         except PiiExposed:  # a rejected Answer is never checked, stored or shown
             outcome, reason = "failed", "pii"
-        except UsageLimitExceeded:  # the request beyond the budget was never sent; every one before it is anchored
-            outcome, reason = "failed", "budget_exhausted"
         except LlmError as e:  # includes a call capture could not record: it fails closed, no Answer reaches the user
             outcome, reason = "failed", "replay_miss" if _replay_miss(e) else "llm_error"
         except ValidationError:

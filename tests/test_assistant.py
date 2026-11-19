@@ -36,10 +36,11 @@ class AnsweringModel(ScriptedModel):
     """Answers every request with `reply`, or fails as an unreachable provider does with `error` when it is set.
     `requests` keeps every request received."""
 
+    reply: dict = {}
+    error: str | None = None
+
     def __init__(self, reply: dict) -> None:
-        self.reply = reply
-        self.error: str | None = None
-        super().__init__(then=self._answer_with, model_name="fake-model-1")
+        super().__init__(then=self._answer_with, model_name="fake-model-1", reply=reply)
 
     def _answer_with(self, request: ScriptedRequest) -> dict | httpx.ConnectError:
         return self.reply if self.error is None else httpx.ConnectError(self.error)
@@ -610,7 +611,7 @@ unwritable_store = sessionmaker(create_engine("sqlite:////nonexistent-dir/exchan
 
 def test_an_exchange_that_cannot_be_captured_fails_closed_and_no_answer_reaches_the_user(app, login, model):
     model.reply = answer("A perfectly good Answer.")
-    app.state.llm = ModelLlm(model, unwritable_store, mode="recorded")
+    app.state.llm = ModelLlm(app.state.llm.model, unwritable_store, mode="recorded", chat_model=model)
     advisor = login("advisor")
     r = ask(advisor, "Why?", portfolio_screen("C001"))
     turn = r.json()

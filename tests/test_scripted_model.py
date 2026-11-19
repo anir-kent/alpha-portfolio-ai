@@ -6,7 +6,7 @@ is the fake chat model (tests/test_fake_chat.py, ADR-0011)."""
 import pytest
 from pydantic_ai import Agent
 
-from tests.scripted import ScriptedModel, call
+from tests.pydantic_scripted import ScriptedModel, call
 
 
 def lookup_agent(model: ScriptedModel) -> Agent:

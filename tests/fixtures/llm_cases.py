@@ -7,7 +7,7 @@ from pathlib import Path
 from app.pydantic_llm import RecordingModel
 from app.reports import extract_pages, extraction_request
 from tests.fake_chat import pydantic_single_call
-from tests.scripted import ScriptedModel
+from tests.pydantic_scripted import ScriptedModel
 
 HERE = Path(__file__).parent
 MODEL = "claude-sonnet-5-5"

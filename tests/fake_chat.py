@@ -34,7 +34,7 @@ from fastapi import FastAPI
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
 from langchain_openrouter import ChatOpenRouter
@@ -52,6 +52,27 @@ class ChatRequest:
     messages: list[BaseMessage]
     params: dict = field(default_factory=dict)
     metadata: dict = field(default_factory=dict)
+    tools: list = field(default_factory=list)  # the tools bound to the model for this request
+
+    @property
+    def instructions(self) -> str:
+        """The system text without its reply schema: what the Assistant's agent was instructed with."""
+        return self.system.partition(REPLY_SCHEMA_HEADING)[0]
+
+    @property
+    def schema(self) -> dict:
+        """The reply schema the system text carries."""
+        return json.loads(self.system.partition(REPLY_SCHEMA_HEADING)[2])
+
+    @property
+    def prompts(self) -> list[str]:
+        """The text of every user message sent, oldest first."""
+        return [str(m.content) for m in self.messages if isinstance(m, HumanMessage)]
+
+    @property
+    def tool_returns(self) -> dict[str, object]:
+        """Each tool's latest result in the messages sent, by tool name."""
+        return {m.name: m.content for m in self.messages if isinstance(m, ToolMessage) and m.name}
 
     @property
     def task(self) -> str | None:
@@ -88,6 +109,16 @@ class ChatRequest:
 Step = Any  # dict | str | AIMessage | BaseException | Callable[[ChatRequest], ...]
 
 
+def call(tool_name: str, **args: object) -> AIMessage:
+    """A scripted reply that calls one tool."""
+    return AIMessage(
+        content="",
+        tool_calls=[{"name": tool_name, "args": args, "id": f"call-{tool_name}", "type": "tool_call"}],
+        response_metadata={"model_name": "scripted"},
+        usage_metadata={"input_tokens": 11, "output_tokens": 7, "total_tokens": 18},
+    )
+
+
 def _message(step: object, model_name: str) -> AIMessage:
     if isinstance(step, BaseException):
         raise step
@@ -119,7 +150,10 @@ class FakeChatModel(GenericFakeChatModel):
     def __init__(self, *steps: Step, **values: Any) -> None:
         super().__init__(script=list(steps), **values)
 
+    tools: list = Field(default_factory=list)
+
     def bind_tools(self, tools: Sequence[Any], **kwargs: Any) -> "FakeChatModel":  # the documented FakeToolCallingModel
+        self.tools = list(tools)
         return self
 
     def with_structured_output(self, schema: dict | type, *, include_raw: bool = False, **kwargs: Any) -> Runnable:
@@ -137,7 +171,9 @@ class FakeChatModel(GenericFakeChatModel):
         self, messages: list[BaseMessage], run_manager: CallbackManagerForLLMRun | None, params: dict
     ) -> ChatRequest:
         """The request as received, kept in `requests`."""
-        request = ChatRequest(list(messages), params, dict(run_manager.metadata) if run_manager else {})
+        request = ChatRequest(
+            list(messages), params, dict(run_manager.metadata) if run_manager else {}, list(self.tools)
+        )
         self.requests.append(request)
         return request
 

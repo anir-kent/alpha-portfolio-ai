@@ -435,6 +435,11 @@ class ModelLlm(_Capture):
         """Capture every model request of an Agent run in this view's Trajectory."""
         return CapturingModel(self.model, self, request, stored, capture_model_boundary=True)
 
+    def exchange_capture(self, request: LlmRequest) -> ExchangeCapture:
+        """The callback that stores one Exchange per model call of an LLM Graph run, in this view's Trajectory."""
+        chat_model = self.chat_model
+        return ExchangeCapture(self, request, endpoint_host=chat_endpoint_host(chat_model), secret=self._secret)
+
     def complete(self, request: LlmRequest) -> LlmResponse:
         try:
             chat_model = self.chat_model

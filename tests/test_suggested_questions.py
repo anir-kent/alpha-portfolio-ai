@@ -121,6 +121,7 @@ def demo(app):
     return app
 
 
+@pytest.mark.skip(reason="recorded mode and the committed recordings are removed in ticket 05")
 def test_in_replay_mode_every_suggested_question_on_every_demo_screen_replays_its_answer(app, demo):
     for role in ROLES:
         c = demo_login(app, role)  # one Conversation per role: replays do not depend on what was asked before
@@ -136,6 +137,7 @@ def test_in_replay_mode_every_suggested_question_on_every_demo_screen_replays_it
     assert events(app, "assistant.answered")
 
 
+@pytest.mark.skip(reason="recorded mode and the committed recordings are removed in ticket 05")
 def test_a_replayed_answer_offers_its_follow_up_questions_and_they_replay_only_if_suggested(app, demo):
     advisor = demo_login(app, "advisor")
     screen = {"kind": "portfolio", "entity_ids": {"portfolio_id": "C004"}, "selected_item": None}

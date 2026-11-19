@@ -17,7 +17,7 @@ from app.llm import LlmRequest, RecordingMissing
 from app.pydantic_llm import RecordingModel, ReplayModel, build_live_model, tagged
 from tests.chat_completions import completion
 from tests.fake_chat import pydantic_single_call
-from tests.scripted import ScriptedModel, call
+from tests.pydantic_scripted import ScriptedModel, call
 
 REQUEST = LlmRequest(
     task="insight_extraction",

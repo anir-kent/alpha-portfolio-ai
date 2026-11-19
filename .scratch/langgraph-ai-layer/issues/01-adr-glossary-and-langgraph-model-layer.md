@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: none
 
 # ADR-0011, glossary, provider factory, callback capture, and all four pipeline steps as one LangGraph workflow

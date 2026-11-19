@@ -1,25 +1,39 @@
-"""Read-only Assistant Agent and its safe, persisted per-turn Trajectory (ADR-0010)."""
+"""The Assistant's LLM Graph and its safe, persisted per-turn Trajectory (ADR-0011).
+
+The graph is LangGraph's documented tool-calling agent (Workflows and agents) as an explicit `StateGraph` over
+`MessagesState`: an `agent` Graph Node (`model.bind_tools(tools)`), a prebuilt `ToolNode` named `tools`, a conditional
+edge `agent -> tools | validate` (the prebuilt `tools_condition`) and an edge `tools -> agent`. `validate` ends the turn;
+the grounding and PII checks, the reflection edge and the request budget join it in ticket 04.
+"""
 
 import json
-from collections.abc import Callable
+import threading
 from dataclasses import dataclass, field
-from typing import Literal, cast
+from typing import Literal
 
+from langchain.tools import ToolRuntime, tool
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.runtime import Runtime
 from pydantic import BaseModel
-from pydantic_ai import Agent, ModelRetry, NativeOutput, RunContext, StructuredDict, UsageLimits
-from pydantic_ai.models import Model
 from sqlalchemy.orm import Session
 
 from app import screen_context
 from app.db import LlmExchangeRow, User
-from app.grounding import ClaimResult
-from app.llm import LlmRequest, wire_schema
+from app.llm import LlmError, LlmRequest, parse_json_reply
+from app.llm_graph import system_prompt
 from app.market_data import MarketData
-from app.routers.analysis import QueueFilters
-from app.screen_context import AuditFilters, ScreenContext, ScreenIdentity, ScreenKind
+from app.screen_context import ScreenContext, ScreenIdentity, ScreenKind
 from app.settings import Settings
 
 NOT_PERMITTED = "not found or not permitted for your role"
+
+AGENT = "agent"
+TOOLS = "tools"
+VALIDATE = "validate"
 
 
 class TrajectoryStep(BaseModel):
@@ -49,7 +63,7 @@ class AssistantDeps:
     market: MarketData
     settings: Settings
     figures: dict[str, float]
-    exchanges: list[LlmExchangeRow]
+    exchanges: list[LlmExchangeRow]  # the turn's stored Exchanges, appended to by the capture callback
     steps: list[tuple[int, TrajectoryStep]] = field(default_factory=list)  # each after the model request it followed
 
     def add_step(self, step: TrajectoryStep) -> None:
@@ -74,15 +88,13 @@ class AssistantDeps:
         )
 
 
-def _record(deps: AssistantDeps, name: str, arguments: dict[str, str], summary: str) -> None:
-    """A tool call's step, placed after the model request that made it."""
-    deps.add_step(TrajectoryStep(kind="tool_call", name=name, arguments=arguments, result_summary=summary))
+@dataclass(frozen=True)
+class AssistantContext:
+    """Runtime context of one turn's graph run: the chat model and the turn's state the tools read and extend."""
 
-
-def _arguments(filters: BaseModel | None) -> dict[str, str]:
-    """The filters the model gave, as the screen's query string would carry them."""
-    given = filters.model_dump(mode="json", exclude_unset=True, exclude_none=True) if filters else {}
-    return {key: json.dumps(value) if isinstance(value, bool) else str(value) for key, value in given.items()}
+    model: BaseChatModel
+    deps: AssistantDeps
+    request: LlmRequest
 
 
 def _screen(
@@ -93,187 +105,88 @@ def _screen(
     return screen_context.build(deps.db, deps.market, deps.user, screen, deps.settings, figure_prefix=prefix)
 
 
-def _result(
-    deps: AssistantDeps,
-    name: str,
-    arguments: dict[str, str],
-    context: ScreenContext | None,
-    summarise: Callable[[dict], str],
-) -> str:
-    """What the tool returns: the serialised, fenced context, whose figures join the turn's citable set. A screen the
-    user may not open and an entity that does not exist give the same result."""
-    if context is None:
-        _record(deps, name, arguments, NOT_PERMITTED)
+# ToolNode runs the tool calls of one model reply on worker threads. They share the turn's Session and state, so the
+# tools take turns, as ADR-0010's sequential tools did.
+_TOOLS_TAKE_TURNS = threading.Lock()
+
+
+@tool
+def look_up_portfolio(portfolio_id: str, runtime: ToolRuntime[AssistantContext]) -> str:
+    """Look up a Portfolio's permission-checked, PII-free Screen Context and citable engine figures."""
+    with _TOOLS_TAKE_TURNS:
+        return _look_up_portfolio(runtime.context.deps, portfolio_id)
+
+
+def _look_up_portfolio(deps: AssistantDeps, portfolio_id: str) -> str:
+    arguments = {"portfolio_id": portfolio_id}
+    context = _screen(deps, "portfolio", arguments, f"portfolio.{portfolio_id}.")
+    if context is None:  # a screen the user may not open and an entity that does not exist give the same result
+        deps.add_step(
+            TrajectoryStep(
+                kind="tool_call", name="look_up_portfolio", arguments=arguments, result_summary=NOT_PERMITTED
+            )
+        )
         return NOT_PERMITTED
     deps.figures.update(context.figures)
     data, _ = json.JSONDecoder().raw_decode(context.text)  # fenced passages may follow the JSON
-    _record(deps, name, arguments, summarise(data))
+    summary = f"Portfolio {portfolio_id}: {len(data['holdings'])} holdings"
+    if (drift := data["portfolio_drift_pp"]) is not None:
+        summary += f", drift {drift} pp"
+    deps.add_step(
+        TrajectoryStep(kind="tool_call", name="look_up_portfolio", arguments=arguments, result_summary=summary)
+    )
     return context.text
 
 
-def _next_lookup_prefix(deps: AssistantDeps) -> str:
-    """Filtered views differ in their totals, so each such lookup names its figures by its place in the turn."""
-    return f"lookup.{sum(step.kind == 'tool_call' for _, step in deps.steps) + 1}."
+ASSISTANT_TOOLS = (look_up_portfolio,)
 
 
-def _counted(screen: str, total: int, shown: int, noun: str) -> str:
-    return f"{screen}: {total} {noun}" + (f", showing {shown}" if shown < total else "")
+def agent(state: MessagesState, runtime: Runtime[AssistantContext]) -> dict:
+    """One model request: the model decides to call a tool or to reply."""
+    context = runtime.context
+    model = context.model.bind_tools(list(ASSISTANT_TOOLS))
+    return {"messages": [model.invoke([SystemMessage(system_prompt(context.request)), *state["messages"]])]}
 
 
-async def look_up_queue(ctx: RunContext[AssistantDeps], filters: QueueFilters | None = None) -> str:
-    """Look up the prioritised Queue as the Queue screen shows it, optionally filtered and sorted like that screen.
-    Figures are named `lookup.<n>.queue...`, where n is this lookup's place in the turn."""
-
-    def summarise(data: dict) -> str:
-        if not isinstance(data["rows"], list):
-            return "queue: no completed Analysis Run"
-        return _counted("queue", data["total_rows"], len(data["rows"]), "rows")
-
-    deps, arguments = ctx.deps, _arguments(filters)
-    context = _screen(deps, "queue", arguments, _next_lookup_prefix(deps))
-    return _result(deps, "look_up_queue", arguments, context, summarise)
+def validate(state: MessagesState) -> dict:
+    """The turn's candidate reply is final. Ticket 04 adds the grounding and PII checks here."""
+    return {}
 
 
-async def look_up_portfolio(ctx: RunContext[AssistantDeps], portfolio_id: str) -> str:
-    """Look up a Portfolio's permission-checked, PII-free Screen Context and citable engine figures."""
-
-    def summarise(data: dict) -> str:
-        summary = f"Portfolio {portfolio_id}: {len(data['holdings'])} holdings"
-        drift = data["portfolio_drift_pp"]
-        return summary + (f", drift {drift} pp" if drift is not None else "")
-
-    deps, arguments = ctx.deps, {"portfolio_id": portfolio_id}
-    context = _screen(deps, "portfolio", arguments, f"portfolio.{portfolio_id}.")
-    return _result(deps, "look_up_portfolio", arguments, context, summarise)
-
-
-async def look_up_recommendation(ctx: RunContext[AssistantDeps], recommendation_id: str) -> str:
-    """Look up one Recommendation's rationale as its screen shows it: Trade Lines, post-trade Suitability, the
-    Research Tilt with its Report passages (for roles that may read Insights) and grounded Claims. Figures are named
-    `portfolio.<Portfolio>.recommendation.<Recommendation>...`."""
-
-    def summarise(data: dict) -> str:
-        lines = len(data["trade_lines"])
-        breaches = sum(rule["status"] == "breach" for rule in data["post_trade_suitability"]["rules"])
-        return (
-            f"recommendation {recommendation_id}: {lines} trade lines, {breaches} breach{'' if breaches == 1 else 'es'}"
-        )
-
-    deps = ctx.deps
-    prefix = screen_context.recommendation_figure_prefix(deps.db, recommendation_id)
-    arguments = {"recommendation_id": recommendation_id}
-    return _result(
-        deps, "look_up_recommendation", arguments, _screen(deps, "recommendation", arguments, prefix), summarise
-    )
-
-
-async def look_up_approvals(ctx: RunContext[AssistantDeps]) -> str:
-    """Look up the items waiting on the steps the user decides, as the Approvals panel lists them."""
-
-    def summarise(data: dict) -> str:
-        return _counted("approvals", data["total_items"], len(data["items"]), "items")
-
-    return _result(ctx.deps, "look_up_approvals", {}, _screen(ctx.deps, "approvals", {}), summarise)
-
-
-async def look_up_audit(ctx: RunContext[AssistantDeps], filters: AuditFilters | None = None) -> str:
-    """Look up Audit Events, newest first, searched like the Audit screen. Figures are named `lookup.<n>.audit...`,
-    where n is this lookup's place in the turn."""
-
-    def summarise(data: dict) -> str:
-        return _counted("audit", data["total_events"], len(data["events"]), "events")
-
-    deps, arguments = ctx.deps, _arguments(filters)
-    context = _screen(deps, "audit", arguments, _next_lookup_prefix(deps))
-    return _result(deps, "look_up_audit", arguments, context, summarise)
-
-
-async def look_up_governance(ctx: RunContext[AssistantDeps]) -> str:
-    """Look up the governance model card: models, prompt versions, controls and the Assistant's limits."""
-    context = _screen(ctx.deps, "governance", {})
-    return _result(ctx.deps, "look_up_governance", {}, context, lambda data: "governance: model card")
-
-
-async def list_approved_insights(ctx: RunContext[AssistantDeps], sector: str | None = None) -> str:
-    """List research Insights whose Insight Review approved them, optionally for one sector (e.g. "Energy"), each
-    with its Report id, page and passage. Quote a passage verbatim, with its Report id and page, to cite it."""
-
-    def summarise(data: dict) -> str:
-        return f"insights{f' ({sector})' if sector is not None else ''}: {data['total_insights']} approved"
-
-    deps = ctx.deps
-    arguments = {"sector": sector} if sector is not None else {}
-    context = screen_context.approved_insights(deps.db, deps.user, sector)
-    return _result(deps, "list_approved_insights", arguments, context, summarise)
-
-
-ASSISTANT_TOOLS = (
-    look_up_queue,
-    look_up_portfolio,
-    look_up_recommendation,
-    look_up_approvals,
-    look_up_audit,
-    look_up_governance,
-    list_approved_insights,
-)
-
-
-class PiiExposed(Exception):
-    """A candidate reply named a Client. The run ends here: the draft is never coached, retried, stored or shown."""
-
-
-# Checks one candidate reply against the guardrails: raises PiiExposed, else returns its ungrounded Claims.
-Review = Callable[[AssistantDeps, dict], list[ClaimResult]]
-
-
-def _retry_message(failing: list[ClaimResult]) -> str:
-    """What the model is told about a rejected draft: each failing Claim and its issues."""
-    lines = [f'- Claim {r.index} "{r.text}": ' + "; ".join(f"{i.code}: {i.message}" for i in r.issues) for r in failing]
+def _build_graph():
+    # handle_tool_errors=False: a bad tool call fails the turn, as before (no tool retries).
     return (
-        "These Claims are not grounded. Fix or remove each one: cite only figures named in the Screen Context or a "
-        "lookup, with the number as the figure shows it, and quote Reports verbatim.\n" + "\n".join(lines)
+        StateGraph(MessagesState, context_schema=AssistantContext)
+        .add_node(AGENT, agent)
+        .add_node(TOOLS, ToolNode(list(ASSISTANT_TOOLS), handle_tool_errors=False))
+        .add_node(VALIDATE, validate)
+        .add_edge(START, AGENT)
+        .add_conditional_edges(AGENT, tools_condition, {"tools": TOOLS, END: VALIDATE})
+        .add_edge(TOOLS, AGENT)
+        .add_edge(VALIDATE, END)
+        .compile(name="assistant")
     )
 
 
-def build_agent(model: Model, request: LlmRequest, review: Review) -> Agent[AssistantDeps, dict]:
-    """All registered tools run on the caller's event loop, retaining its database session and capture binding. A run's
-    output has passed `review`, or is the second draft and keeps its ungrounded Claims for the caller to flag; a draft
-    exposing PII ends the run with PiiExposed."""
-    agent = Agent(
-        model,
-        deps_type=AssistantDeps,
-        instructions=request.system + "\n\nJSON schema of the reply:\n" + json.dumps(request.schema),
-        output_type=NativeOutput(
-            StructuredDict(cast(dict, wire_schema(request.schema)), name=request.task),
-            template=False,
-            strict=False,
-        ),
-        retries={"tools": 0, "output": 1},
+ASSISTANT = _build_graph()
+
+
+def run_assistant(
+    model: BaseChatModel, request: LlmRequest, deps: AssistantDeps, callbacks: list[BaseCallbackHandler]
+) -> dict:
+    """The reply object the Assistant graph ends the turn with. `callbacks` see every model call, and each call's
+    Graph Node."""
+    state = ASSISTANT.invoke(
+        {"messages": [HumanMessage(request.user)]},
+        {
+            "callbacks": callbacks,
+            "metadata": {"llm_task": request.task, "llm_prompt_version": request.prompt_version},
+            # Interim bound until the request budget is a counter in graph state (ticket 04): agent and tools alternate.
+            "recursion_limit": 2 * deps.settings.assistant_request_limit + 1,
+        },
+        context=AssistantContext(model=model, deps=deps, request=request),
     )
-    for tool in ASSISTANT_TOOLS:
-        agent.tool(retries=0, sequential=True)(tool)
-
-    @agent.output_validator
-    async def self_correct(ctx: RunContext[AssistantDeps], reply: dict) -> dict:
-        """`reply` is accepted, or the model is sent its failing Claims once and the step is in the summary."""
-        failing = review(ctx.deps, reply)
-        if failing and not ctx.last_attempt:
-            issues = sum(len(r.issues) for r in failing)
-            ctx.deps.add_step(TrajectoryStep(kind="self_correction", issue_count=issues))
-            raise ModelRetry(_retry_message(failing))
-        return reply
-
-    return agent
-
-
-def run_agent(model: Model, request: LlmRequest, deps: AssistantDeps, review: Review) -> dict:
-    """Raises UsageLimitExceeded rather than send a request beyond the turn's budget. Token limits are off."""
-    return (
-        build_agent(model, request, review)
-        .run_sync(
-            request.user,
-            deps=deps,
-            usage_limits=UsageLimits(request_limit=deps.settings.assistant_request_limit),
-        )
-        .output
-    )
+    final = state["messages"][-1]
+    if not isinstance(final, AIMessage):
+        raise LlmError("the Assistant graph did not end on a model reply")
+    return parse_json_reply(str(final.text))

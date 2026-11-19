@@ -47,3 +47,13 @@ Each Exchange records its **Graph Node** in a new `graph_node` column (hand-writ
 ## Consequences
 
 `langgraph`, `langchain`, `langchain-openrouter` and `langchain-openai` are dependencies. `pydantic-ai-slim` stays until the Assistant moves. A provider is now a config change behind `get_chat_model`, with OpenRouter the default. Exchange `usage` now uses LangChain's keys (`input_tokens`, `output_tokens`, `total_tokens`), which the UI and the Assistant's trajectory summary already read alongside the older `prompt_tokens` and `completion_tokens`. The API exposes each Exchange's `graph_node`. A fresh app in the default `recorded` mode without an API key now runs its Analysis Runs with failed narratives and rule-based Recommendations, where it used to replay them. The demo needs a key, or the Assistant-only replay until ticket 05.
+
+## The Assistant graph (ticket 03)
+
+The Assistant now runs as an LLM Graph, LangGraph's documented tool-calling agent as an explicit `StateGraph(MessagesState)`: an `agent` Graph Node (`model.bind_tools(tools)`), a prebuilt `ToolNode` named `tools`, the prebuilt `tools_condition` edge `agent -> tools | validate`, an edge `tools -> agent`, and a `validate` node that ends the turn. The chat model and the turn's state (`AssistantDeps`) are the graph's runtime context, and tools read the state through `ToolRuntime`. Each model call is an Exchange written by the same `ExchangeCapture` callback as the pipeline's, carrying `graph_node` `agent`. The Trajectory summary is derived from the Exchanges as before. Deviations and interim states, all closed in tickets 04 and 05:
+
+- **Tools are sync.** The graph runs with `invoke` on the router's worker thread, so there is no event loop to block and ADR-0010's async-tool guard has nothing to guard. The `ToolNode` has `handle_tool_errors=False`: a malformed tool call fails the turn, with no tool retry, as before.
+- **One lookup.** Only `look_up_portfolio` is ported (ticket 03's tracer bullet). The other six follow in ticket 04.
+- **`validate` is a pass-through.** The PII check still runs in `assistant.ask` on the final reply, so no Client-naming answer is stored. Grounding runs on the final reply as before. The one-retry reflection edge and the request budget land in ticket 04, so until then a turn that loops on tools is bounded only by LangGraph's recursion limit.
+- **Reply format.** The agent's final message is the JSON reply, as the system prompt's schema asks. Native structured output together with tools is not used.
+

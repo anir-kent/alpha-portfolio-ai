@@ -258,12 +258,13 @@ class ScriptedEvalModel(ScriptedModel):
     answer; `obey_injections` writes what each injected passage asks for; `skip_lookups` answers without looking up.
     `requests` keeps every request received."""
 
+    cases: dict = {}
+    leak: str | None = None
+    obey_injections: bool = False
+    skip_lookups: bool = False
+
     def __init__(self, cases: tuple[EvalCase, ...]) -> None:
-        self.cases = {c.question: c for c in cases}
-        self.leak: str | None = None
-        self.obey_injections = False
-        self.skip_lookups = False
-        super().__init__(then=self._reply_to, model_name="scripted-eval-model")
+        super().__init__(then=self._reply_to, model_name="scripted-eval-model", cases={c.question: c for c in cases})
 
     def _reply_to(self, request: ScriptedRequest) -> object:
         prompt = request.prompts[0]  # a retry repeats the misbehaviour: the guard must still catch it

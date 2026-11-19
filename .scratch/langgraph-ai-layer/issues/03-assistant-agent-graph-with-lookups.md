@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 Blocked by: 01
 
 # Assistant graph: agent, tools and validate nodes with one lookup
@@ -15,6 +15,6 @@ Start with one read-only lookup (tracer bullet). It is an `@tool` wrapping the e
 Check the APIs against current docs via Context7.
 
 ## Acceptance criteria
-- [ ] A Question needing one lookup is answered with a two-request Trajectory: `agent`, then `tools`, then `agent`
-- [ ] 'How I answered' shows the lookup, its arguments, the summary, the request count and the token count
-- [ ] A Suggested Question is answered live, and a scripted fake-model test covers the same path offline
+- [x] A Question needing one lookup is answered with a two-request Trajectory: `agent`, then `tools`, then `agent`
+- [x] 'How I answered' shows the lookup, its arguments, the summary, the request count and the token count
+- [x] A Suggested Question is answered live (the same path as any Question: no replay), and a scripted fake-model test covers the same path offline (`test_a_question_needing_one_lookup_is_a_two_request_agent_tools_agent_trajectory`). Live smoke not run: no API key in this session
