@@ -1,5 +1,5 @@
 ---
-status: accepted, amended by ADR-0010 (Audit Events anchor an ordered list of Exchanges; live capture at the HTTP transport)
+status: accepted, amended by ADR-0010 (Audit Events anchor an ordered list of Exchanges) and ADR-0011 (capture by a LangChain callback, not at the HTTP transport; each Exchange names its Graph Node; the pipeline is live only)
 ---
 
 # LLM Exchanges are stored in their own append-only table and anchored in the audit chain by hash

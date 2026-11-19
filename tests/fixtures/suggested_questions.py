@@ -28,7 +28,7 @@ from pydantic_ai.settings import ModelSettings
 from app.llm import RecordingMissing
 from app.main import create_app
 from app.market_data import MarketData
-from app.prompts import ASSISTANT_ANSWER, PRIORITY_NARRATIVE, RECOMMENDATION_NARRATIVE, RESEARCH_TILT
+from app.prompts import ASSISTANT_ANSWER
 from app.pydantic_llm import (
     ReplayModel,
     build_live_model,
@@ -42,6 +42,7 @@ from app.research_seed import seed_research
 from app.screen_context import SUGGESTED_QUESTIONS
 from app.seeder import PLANTED, seed_clients
 from app.settings import Settings
+from tests.fake_chat import RecordedPipeline
 from tests.runs import run_and_wait
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -53,8 +54,10 @@ SEED_PASSWORD = "test-only-password"
 # are part of the governance prompt and its recording keys: changing them means re-recording.
 RECORDED_MODEL = "anthropic/claude-sonnet-5.5"
 RECORDED_BASE_URL = "https://openrouter.ai/api/v1/"
-# The tasks this script records: the Analysis Run's AI steps and the Assistant.
-RECORDED_TASKS = {t.name for t in (PRIORITY_NARRATIVE, RESEARCH_TILT, RECOMMENDATION_NARRATIVE, ASSISTANT_ANSWER)}
+# The tasks this script records: the Assistant's. The pipeline is live-only (ADR-0011); its committed recordings are
+# frozen and answered by `tests.fake_chat.RecordedPipeline` until ticket 05 removes them, so they are never re-recorded
+# or removed here.
+RECORDED_TASKS = {ASSISTANT_ANSWER.name}
 
 
 def replay_settings(directory: Path) -> Settings:
@@ -187,7 +190,7 @@ def record(*, offline: bool = False) -> int:
         return 1
     client = ReplayOrRecord(live)
     with tempfile.TemporaryDirectory() as tmp:
-        app = create_app(lift_question_limits(replay_settings(Path(tmp))))
+        app = create_app(lift_question_limits(replay_settings(Path(tmp))), chat_model=RecordedPipeline())
         app.state.llm.model = client
         seed_demo(app, RECORDING_RUN_TIMEOUT)
         failures = []

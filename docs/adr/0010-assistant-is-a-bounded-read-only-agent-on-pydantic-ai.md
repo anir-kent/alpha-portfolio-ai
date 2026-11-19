@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0011 (the pipeline steps already; the Assistant when it becomes an LLM Graph)
 supersedes: ADR-0007
 amends: ADR-0004
 ---

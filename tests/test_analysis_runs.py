@@ -1,6 +1,6 @@
 """Seam: the Analysis Run lifecycle through the HTTP API (ADR-0005). A run starts in the background; its Run Steps are read
-back as snapshots. Timing is controlled only through the Model the app's LLM calls go to (a scripted Model behind
-capture)."""
+back as snapshots. Timing is controlled only through the chat model the pipeline's LLM Graph runs on (a fake chat model
+behind capture)."""
 
 import json
 import logging
@@ -8,10 +8,8 @@ import shutil
 import sqlite3
 import threading
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
-from pydantic_ai.models import Model
 from sqlalchemy import func, select
 
 from app import audit
@@ -24,8 +22,8 @@ from app.prompts import PRIORITY_NARRATIVE, RECOMMENDATION_NARRATIVE
 from app.research_seed import seed_research
 from app.seeder import seed_clients
 from tests.conftest import ROLES, SEED_PASSWORD
+from tests.fake_chat import ByTask, ChatRequest, FakeChatModel, RecordedPipeline, serve_chat
 from tests.runs import RUNS, run_and_wait, start_and_wait, wait_for_outcome
-from tests.scripted import ByTask, ScriptedModel, ScriptedRequest, serve
 from tests.test_market_data import LOOKTHROUGH, SNAPSHOT
 from tests.test_queue import seeded  # noqa: F401  (fixture)
 
@@ -64,26 +62,29 @@ def test_a_run_ends_completed_with_every_run_step_done_and_timed(advisor):
     assert advisor.get("/api/queue").json()["run_id"] == snap["run_id"]
 
 
-class BlockingModel(ScriptedModel):
+class BlockingModel(FakeChatModel):
     """Holds the first model request until released. With approved research seeded, that is a Research Tilt inside
     Score Portfolios, so the run freezes part-way through scoring. Every request then fails as an unreachable provider
     does, which costs only the AI output: the run ends Completed with warnings."""
 
-    def __init__(self) -> None:
-        self.entered, self.release = threading.Event(), threading.Event()
-        super().__init__(then=self._hold)
+    entered: threading.Event = threading.Event()
+    release: threading.Event = threading.Event()
 
-    def _hold(self, request: ScriptedRequest) -> httpx.ConnectError:
+    def __init__(self) -> None:
+        super().__init__(entered=threading.Event(), release=threading.Event())
+        self.then = self._hold
+
+    def _hold(self, request: ChatRequest) -> ConnectionError:
         self.entered.set()
         assert self.release.wait(30), "the test never released the model"
-        return httpx.ConnectError("no AI output in this test")
+        return ConnectionError("no AI output in this test")
 
 
 @pytest.fixture
 def frozen(app, advisor):
     """A run started by `advisor` and frozen part-way through Score Portfolios; released on teardown."""
     seed_research(app.state.session_factory)
-    llm = serve(app, BlockingModel())
+    llm = serve_chat(app, BlockingModel())
     r = advisor.post(RUNS)
     assert r.status_code == 202, r.text
     assert llm.entered.wait(30)
@@ -325,18 +326,16 @@ NARRATIVES = (PRIORITY_NARRATIVE.name, RECOMMENDATION_NARRATIVE.name)
 
 
 class NarrativeFailingModel(ByTask):
-    """Replays a Research Tilt from the recordings. Fails the way an unreachable provider does on the narrative tasks in
-    `failing`; other narratives get a reply with no claims."""
+    """Answers a Research Tilt from the recordings. Fails the way an unreachable provider does on the narrative tasks
+    in `failing`; other narratives get a reply with no claims."""
 
-    def __init__(self, replay: Model, failing: tuple[str, ...] = NARRATIVES) -> None:
-        super().__init__(replay)
-        self.failing = failing
+    failing: tuple[str, ...] = NARRATIVES
 
-    def script_for(self, task: str) -> Model | None:
+    def script_for(self, task: str) -> FakeChatModel | None:
         if task in self.failing:
-            return ScriptedModel(httpx.ConnectError("secret internal detail: provider is down"))
+            return FakeChatModel(then=ConnectionError("secret internal detail: provider is down"))
         if task in NARRATIVES:
-            return ScriptedModel({"claims": []})
+            return FakeChatModel(then={"claims": []})
         return None
 
 
@@ -346,7 +345,7 @@ AI_STEP_FAILED = "Narrative unavailable (AI step failed; scores are unaffected).
 def test_an_llm_failing_in_the_narrative_steps_ends_completed_with_warnings_and_the_queue_moves_on(app, advisor):
     seed_research(app.state.session_factory)
     previous = run_and_wait(advisor)
-    serve(app, NarrativeFailingModel(app.state.llm.model))
+    serve_chat(app, NarrativeFailingModel(fallback=RecordedPipeline()))
     snap = start_and_wait(advisor)
     assert snap["outcome"] == "completed_with_warnings"
     assert outcomes(snap) == ["done", "done", "done", "failed", "failed"]
@@ -357,12 +356,12 @@ def test_an_llm_failing_in_the_narrative_steps_ends_completed_with_warnings_and_
 
 def test_recommendation_narratives_still_run_after_the_priority_model_raises_an_unexpected_error(app, advisor, login):
     seed_research(app.state.session_factory)
-    serve(
+    serve_chat(
         app,
         ByTask(
-            app.state.llm.model,
-            priority_narrative=ScriptedModel(then=RuntimeError("secret internal detail: provider blew up")),
-            recommendation_narrative=ScriptedModel(then={"claims": []}),
+            RecordedPipeline(),
+            priority_narrative=FakeChatModel(then=RuntimeError("secret internal detail: provider blew up")),
+            recommendation_narrative=FakeChatModel(then={"claims": []}),
         ),
     )
     snap = start_and_wait(advisor)

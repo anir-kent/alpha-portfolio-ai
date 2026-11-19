@@ -3546,6 +3546,17 @@
             ],
             "title": "Trajectory Position"
           },
+          "graph_node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Node"
+          },
           "hash": {
             "type": "string",
             "title": "Hash"
@@ -3594,6 +3605,7 @@
           "error",
           "trajectory_id",
           "trajectory_position",
+          "graph_node",
           "hash",
           "used_by",
           "grounding",

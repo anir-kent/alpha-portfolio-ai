@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from tests.scripted import serve
+from tests.fake_chat import FakeChatModel, serve_chat
 from tests.test_ai_recommendations import ai, tilt_for  # noqa: F401  (fixture)
 from tests.test_portfolio import url
 from tests.test_queue import seeded  # noqa: F401  (fixture)
@@ -27,9 +27,9 @@ def test_an_advisor_sees_each_ai_step_with_mode_outcome_and_counts_but_no_raw_te
     rec = captured.run()
     got = steps(rec)
     assert set(got) == {"tilt", "memo"}
-    assert got["tilt"]["mode"] == "recorded" and got["tilt"]["outcome"] == "ok"
+    assert got["tilt"]["mode"] == "live" and got["tilt"]["outcome"] == "ok"  # the pipeline is live only (ADR-0011)
     assert got["memo"]["grounded"] == 0 and got["memo"]["ungrounded"] == 0
-    assert got["tilt"]["latency_ms"] is None and got["tilt"]["telemetry"] == "not_available_replayed"
+    assert isinstance(got["tilt"]["latency_ms"], int) and got["tilt"]["telemetry"] == "measured"
     blob = json.dumps(rec["research"]["steps"])
     for forbidden in ("exchange_hash", "system_text", "user_prompt", "raw_reply"):
         assert forbidden not in blob
@@ -57,11 +57,11 @@ def test_a_role_with_llm_read_also_gets_the_exchange_id_that_opens_the_exchange(
 
 
 def test_a_failed_step_shows_failed_with_its_transport_error_and_the_rule_based_result_stands(app, captured):
-    serve(app, captured.replay)  # the app's own replay path, which has no tilt or memo recordings
+    serve_chat(app, FakeChatModel(then=ConnectionError("provider unavailable")))
     rec = captured.run()
     got = steps(rec)
     assert {s["outcome"] for s in got.values()} == {"failed"}
-    assert "No recorded response" in got["tilt"]["reason"] and len(got["memo"]["reason"]) <= 200
+    assert "provider unavailable" in got["tilt"]["reason"] and len(got["memo"]["reason"]) <= 200
     assert got["memo"]["grounded"] is None
     assert rec["trade_lines"] and rec["research"]["tilt"]["status"] == "failed"
 

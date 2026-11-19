@@ -1,5 +1,5 @@
 ---
-status: superseded by ADR-0010
+status: superseded by ADR-0010; its rejection of LangGraph is dropped by ADR-0011
 ---
 
 # LLM steps are single, schema-bound calls through a plain OpenAI-compatible client, without an agent framework, agent loop or RAG

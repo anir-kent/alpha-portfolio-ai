@@ -13,8 +13,8 @@ Agent behind the step-facing `complete`.
   `RecordingMissing`, never a guess. `RecordingModel` wraps a live Model and writes one recording per model request in
   the format `ReplayModel` reads. Both learn the task and prompt version from `tagged`, which capture wraps around
   every request.
-- `run_single_call` is the single schema-bound call of ADR-0007's pipeline steps: native structured output over the
-  request's JSON schema, no tools, no output retries. The step's own Pydantic model still validates the reply.
+- The pipeline steps no longer run here: they are an LLM Graph on a LangChain chat model (ADR-0011, `app.llm_graph`).
+  What remains serves the Assistant until it moves too.
 
 Capture itself lives in `app.exchanges`.
 """
@@ -28,11 +28,9 @@ import time
 import warnings
 from collections.abc import Iterator
 from pathlib import Path
-from typing import cast
 
 import httpx
 import pydantic_ai
-from pydantic_ai import Agent, AgentRetries, NativeOutput, StructuredDict
 from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ModelResponse
 from pydantic_ai.models import Model, ModelRequestParameters
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
@@ -43,7 +41,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.providers.openrouter import OpenRouterProvider
 from pydantic_ai.settings import ModelSettings
 
-from app.llm import OPENROUTER_TITLE, LlmRequest, RecordingMissing, wire_schema
+from app.llm import OPENROUTER_TITLE, LlmRequest, RecordingMissing
 
 pydantic_ai.BANNER_ENABLED = False  # the glass box is the observability record (ADR-0010); no console banner
 
@@ -375,19 +373,3 @@ class RecordingModel(WrapperModel):
         response = await super().request(messages, model_settings, model_request_parameters)
         write_recording(self.directory, request, key, response)
         return response
-
-
-def run_single_call(model: Model, request: LlmRequest) -> dict:
-    """The reply object of one model request for `request`: its system text (with the reply schema, as the step's
-    prompt has always carried it) and user prompt, held to the schema by native structured output."""
-    agent = Agent(
-        model,
-        instructions=request.system + "\n\nJSON schema of the reply:\n" + json.dumps(request.schema),
-        output_type=NativeOutput(
-            StructuredDict(cast(dict, wire_schema(request.schema)), name=request.task),
-            template=False,
-            strict=False,
-        ),
-        retries=AgentRetries(output=0),
-    )
-    return agent.run_sync(request.user).output

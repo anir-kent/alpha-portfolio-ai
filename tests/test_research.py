@@ -1,5 +1,6 @@
-"""Seam: Report ingestion, Insight approval and the LLM interface. All LLM calls replay committed recordings
-(tests/fixtures/llm); a live smoke test runs only with LLM_LIVE=1."""
+"""Seam: Report ingestion, Insight approval and the LLM interface. Insight extraction runs the pipeline's LLM Graph on a
+fake chat model that answers from the committed recordings (tests/fixtures/llm) unless a test scripts it; a live smoke
+test runs only with LLM_LIVE=1."""
 
 import json
 import os
@@ -12,7 +13,7 @@ from app import audit
 from app.db import AuditEventRow
 from app.research_seed import seed_research
 from tests.conftest import ROLES
-from tests.scripted import ScriptedModel, serve
+from tests.fake_chat import FakeChatModel, serve_chat
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -83,9 +84,9 @@ def test_pdf_upload_keeps_page_references(login):
 
 
 def test_upload_runs_insight_extraction_off_the_event_loop(app, login):
-    model = serve(
+    model = serve_chat(
         app,
-        ScriptedModel(
+        FakeChatModel(
             {
                 "insights": [
                     {
@@ -251,13 +252,15 @@ def test_seeding_twice_adds_nothing(seeded_research):
 
 
 @pytest.mark.skipif(not os.environ.get("LLM_LIVE"), reason="live smoke test: set LLM_LIVE=1 and APP_LLM_API_KEY")
-def test_live_smoke_extraction(tmp_path, allow_model_requests):
+def test_live_smoke_extraction(tmp_path, allow_network):
+    from app.chat_model import get_chat_model
     from app.db import make_session_factory
     from app.exchanges import build_llm
     from app.reports import extract_pages, extraction_request
     from app.settings import Settings
 
-    s = Settings(llm_mode="live")
+    s = Settings()
     _, pages = extract_pages("v.txt", (FIXTURES / "house_view_demo.txt").read_bytes())
     store = make_session_factory(f"sqlite:///{tmp_path / 'smoke.db'}")
-    assert build_llm(s, store).complete(extraction_request(pages)).content["insights"]
+    llm = build_llm(s, store, chat_model=get_chat_model(s))
+    assert llm.complete(extraction_request(pages)).content["insights"]

@@ -1,6 +1,6 @@
 """Seam: the HTTP API (`/api/audit/verify`, `/api/llm/exchanges/{id}`). An Audit Event anchors an ordered LLM Trajectory
 and chain verification proves it complete, unaltered and in order (ADR-0004 as amended by ADR-0010). The Trajectory
-is built in the test through capture over a scripted Model; no network."""
+is built in the test through capture over a fake chat model; no network."""
 
 import hashlib
 import json
@@ -12,10 +12,10 @@ from app import audit
 from app.db import AuditEventRow, LlmExchangeRow
 from app.exchanges import ModelLlm, exchange_digest
 from app.llm import LlmError, LlmRequest, LlmResponse, exchange_ref
-from tests.scripted import ScriptedModel, ScriptedRequest
+from tests.fake_chat import ChatRequest, FakeChatModel
 
 
-def echo(request: ScriptedRequest) -> dict | httpx.ConnectError:
+def echo(request: ChatRequest) -> dict | httpx.ConnectError:
     """Answers every request with its own user text, or fails as an unreachable provider does when the text says so."""
     if request.user_prompt == "fail":
         return httpx.ConnectError("provider unavailable")
@@ -36,7 +36,12 @@ def anchor(app, outcomes) -> int:
 
 
 def capture(app) -> ModelLlm:
-    return ModelLlm(ScriptedModel(then=echo, model_name="echo-1"), app.state.session_factory, mode="recorded")
+    return ModelLlm(
+        app.state.llm.model,
+        app.state.session_factory,
+        mode="recorded",
+        chat_model=FakeChatModel(then=echo, model_name="echo-1"),
+    )
 
 
 def trajectory_of_three(app) -> tuple[int, list[int | None]]:

@@ -33,6 +33,7 @@ from pydantic_ai.models import Model
 
 from app.main import create_app
 from app.seeder import PLANTED as PLANTED_IDS
+from tests.fake_chat import RecordedPipeline
 from tests.fixtures.suggested_questions import login, replay_settings, seed_demo
 from tests.runs import run_and_wait
 
@@ -458,10 +459,11 @@ class Walkthrough:
 
 
 def walk(model: Model | None = None, run_timeout: float = 60) -> list[Check]:
-    """Plays the walkthrough on a fresh, seeded throwaway app. `model` replaces the replay Model behind capture (for
-    recording), which also needs a longer `run_timeout` for its live Analysis Runs."""
+    """Plays the walkthrough on a fresh, seeded throwaway app. Its pipeline steps answer from the committed recordings
+    (`RecordedPipeline`, until the walkthrough runs live in ticket 05). `model` replaces the Assistant's replay Model
+    behind capture (for recording), which also needs a longer `run_timeout`."""
     with tempfile.TemporaryDirectory() as tmp:
-        app = create_app(replay_settings(Path(tmp)))
+        app = create_app(replay_settings(Path(tmp)), chat_model=RecordedPipeline())
         if model is not None:
             app.state.llm.model = model
         seed_demo(app, run_timeout)

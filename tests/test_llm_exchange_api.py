@@ -362,13 +362,12 @@ def test_stream_opens_with_its_cursor_so_a_client_that_saw_nothing_still_resumes
 
 
 def trajectory(app, *users: str) -> list[int]:
-    """One LLM Trajectory of `len(users)` requests through capture over a scripted Model; returns its Exchange ids. A
+    """One LLM Trajectory of `len(users)` requests through capture over a fake chat model; returns its Exchange ids. A
     request whose text is "fail" fails as an unreachable provider does and is stored as an error Exchange."""
     import httpx
 
-    from app.exchanges import ModelLlm
     from app.llm import LlmError, LlmRequest, LlmResponse
-    from tests.scripted import ScriptedModel
+    from tests.fake_chat import FakeChatModel, serve_chat
 
     def echo(request):
         return (
@@ -377,7 +376,8 @@ def trajectory(app, *users: str) -> list[int]:
             else {"echo": request.user_prompt}
         )
 
-    steps = ModelLlm(ScriptedModel(then=echo), app.state.session_factory, mode="recorded").trajectory()
+    serve_chat(app, FakeChatModel(then=echo))
+    steps = app.state.llm.trajectory()
     ids = []
     for user in users:
         outcome: LlmResponse | LlmError

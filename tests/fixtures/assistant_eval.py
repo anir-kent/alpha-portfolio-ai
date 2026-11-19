@@ -37,6 +37,7 @@ from app.governance import AssistantEval, EvalCaseResult, EvalCategory, EvalExpe
 from app.main import create_app
 from app.prompts import ASSISTANT_ANSWER
 from app.settings import Settings
+from tests.fake_chat import RecordedPipeline
 from tests.fixtures.suggested_questions import (
     ReplayOrRecord,
     lift_question_limits,
@@ -461,7 +462,7 @@ def main() -> int:
     if live is None:
         return 1
     with tempfile.TemporaryDirectory() as tmp:
-        app = create_app(lift_question_limits(replay_settings(Path(tmp))))
+        app = create_app(lift_question_limits(replay_settings(Path(tmp))), chat_model=RecordedPipeline())
         # The Analysis Run's AI steps replay; the eval's own Questions go live, and nothing is recorded.
         app.state.llm.model = ReplayOrRecord(live, record=False)
         seed_demo(app)

@@ -44,6 +44,8 @@ class ExchangeOut(BaseModel):
     # Trajectories existed has neither and is a Trajectory of one.
     trajectory_id: str | None
     trajectory_position: int | None
+    # The Graph Node of the LLM Graph that made the call (ADR-0011); None for a call made before LLM Graphs.
+    graph_node: str | None
     hash: str
 
 
@@ -94,6 +96,7 @@ def exchange_out(r: LlmExchangeRow) -> ExchangeOut:
         error=r.error,
         trajectory_id=r.trajectory_id,
         trajectory_position=r.trajectory_position,
+        graph_node=r.graph_node,
         hash=r.hash,
     )
 

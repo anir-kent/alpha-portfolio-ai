@@ -1,8 +1,8 @@
 """The single LLM interface (spec: OpenAI-compatible, gateway-ready; OpenRouter in front of an Anthropic model).
 
 Callers only ever see `LlmClient.complete`, its request and response, and its errors. What the app serves behind it is
-`app.exchanges.build_llm`: pydantic-ai over the live or replay Model, wrapped in capture (ADR-0010). Every response
-carries the model and prompt version so the caller can log both to the audit chain.
+`app.exchanges.build_llm`: the pipeline's LLM Graph on the chat model from `get_chat_model`, captured by a callback
+(ADR-0011). Every response carries the model and prompt version so the caller can log both to the audit chain.
 """
 
 import json
