@@ -9,10 +9,11 @@ from sqlalchemy import select
 
 from app import grounding
 from app.db import AuditEventRow, GroundingResultRow
+from app.research_seed import seed_research
 from tests.runs import run_and_wait
 from tests.test_llm_exchange_api import add_exchange
 from tests.test_queue import seeded  # noqa: F401  (fixture)
-from tests.test_research import upload
+from tests.uploads import upload
 
 QUOTE = "We are constructive on technology."
 
@@ -97,9 +98,11 @@ def test_fabricated_quote_is_flagged(ctx):
     assert result["grounded"] is False and codes(result) == {"quote_not_found"}
 
 
-def test_quote_from_a_different_page_is_flagged(ctx):
-    advisor, rec, rid = ctx
-    claim = {"text": "Tech.", "citations": [report_cite(rid, page=2)]}
+def test_quote_from_a_different_page_is_flagged(app, ctx):
+    advisor, rec, _ = ctx  # an upload is one page now (Docling gives Markdown and DOCX no pages): use a seeded PDF
+    seed_research(app.state.session_factory)
+    quote = "equities were the best-performing asset class in all 21 Yearbook countries with continuous investment histories"
+    claim = {"text": "Equities.", "citations": [report_cite("RPT-UBS-GIRY-2026", page=6, quote=quote)]}
     assert codes(check(advisor, rec, [claim])["results"][0]) == {"quote_not_found"}
 
 

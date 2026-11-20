@@ -51,7 +51,7 @@ def test_no_api_key_is_a_configuration_error_naming_the_setting():
         get_chat_model(settings().model_copy(update={"llm_api_key": ""}))
 
 
-def test_get_chat_model_is_the_only_module_that_imports_a_langchain_provider_package():
+def test_only_the_provider_seams_import_a_langchain_provider_package():
     importers = set()
     for path in APP.rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
@@ -62,4 +62,5 @@ def test_get_chat_model_is_the_only_module_that_imports_a_langchain_provider_pac
                 n.split(".")[0] in {"langchain_openrouter", "langchain_openai", "openrouter", "openai"} for n in names
             ):
                 importers.add(path.name)
-    assert importers <= {"chat_model.py"}
+    # `get_chat_model` for the chat model, `report_index.py` for the embeddings the Report Index uses (ADR-0012)
+    assert importers <= {"chat_model.py", "report_index.py"}

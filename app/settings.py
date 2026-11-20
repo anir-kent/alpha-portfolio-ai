@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field, PositiveInt
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -20,6 +22,17 @@ class Settings(BaseSettings):
     # Sent only when set. Claude 5 models accept no temperature, and through OpenRouter a request carrying one finds no
     # endpoint, so the default leaves it to the provider. Reported on the governance model card.
     llm_temperature: float | None = None
+    # The Report Index (ADR-0012): Chunk embeddings go through the same OpenAI-compatible endpoint and key as the chat model.
+    vector_store: Literal["chroma", "qdrant", "memory"] = "chroma"  # `memory` is for tests
+    chroma_dir: str = "data/chroma"
+    qdrant_dir: str = "data/qdrant"  # embedded Qdrant on disk (":memory:" for tests)
+    qdrant_url: str = ""  # a Qdrant server; when set, `qdrant_dir` is unused
+    embedding_model: str = "openai/text-embedding-3-small"  # in the gateway's naming
+    retrieval_k: PositiveInt = 10  # candidate Chunks each Retrieval Query takes from a Report, before reranking
+    # Reranking calls Cohere directly (ADR-0012), with its own key; embeddings and chat go through the gateway above.
+    cohere_api_key: str = ""
+    rerank_model: str = "rerank-v3.5"
+    rerank_top_n: PositiveInt = 4  # Chunks each Retrieval Query keeps after reranking
     llm_stream_poll_seconds: float = 1.0  # how often the Exchange stream looks for new rows
     llm_stream_max_seconds: float = 300.0  # a stream closes after this; the browser reconnects with its last event id
     # The Assistant's limits. Each description is the "Effect" column of the generated table in the architecture

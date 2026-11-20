@@ -263,7 +263,8 @@ function RejectDialog({
             <p>
               <span className="font-semibold">{insight.subject}</span>{" "}
               <span className="text-ink-3">
-                · cited on page <span className="mono">{insight.page}</span> · Insight{" "}
+                · cited on page <span className="mono">{insight.page}</span>
+                {insight.headings && <> (under {insight.headings})</>} · Insight{" "}
                 <span className="mono">#{insight.id}</span>
               </span>
             </p>

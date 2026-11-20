@@ -69,7 +69,7 @@ flowchart TB
 
     subgraph ai["AI under deterministic control"]
       direction TB
-      research["<b>Research and Insights</b><br/>Report ingestion, Insight Review,<br/>approved-only retrieval"]
+      research["<b>Research and Insights</b><br/>Report ingestion, Report Index and<br/>RAG extraction, Insight Review,<br/>approved-only retrieval"]
       aisteps["<b>AI-on-Recommendations steps</b><br/>Research Tilt, Recommendation and<br/>priority narratives, AI step summary"]
       grounding["<b>Grounding validator</b><br/>Every Claim cited and checked"]
       assistant["<b>Assistant</b><br/>Bounded read-only agent: lookups,<br/>self-correction, request budget;<br/>Screen Context"]

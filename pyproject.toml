@@ -5,17 +5,28 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "docling>=2.151.1",
     "fastapi>=0.162.0",
     "httpx>=0.28.1",
     "langchain>=1.5.2",
+    "langchain-chroma>=1.1.0",
+    "langchain-classic>=1.0.8",
+    "langchain-cohere>=0.6.0",
+    "langchain-docling>=3.0.0",
     "langchain-openai>=1.8.3",
     "langchain-openrouter>=0.3.0",
+    "langchain-qdrant>=1.1.0",
     "langgraph>=1.2.23",
     "pydantic-settings>=2.16.2",
     "pypdf>=6.21.4",
     "python-multipart>=0.0.33",
     "sqlalchemy>=2.1.6",
     "uvicorn[standard]>=0.54.0",
+]
+
+[project.optional-dependencies]
+eval = [
+    "ragas>=0.4.4",
 ]
 
 [dependency-groups]
@@ -29,6 +40,9 @@ dev = [
     "types-jsonschema>=4.26.0.20261006",
 ]
 
+[tool.pytest.ini_options]
+markers = ["live_eval: runs against the real embedding model and Cohere; skipped unless selected with -m live_eval"]
+
 [tool.mypy]
 python_version = "3.13"
 files = ["app", "tests", "scripts"]
@@ -37,6 +51,10 @@ check_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 strict_equality = true
+
+[[tool.mypy.overrides]]
+module = ["ragas", "ragas.*"]
+ignore_missing_imports = true  # the optional `eval` extra; not installed for the main checks
 
 [tool.ruff]
 line-length = 120

@@ -186,9 +186,20 @@ class ExchangeCapture(BaseCallbackHandler):
 
     raise_error = True
 
-    def __init__(self, capture: "_Capture", request: LlmRequest, *, endpoint_host: str | None, secret: str = ""):
+    def __init__(
+        self,
+        capture: "_Capture",
+        request: LlmRequest,
+        *,
+        endpoint_host: str | None,
+        secret: str = "",
+        user_from_call: bool = False,
+    ):
         self._capture = capture
         self._request = request
+        # A graph that builds its prompt inside a node (retrieval) has no user text when the callback is made: an
+        # Exchange then records the user message the model was actually sent.
+        self._user_from_call = user_from_call
         self._endpoint_host = endpoint_host
         self._secret = secret
         self._calls: dict[UUID, dict] = {}
@@ -208,6 +219,7 @@ class ExchangeCapture(BaseCallbackHandler):
         self._calls[run_id] = {
             "messages": convert_to_openai_messages(messages[0]),
             "graph_node": (metadata or {}).get("langgraph_node"),
+            "user": next((str(m.content) for m in reversed(messages[0]) if m.type == "human"), ""),
             "started": time.perf_counter(),
             "model": invocation.get("model") or invocation.get("model_name"),
         }
@@ -253,8 +265,9 @@ class ExchangeCapture(BaseCallbackHandler):
         usage: Mapping[str, Any] | None,
         error: str | None = None,
     ) -> None:
+        request = dataclasses.replace(self._request, user=call["user"]) if self._user_from_call else self._request
         row = self._capture.persist(
-            self._request,
+            request,
             model=model,
             messages=call["messages"],
             raw_reply=raw_reply,
@@ -300,19 +313,40 @@ class ModelLlm(_Capture):
     def chat_model(self, model: BaseChatModel) -> None:
         self._chat_model = model
 
-    def exchange_capture(self, request: LlmRequest) -> ExchangeCapture:
+    def exchange_capture(self, request: LlmRequest, *, user_from_call: bool = False) -> ExchangeCapture:
         """The callback that stores one Exchange per model call of an LLM Graph run, in this view's Trajectory."""
         chat_model = self.chat_model
-        return ExchangeCapture(self, request, endpoint_host=chat_endpoint_host(chat_model), secret=self._secret)
+        return ExchangeCapture(
+            self,
+            request,
+            endpoint_host=chat_endpoint_host(chat_model),
+            secret=self._secret,
+            user_from_call=user_from_call,
+        )
 
     def complete(self, request: LlmRequest) -> LlmResponse:
+        _, response = self.run(request, lambda model, callbacks: {"content": run_pipeline(model, request, callbacks)})
+        return response
+
+    def run(
+        self,
+        request: LlmRequest,
+        graph: Callable[[BaseChatModel, list[BaseCallbackHandler]], dict],
+        *,
+        user_from_call: bool = False,
+    ) -> tuple[dict, LlmResponse]:
+        """One captured run of an LLM Graph on the chat model: `graph` gets the model and the capture callback and
+        returns the final graph state, whose `content` is the reply object. The response (and any error) carries the
+        stored Exchange's id and hash. `request` names the step; with `user_from_call` its user text is a placeholder,
+        because the graph builds the prompt itself (Insight extraction retrieves its Chunks first, ADR-0012)."""
         try:
             chat_model = self.chat_model
         except Exception as e:  # not configured (no API key): no call was made, so there is nothing to record
             raise LlmError(f"LLM call failed: {e}") from e
-        capture = ExchangeCapture(self, request, endpoint_host=chat_endpoint_host(chat_model), secret=self._secret)
+        capture = self.exchange_capture(request, user_from_call=user_from_call)
         try:
-            content = run_pipeline(chat_model, request, [capture])
+            state = graph(chat_model, [capture])
+            content = state["content"]
         except Exception as e:  # anchor whatever was stored: the error Exchange, or the ok one a step cannot use
             last = capture.stored[-1] if capture.stored else None
             if isinstance(e, LlmError) and e.exchange_id is None and str(e):
@@ -326,7 +360,7 @@ class ModelLlm(_Capture):
                 raw_reply=last.raw_reply if last else None,
             ) from e
         row = capture.stored[-1]
-        return LlmResponse(
+        return state, LlmResponse(
             content=content,
             model=row.model or getattr(chat_model, "model_name", None) or type(chat_model).__name__,
             prompt_version=request.prompt_version,

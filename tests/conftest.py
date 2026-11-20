@@ -1,3 +1,5 @@
+import re
+
 import httpx
 import httpx2
 import pytest
@@ -5,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.main import create_app
 from tests.fake_chat import DemoPipeline
+from tests.fake_index import fake_embeddings, fake_reranker, word_tokenizer
 from tests.fixtures.demo import SEED_PASSWORD, demo_settings
 
 ROLES = [
@@ -59,6 +62,14 @@ def pipeline_chat_model(monkeypatch):
     monkeypatch.setattr("app.exchanges.get_chat_model", lambda settings: DemoPipeline())
 
 
+@pytest.fixture(autouse=True)
+def offline_index(monkeypatch):
+    """The Report Index runs on fake embeddings and a word-count tokenizer: no provider call, no model download."""
+    monkeypatch.setattr("app.report_index.get_embeddings", fake_embeddings)
+    monkeypatch.setattr("app.report_index.chunk_tokenizer", word_tokenizer)
+    monkeypatch.setattr("app.report_index.get_reranker", fake_reranker)
+
+
 @pytest.fixture
 def settings(tmp_path):
     return demo_settings(tmp_path)  # ignores the developer's .env, so local runs see what CI sees
@@ -86,3 +97,13 @@ def login(app):
         return c
 
     return _login
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """A `live_eval` test costs provider calls, so it is skipped unless selected with `-m live_eval`."""
+    if re.search(r"(?<!not )\blive_eval\b", config.getoption("-m") or ""):  # `-m "not live_eval"` stays skipped
+        return
+    skip = pytest.mark.skip(reason="live eval: opt in with -m live_eval")
+    for item in items:
+        if "live_eval" in item.keywords:
+            item.add_marker(skip)

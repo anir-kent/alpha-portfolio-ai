@@ -1,0 +1,11 @@
+# Northwind House View, Q4 2026
+
+## Sectors
+
+We are constructive on technology. Earnings revisions remain strong and balance sheets are healthy.
+
+Utilities look expensive after the rally and offer limited upside from here.
+
+## Asset allocation
+
+We prefer equities over bonds for the next twelve months as growth stays resilient.

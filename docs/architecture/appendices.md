@@ -485,14 +485,14 @@ The policy is a pure function of the Recommendation and the configuration in for
 
 ### E.20 6.3 Report ingestion to Insight Review controls and failure paths
 
-A Research Analyst uploads a Report. The platform splits it into pages and makes one LLM call to extract candidate Insights. Code keeps a candidate only if its subject is in the taxonomy and its quoted passage really appears on the cited page. Every kept Insight starts `pending`, and only an Insight the Analyst approves in Insight Review can influence anything downstream. After approval, the passage is checked again whenever a narrative cites it, by the Grounding validator.
+A Research Analyst uploads a Report. The platform converts it with Docling, indexes its Chunks, retrieves and reranks per taxonomy subject and makes one LLM call over the retrieved Chunks to extract candidate Insights. Code keeps a candidate only if its subject is in the taxonomy and its quoted passage really appears on the cited page. Every kept Insight starts `pending`, and only an Insight the Analyst approves in Insight Review can influence anything downstream. After approval, the passage is checked again whenever a narrative cites it, by the Grounding validator.
 
 
 
 | Failure path | What happens |
 | --- | --- |
-| Unreadable or oversized file | `413` over 20 MiB. `422` for a file that is not a PDF or UTF-8 text, a scanned PDF with no text, or more than 400,000 characters. Nothing is stored and no LLM call is made. |
-| The extraction call fails, or the model is unreachable | The Report is kept with extraction status `failed`. An LLM Exchange with outcome `error` and an `insight_extracted` event with outcome `failed` are written. The Analyst sees the failure on the Report. |
+| Unusable or oversized upload | `413` over 20 MiB or a PDF over 50 pages. `422` for an unsupported type, a file whose bytes do not match its type, or text that is not UTF-8 or is empty. Nothing is stored and no LLM call is made. A file that passes these checks but cannot be read by Docling is stored and ends `failed` in the background job. |
+| Embedding, the vector store, the reranker or the extraction call fails, or the model is unreachable | The Report is kept with extraction status `failed`; there is no retry and no fallback to full text. An LLM Exchange with outcome `error` and an `insight_extracted` event with outcome `failed` are written. The Analyst sees the failure on the Report. |
 | The LLM invents a subject, page or passage | That candidate is dropped before it becomes an Insight, and the reason is recorded on `insight_extracted`. |
 | A second Insight Review of the same Insight | `409`. The first review stands. |
 | A narrative misquotes an approved Report | The Grounding validator flags the Claim (`quote_not_found`) and writes `claim_ungrounded`. Only Grounded Claims reach a memo or summary. |

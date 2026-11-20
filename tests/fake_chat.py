@@ -24,6 +24,7 @@ seeded demo run completes offline.
 """
 
 import json
+import re
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -256,18 +257,40 @@ class DemoPipeline(FakeChatModel):
         return ChatResult(generations=[ChatGeneration(message=_message(reply, self.model_name))])
 
 
+_CHUNK = re.compile(r"\[Chunk ([0-9a-f-]{36})\] \(page \d+\)\n(.*?)(?=\n\n\[Chunk |\Z)", re.DOTALL)
+
+
+def _extraction_reply(user_prompt: str) -> dict:
+    """The fixture case whose passages the request's Chunks hold, with each Insight citing the Chunk that holds its passage."""
+    from app.reports import normalise
+    from tests.fixtures.llm_cases import CASES
+
+    chunks = [(cid, normalise(text)) for cid, text in _CHUNK.findall(user_prompt)]
+
+    def holder(passage: str) -> str | None:
+        return next((cid for cid, text in chunks if normalise(passage) in text), None)
+
+    found, case = max(
+        ((sum(holder(i["passage"]) is not None for i in c["insights"]), c) for c in CASES.values()),
+        key=lambda hit: hit[0],
+    )
+    if not found:
+        raise ConnectionError("the demo has no reply for this Report")
+    return {
+        "insights": [
+            {**i, "chunk_id": i.get("chunk_id") or holder(i["passage"]) or chunks[0][0]} for i in case["insights"]
+        ]
+    }
+
+
 _TILT_PP = {"positive": 0.3, "negative": -0.3}
 
 
 def demo_reply(request: ChatRequest) -> dict:
     """The demo's reply object for one pipeline request."""
-    from tests.fixtures.llm_cases import EXTRACTION_REPLIES
-
     task = request.task
     if task == "insight_extraction":
-        if request.user_prompt not in EXTRACTION_REPLIES:
-            raise ConnectionError("the demo has no reply for this Report")
-        return EXTRACTION_REPLIES[request.user_prompt]
+        return _extraction_reply(request.user_prompt)
     if task == "research_tilt":
         tilts = []
         for insight in request.payload["insights"]:

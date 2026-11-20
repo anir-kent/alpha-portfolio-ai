@@ -1,5 +1,6 @@
 """Versioned prompts. Bump the version whenever the wording changes: it is logged with every LLM call, so an Exchange says which wording produced it."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 
@@ -16,22 +17,58 @@ class Prompt:
 
 INSIGHT_EXTRACTION = Prompt(
     name="insight_extraction",
-    version="v1",
-    system="""You extract investment Insights from a research Report for a wealth-management platform.
+    version="v2",
+    system="""You extract investment Insights from excerpts of a research Report for a wealth-management platform.
 
-The Report is given as pages, each introduced by a line "[Page N]". Return ONLY a JSON object:
+The excerpts are Chunks of the Report, retrieved for the topics we care about. Each is introduced by a line
+"[Chunk <chunk_id>] (page N)" and its text follows, section headings first. Return ONLY a JSON object:
 {"insights": [{"subject_kind": "sector" | "asset_class", "subject": string, "direction": "positive" | "neutral" | "negative",
-"confidence": "low" | "medium" | "high", "page": integer, "passage": string}]}
+"confidence": "low" | "medium" | "high", "chunk_id": string, "passage": string}]}
 
 Rules:
 - subject_kind "sector": subject must be exactly one of the GICS sectors: Communication Services, Consumer Discretionary,
   Consumer Staples, Energy, Financials, Health Care, Industrials, Information Technology, Materials, Real Estate, Utilities.
 - subject_kind "asset_class": subject must be exactly one of: equity, bond, cash.
 - direction is the Report's view on the subject; confidence reflects how strongly and consistently the Report supports it.
-- "page" is the page the passage appears on and "passage" is a verbatim quote from that page (one or two sentences).
-  Never paraphrase, never invent text, never cite a page you did not read.
+- "chunk_id" is the id of the Chunk the passage appears in, copied exactly from its "[Chunk ...]" line, and "passage" is a
+  verbatim quote from that Chunk (one or two sentences). Never paraphrase, never invent text, never cite a Chunk you did not read.
 - Report only views the Report actually states. Do not compute or restate numbers of your own.
-- If the Report states no usable view, return {"insights": []}.""",
+- If the excerpts state no usable view, return {"insights": []}.""",
+)
+
+
+@dataclass(frozen=True)
+class RetrievalQuery:
+    subject_kind: str  # sector | asset_class
+    subject: str
+    text: str
+
+
+@dataclass(frozen=True)
+class RetrievalQueries:
+    """The fixed queries that retrieve a Report's candidate Chunks, one per taxonomy subject. Bump the version whenever
+    the wording changes: it is recorded in every Retrieval Provenance."""
+
+    version: str
+    sector: str
+    asset_class: str
+
+    @property
+    def label(self) -> str:
+        return f"retrieval_queries@{self.version}"
+
+    def for_subjects(self, sectors: Sequence[str], asset_classes: Sequence[str]) -> list[RetrievalQuery]:
+        return [RetrievalQuery("sector", s, self.sector.format(subject=s)) for s in sectors] + [
+            RetrievalQuery("asset_class", a, self.asset_class.format(subject=a)) for a in asset_classes
+        ]
+
+
+RETRIEVAL_QUERIES = RetrievalQueries(
+    version="v1",
+    sector="The Report's view, outlook or recommendation on the {subject} sector: positive, neutral or negative, "
+    "overweight or underweight, and the reasons given.",
+    asset_class="The Report's view, outlook or recommendation on {subject} as an asset class: positive, neutral or "
+    "negative, preferred or avoided, and the reasons given.",
 )
 
 

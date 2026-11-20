@@ -58,15 +58,15 @@ def test_quality_panel_with_no_grounding_data_has_no_pass_rate(login, app):
 
 
 def test_prompt_log_lists_each_prompt_version_used_with_when(ctx, login):  # noqa: F811
-    from tests.test_research import upload  # the extraction call is logged with its prompt version
+    from tests.uploads import upload  # the extraction call is logged with its prompt version
 
     log = {p["prompt_version"]: p for p in governance(login)["prompt_log"]}
-    assert "insight_extraction@v1" in log  # ctx uploaded a Report
-    entry = log["insight_extraction@v1"]
+    assert "insight_extraction@v2" in log  # ctx uploaded a Report
+    entry = log["insight_extraction@v2"]
     assert entry["calls"] >= 1 and entry["models"]
     assert entry["first_used"] <= entry["last_used"]
     upload(login("research_analyst"))
-    again = {p["prompt_version"]: p for p in governance(login)["prompt_log"]}["insight_extraction@v1"]
+    again = {p["prompt_version"]: p for p in governance(login)["prompt_log"]}["insight_extraction@v2"]
     assert again["calls"] == entry["calls"] + 1 and again["last_used"] >= entry["last_used"]
 
 
@@ -81,7 +81,7 @@ def test_model_card_reports_configured_model_and_current_prompt_versions(login, 
     card = governance(login)["model_card"]
     assert card["model"] == settings.llm_model and "llm_mode" not in card
     assert card["tilt_bound_pp"] == 2.0
-    assert {"insight_extraction@v1", "research_tilt@v1", "recommendation_narrative@v1", "priority_narrative@v1"} <= set(
+    assert {"insight_extraction@v2", "research_tilt@v1", "recommendation_narrative@v1", "priority_narrative@v1"} <= set(
         card["current_prompt_versions"]
     )
 

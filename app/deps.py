@@ -8,6 +8,7 @@ from app.analysis_runs import AnalysisRuns
 from app.db import SessionRow, User
 from app.market_data import MarketData
 from app.rbac import PERMISSIONS
+from app.report_index import ReportIndex
 from app.security import token_digest
 from app.timeutil import as_utc
 
@@ -82,3 +83,7 @@ def get_llm(request: Request):
 
 def get_analysis_runs(request: Request) -> AnalysisRuns:
     return request.app.state.analysis_runs
+
+
+def get_report_index(request: Request) -> ReportIndex:
+    return request.app.state.report_index

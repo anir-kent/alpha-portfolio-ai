@@ -13,14 +13,10 @@ from sqlalchemy import select, text
 from app import audit
 from app.db import AuditEventRow
 from tests.conftest import ROLES
+from tests.uploads import upload
 
 FIXTURES = Path(__file__).parent / "fixtures"
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
-
-
-def upload(c, name="house_view_demo.txt", content=None):
-    content = (FIXTURES / name).read_bytes() if content is None else content
-    return c.post("/api/reports", files={"file": (name, content)})
 
 
 def extraction_event(app, report_id):
@@ -41,7 +37,7 @@ def test_extraction_is_captured_and_anchored_in_the_audit_event(app, login):
     ex = r.json()
     assert ex["hash"] == payload["exchanges"][0]["exchange_hash"]
     assert (ex["outcome"], ex["task"], ex["graph_node"]) == ("ok", "insight_extraction", "generate")
-    assert (ex["prompt_version"], ex["model"]) == ("insight_extraction@v1", "demo-model")
+    assert (ex["prompt_version"], ex["model"]) == ("insight_extraction@v2", "demo-model")
     assert "We are constructive on technology." in ex["user_prompt"]
     assert ex["system_text"] and ex["reply_schema"]["properties"]["insights"]
     assert {i["subject"] for i in ex["parsed_content"]["insights"]} == {"Information Technology", "Utilities", "equity"}

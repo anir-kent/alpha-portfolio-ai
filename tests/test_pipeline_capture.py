@@ -10,7 +10,8 @@ from app.db import LlmExchangeRow
 from app.exchanges import exchange_digest
 from tests.fake_chat import FakeChatModel, serve_chat
 from tests.test_assistant import unwritable_store
-from tests.test_llm_exchanges import extraction_event, upload
+from tests.test_llm_exchanges import extraction_event
+from tests.uploads import upload
 
 REPLY: dict = {"insights": []}
 
@@ -39,7 +40,7 @@ def test_an_exchange_stores_the_messages_raw_reply_usage_latency_and_graph_node(
     assert ex["usage"] == {"input_tokens": 11, "output_tokens": 7, "total_tokens": 18}
     assert isinstance(ex["latency_ms"], int) and ex["latency_ms"] >= 0
     assert (ex["graph_node"], ex["outcome"], ex["model"]) == ("generate", "ok", "fake-model-1")
-    assert (ex["task"], ex["prompt_version"]) == ("insight_extraction", "insight_extraction@v1")
+    assert (ex["task"], ex["prompt_version"]) == ("insight_extraction", "insight_extraction@v2")
 
 
 def test_the_model_is_asked_for_native_json_schema_output_named_after_the_task(app, login):

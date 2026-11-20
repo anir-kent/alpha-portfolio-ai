@@ -12,8 +12,19 @@ export type Insight = components["schemas"]["InsightOut"];
 export type InsightStatus = Insight["status"];
 export type InsightCounts = Record<InsightStatus, number>;
 
-export const KIND_LABEL: Record<Report["kind"], string> = { pdf: "PDF", text: "Text" };
+export const KIND_LABEL: Record<Report["kind"], string> = {
+  pdf: "PDF",
+  text: "Text",
+  docx: "Word",
+  pptx: "PowerPoint",
+  image: "Image",
+};
 const OUTCOME: Record<Report["extraction_status"], { tone: Tone; text: string; hint: string }> = {
+  pending: {
+    tone: "info",
+    text: "Extracting…",
+    hint: "The Report is being read and its Insights extracted in the background",
+  },
   complete: { tone: "pos", text: "Extracted", hint: "Insights were extracted by the LLM and await an Insight Review" },
   seeded: { tone: "mute", text: "Seeded", hint: "Insights were loaded from a human-verified seed, not extracted" },
   failed: { tone: "neg", text: "Extraction failed", hint: "No Insights could be extracted" },
@@ -35,11 +46,17 @@ export const CONFIDENCE: Record<Insight["confidence"], { tone: Tone; text: strin
   low: { tone: "warn", text: "Low confidence" },
 };
 
+/** How often the Report list refreshes while a Report is still being extracted. */
+const PENDING_POLL_MS = 2000;
+
 /** The Report list, every Report with all its Insights in every status. Report detail and the To review tab read the
  * same query, so counts agree across views and one cache update after an Insight Review moves them all. */
 export function useReports() {
   return useQuery({
     queryKey: ["reports"],
+    // Extraction runs in the background: poll while any Report is still pending, then stop.
+    refetchInterval: (query) =>
+      query.state.data?.items.some((r) => r.extraction_status === "pending") ? PENDING_POLL_MS : false,
     queryFn: async () => {
       // A network failure throws rather than returning an error; both read the same to the Analyst.
       const res = await api.GET("/api/reports").catch(() => null);

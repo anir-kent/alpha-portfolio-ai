@@ -25,7 +25,8 @@ sequenceDiagram
   participant R as AnalysisRuns + ProgressRegistry<br/>(process memory)
   participant W as Run thread<br/>(run_analysis)
   participant DB as SQLite: business rows
-  participant LLM as ModelLlm: pipeline graph<br/>+ capture callback
+  participant IDX as Report Index: SQLite Chunks<br/>+ vector store
+  participant LLM as ModelLlm: extraction graph<br/>+ capture callback
   participant EX as LLM Exchanges
   participant AU as Audit chain
 
@@ -161,7 +162,7 @@ sequenceDiagram
 
 ## 6.3 Report ingestion to Insight Review
 
-A Research Analyst uploads a Report. The platform splits it into pages and makes one LLM call to extract candidate Insights. Code keeps a candidate only if its subject is in the taxonomy and its quoted passage really appears on the cited page. Every kept Insight starts `pending`, and only an Insight the Analyst approves in Insight Review can influence anything downstream. After approval, the passage is checked again whenever a narrative cites it, by the Grounding validator.
+A Research Analyst uploads a Report. The platform converts it with Docling, splits it into Chunks and indexes them (the Report Index: SQLite holds the Chunks, a vector store holds their embeddings). One fixed Retrieval Query per taxonomy subject retrieves candidate Chunks from that Report, a Cohere reranker keeps the best few, and one LLM call over the union of them extracts candidate Insights ([ADR-0012](../adr/0012-insight-extraction-is-standard-rag-over-a-report-index.md)). Code keeps a candidate only if its subject is in the taxonomy and its quoted passage really appears on the cited page. Every kept Insight starts `pending`, and only an Insight the Analyst approves in Insight Review can influence anything downstream. After approval, the passage is checked again whenever a narrative cites it, by the Grounding validator.
 
 ```mermaid
 sequenceDiagram
@@ -176,22 +177,26 @@ sequenceDiagram
   participant G as Grounding validator
 
   RA->>API: POST /api/reports, PDF or text file (report:upload)
-  API->>API: over 20 MiB: 413
-  API->>S: ingest()
-  S->>S: split into pages: pypdf per PDF page, form feeds in text
-  Note over S: Not a PDF or UTF-8 text, no extractable text,<br/>or over 400,000 characters: 422, nothing stored
-  S->>DB: Report and its pages, commit
+  API->>API: over 20 MiB or 50 PDF pages: 413
+  API->>S: receive()
+  Note over S: Unsupported type, bytes that do not match it,<br/>or empty or non-UTF-8 text: 422, nothing stored
+  S->>DB: Report with extraction_status pending, commit
   S->>AU: report_ingested (actor: the Analyst)
-  S->>LLM: insight extraction, every page labelled [Page n]
+  API-->>RA: 201 Report, pending (extraction continues in a FastAPI background task with its own DB session)
+  S->>S: process(): Docling converts, page texts and Chunks
+  S->>IDX: Chunks to SQLite, embeddings to the vector store
+  S->>IDX: retrieve: one Retrieval Query per subject, k Chunks each, filtered to this Report
+  IDX-->>S: rerank (Cohere) keeps top_n per query, de-duplicated union
+  S->>LLM: insight extraction (generate), the Chunks labelled by chunk_id
   LLM->>EX: store Exchange (own DB session, commit)
   LLM-->>S: reply with Exchange id and hash, or LlmError
   alt LlmError or the reply fails the schema
     S->>DB: extraction_status failed, commit
-    S->>AU: insight_extracted, outcome failed, carrying the Exchange ref
+    S->>AU: insight_extracted, outcome failed (embedding, index, rerank or model error), carrying the Exchange ref when there is one
     API-->>RA: 201 Report marked extraction failed, no Insights
   else a reply that fits the schema
-    S->>S: keep a candidate only if its subject is in the taxonomy, its page exists<br/>and its passage appears on that page (normalised). Others are dropped with a reason.
-    S->>AU: insight_extracted, outcome ok, count kept, dropped reasons, carrying the Exchange ref
+    S->>S: keep a candidate only if its subject is in the taxonomy, its chunk was sent<br/>and its passage appears on the cited page (normalised). Others are dropped with a reason.
+    S->>AU: insight_extracted, outcome ok, count kept, dropped reasons, Retrieval Provenance, carrying the Exchange ref
     S->>DB: each kept Insight, status pending, linked to that event
     API-->>RA: 201 Report with its pending Insights
   end

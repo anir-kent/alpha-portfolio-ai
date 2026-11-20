@@ -174,10 +174,17 @@ function ReportDetail({ report, canUpload, canReview }: { report: Report; canUpl
   const fullyReviewed = canReview && report.insights.length > 0 && counts.pending === 0;
 
   const failed = report.extraction_status === "failed";
+  const pending = report.extraction_status === "pending";
   return (
     <div>
       <BackLink />
       <ReportHeader report={report} />
+      {pending && (
+        <p role="status" className="mb-3 flex items-center gap-2.5 font-semibold text-info">
+          <span className="run-spin" aria-hidden />
+          Extracting Insights in the background. This page updates when it finishes.
+        </p>
+      )}
       {failed && (
         <div className="mb-3 space-y-2">
           <ErrorLine>
@@ -191,8 +198,18 @@ function ReportDetail({ report, canUpload, canReview }: { report: Report; canUpl
         {report.insights.length === 0 ? (
           <Panel title="Insights" label="Insights">
             <Empty>
-              {failed ? "No Insights, because extraction failed." : "No Insights were extracted from this Report."} Its{" "}
-              <span className="mono">{report.page_count}</span> {pagesLabel(report.page_count)} can still be read.
+              {pending
+                ? "Insights will appear here once extraction finishes."
+                : failed
+                  ? "No Insights, because extraction failed."
+                  : "No Insights were extracted from this Report."}
+              {report.page_count > 0 && (
+                <>
+                  {" "}
+                  Its <span className="mono">{report.page_count}</span> {pagesLabel(report.page_count)} can still be
+                  read.
+                </>
+              )}
             </Empty>
           </Panel>
         ) : (

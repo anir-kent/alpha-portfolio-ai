@@ -239,6 +239,18 @@ class ReportPageRow(Base):
     text: Mapped[str] = mapped_column(Text)
 
 
+class ReportChunkRow(Base):
+    """One Chunk of a Report (the record of truth of the Report Index; the vector store can be rebuilt from it)."""
+
+    __tablename__ = "report_chunk"
+    id: Mapped[str] = mapped_column(String, primary_key=True)  # uuid5 of the Report id and the Chunk index
+    report_id: Mapped[str] = mapped_column(ForeignKey("reports.id"), index=True)
+    chunk_index: Mapped[int] = mapped_column()
+    page: Mapped[int] = mapped_column()  # 1-based; 1 for a format with no pages (Markdown, DOCX)
+    headings: Mapped[str] = mapped_column(Text, default="")  # section headings, joined by " > "
+    text: Mapped[str] = mapped_column(Text)
+
+
 class InsightRow(Base):
     """A cited claim from a Report. Pending until a Research Analyst approves; only approved ones are usable."""
 
@@ -258,6 +270,7 @@ class InsightRow(Base):
     decided_at: Mapped[str | None] = mapped_column(String, nullable=True)
     decision_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     extract_event_id: Mapped[int] = mapped_column()  # the audit event that produced it
+    chunk_id: Mapped[str | None] = mapped_column(String, nullable=True)  # the cited Chunk; None before the Report Index
 
 
 class GroundingResultRow(Base):
@@ -391,6 +404,7 @@ def make_session_factory(url: str) -> sessionmaker:
     _add_turn_columns(engine)
     _add_exchange_trajectory(engine)
     _add_exchange_graph_node(engine)
+    _add_insight_chunk_id(engine)
     return sessionmaker(engine, expire_on_commit=False)
 
 
@@ -432,6 +446,14 @@ def _add_exchange_graph_node(engine: Engine) -> None:
     with engine.begin() as conn:
         if "graph_node" not in {c["name"] for c in inspect(conn).get_columns("llm_exchanges")}:
             conn.execute(text("ALTER TABLE llm_exchanges ADD COLUMN graph_node VARCHAR"))
+
+
+def _add_insight_chunk_id(engine: Engine) -> None:
+    """An existing database predates the Report Index (ADR-0012): afterwards every Insight has a `chunk_id` column, empty
+    for the Insights extracted before it. The `report_chunk` table itself is created with the others."""
+    with engine.begin() as conn:
+        if "chunk_id" not in {c["name"] for c in inspect(conn).get_columns("insights")}:
+            conn.execute(text("ALTER TABLE insights ADD COLUMN chunk_id VARCHAR"))
 
 
 def _generalise_grounding_results(engine: Engine) -> None:
