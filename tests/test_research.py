@@ -1,6 +1,7 @@
-"""Seam: Report ingestion, Insight approval and the LLM interface. Insight extraction runs the pipeline's LLM Graph on a
-fake chat model that answers from the committed recordings (tests/fixtures/llm) unless a test scripts it; a live smoke
-test runs only with LLM_LIVE=1."""
+"""Seam: Report ingestion, Insight approval and the LLM interface. Insight extraction runs the extraction LLM Graph
+(retrieve, then one generate call) over a Report Index on fake embeddings, on a fake chat model that answers from the
+hand-authored cases (tests/fixtures/llm_cases.py) unless a test scripts it; a live smoke test runs only with LLM_LIVE=1,
+and the PDF test only with DOCLING_MODELS=1 (Docling's PDF pipeline downloads layout models)."""
 
 import json
 import os
@@ -62,45 +63,59 @@ def test_upload_produces_pending_cited_insights(login):
     r = upload(login("research_analyst"), title="Demo view")
     assert r.status_code == 201, r.text
     report = r.json()
-    assert report["title"] == "Demo view" and report["page_count"] == 2 and report["extraction_status"] == "complete"
+    assert report["title"] == "Demo view" and report["page_count"] == 1 and report["extraction_status"] == "complete"
     by_subject = {i["subject"]: i for i in report["insights"]}
     assert set(by_subject) == {"Information Technology", "Utilities", "equity"}
     tech = by_subject["Information Technology"]
     assert (tech["status"], tech["direction"], tech["confidence"], tech["page"]) == ("pending", "positive", "high", 1)
     assert tech["passage"] == "We are constructive on technology."
-    assert by_subject["equity"]["page"] == 2 and by_subject["equity"]["subject_kind"] == "asset_class"
+    assert by_subject["equity"]["page"] == 1 and by_subject["equity"]["subject_kind"] == "asset_class"
+    assert all(i["chunk_id"] for i in report["insights"])
     assert not any(i["human_verified"] for i in report["insights"])
 
 
-def test_pdf_upload_keeps_page_references(login):
+@pytest.mark.skipif(not os.environ.get("DOCLING_MODELS"), reason="downloads Docling's PDF models: set DOCLING_MODELS=1")
+def test_pdf_upload_keeps_page_references(login, allow_network):
     pdf = minimal_pdf(
-        ["Report cover", "We prefer equities over bonds for the next twelve months as growth stays resilient."]
+        ["Report cover.", "We prefer equities over bonds for the next twelve months as growth stays resilient."]
     )
     r = upload(login("research_analyst"), "pdf_view.pdf", pdf)
     assert r.status_code == 201, r.text
     assert r.json()["kind"] == "pdf" and r.json()["page_count"] == 2
+    # a paragraph with no closing punctuation would be joined to the next page's text: Docling's own behaviour
     page = login("advisor").get(f"/api/reports/{r.json()['id']}/pages/2")
     assert "We prefer equities over bonds" in page.json()["text"]
+    assert [i["page"] for i in r.json()["insights"]] == [2]
+
+
+def cite_first_chunk(request):
+    """A scripted reply: one Insight quoting the technology passage, cited to the first Chunk sent."""
+    chunk_id = request.user_prompt.split("[Chunk ", 1)[1][:36]
+    return {
+        "insights": [
+            {
+                "subject_kind": "sector",
+                "subject": "Information Technology",
+                "direction": "positive",
+                "confidence": "high",
+                "chunk_id": chunk_id,
+                "passage": "We are constructive on technology.",
+            }
+        ]
+    }
+
+
+@pytest.mark.skipif(not os.environ.get("DOCLING_MODELS"), reason="runs Docling's OCR models: set DOCLING_MODELS=1")
+def test_image_upload_is_read_by_ocr(login, allow_network):
+    r = upload(login("research_analyst"), "house_view_scan.png")
+    assert r.status_code == 201, r.text
+    assert r.json()["kind"] == "image" and r.json()["page_count"] == 1
+    text = login("advisor").get(f"/api/reports/{r.json()['id']}/pages/1").json()["text"]
+    assert "constructive on technology" in text
 
 
 def test_upload_runs_insight_extraction_off_the_event_loop(app, login):
-    model = serve_chat(
-        app,
-        FakeChatModel(
-            {
-                "insights": [
-                    {
-                        "subject_kind": "sector",
-                        "subject": "Information Technology",
-                        "direction": "positive",
-                        "confidence": "high",
-                        "page": 1,
-                        "passage": "We are constructive on technology.",
-                    }
-                ]
-            }
-        ),
-    )
+    model = serve_chat(app, FakeChatModel(cite_first_chunk))
     r = upload(login("research_analyst"))
     assert r.status_code == 201, r.text
     assert len(model.requests) == 1 and r.json()["extraction_status"] == "complete" and len(r.json()["insights"]) == 1
@@ -112,7 +127,7 @@ def test_every_llm_call_logs_model_and_prompt_version_to_the_audit_chain(app, lo
     ingested, extracted = events(app, report_id=report["id"])
     assert (ingested.type, ingested.actor_role) == ("report_ingested", "research_analyst")
     assert extracted.type == "insight_extracted" and extracted.actor_kind == "system"
-    assert (extracted.model, extracted.prompt_version) == ("demo-model", "insight_extraction@v1")
+    assert (extracted.model, extracted.prompt_version) == ("demo-model", "insight_extraction@v2")
     assert json.loads(extracted.parent_ids_json) == [ingested.id]
     with app.state.session_factory() as db:
         assert audit.verify(db).valid
@@ -123,9 +138,9 @@ def test_insights_failing_citation_or_taxonomy_checks_are_dropped_and_recorded(a
     assert [i["passage"] for i in report["insights"]] == ["Energy will double next year according to our model."]
     payload = json.loads(events(app, report_id=report["id"], type="insight_extracted")[0].payload_json)
     assert {d["reason"] for d in payload["dropped"]} == {
-        "passage not found on cited page",
+        "passage not found in cited chunk",
         "subject not in taxonomy",
-        "cited page does not exist",
+        "cited chunk was not among the chunks sent",
     }
 
 
@@ -168,7 +183,7 @@ def test_only_approved_insights_are_retrievable_for_use(app, login):
 
     visible = advisor.get("/api/insights").json()["items"]
     assert [i["subject"] for i in visible] == ["Information Technology"]
-    assert visible[0]["page"] == 1 and visible[0]["passage"]
+    assert visible[0]["page"] == 1 and visible[0]["passage"] and visible[0]["chunk_id"]
     assert advisor.get("/api/insights", params={"subject": "Utilities"}).json()["items"] == []
 
     types = [e.type for e in events(app, report_id=tech["report_id"])]
@@ -252,15 +267,27 @@ def test_seeding_twice_adds_nothing(seeded_research):
 
 
 @pytest.mark.skipif(not os.environ.get("LLM_LIVE"), reason="live smoke test: set LLM_LIVE=1 and APP_LLM_API_KEY")
-def test_live_smoke_extraction(tmp_path, allow_network):
+def test_live_smoke_extraction(tmp_path, allow_network, monkeypatch):
+    from app import extraction
+    from app.audit import Actor
     from app.chat_model import get_chat_model
     from app.db import make_session_factory
     from app.exchanges import build_llm
-    from app.reports import extract_pages, extraction_request
+    from app.report_index import ReportIndex
     from app.settings import Settings
 
-    s = Settings()
-    _, pages = extract_pages("v.txt", (FIXTURES / "house_view_demo.txt").read_bytes())
+    monkeypatch.undo()  # the offline doubles: this test calls the real embedding endpoint and tokenizer
+    s = Settings(vector_store="memory")
     store = make_session_factory(f"sqlite:///{tmp_path / 'smoke.db'}")
     llm = build_llm(s, store, chat_model=get_chat_model(s))
-    assert llm.complete(extraction_request(pages)).content["insights"]
+    with store() as db:
+        _, insights = extraction.ingest(
+            db,
+            llm,
+            ReportIndex(s),
+            title="v",
+            filename="v.md",
+            content=(FIXTURES / "house_view_demo.md").read_bytes(),
+            uploader=Actor.system("smoke"),
+        )
+    assert insights

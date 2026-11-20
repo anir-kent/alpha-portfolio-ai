@@ -29,6 +29,7 @@ def demo_settings(directory: Path) -> Settings:
         "seed_user_password": SEED_PASSWORD,
         "market_data_snapshot_path": str(directory / "snapshot.json"),
         "seed_dir": str(ROOT / "data" / "seed"),
+        "vector_store": "memory",
     }
     return Settings(_env_file=None, **values)  # `_env_file=None`: a pydantic-settings init option, read no .env
 

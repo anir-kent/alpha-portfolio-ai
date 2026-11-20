@@ -6,11 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app import reports
+from app import extraction, reports
 from app.audit import Actor
 from app.db import InsightRow, ReportPageRow, ReportRow, User
-from app.deps import get_db, get_llm, require
-from app.llm import LlmClient
+from app.deps import get_db, get_llm, get_report_index, require
+from app.exchanges import ModelLlm
+from app.report_index import ReportIndex
 
 router = APIRouter(prefix="/api", tags=["research"])
 
@@ -25,6 +26,7 @@ class InsightOut(BaseModel):
     direction: Literal["positive", "neutral", "negative"]
     confidence: Literal["low", "medium", "high"]
     page: int
+    chunk_id: str | None
     passage: str
     status: Literal["pending", "approved", "rejected"]
     human_verified: bool
@@ -37,7 +39,7 @@ class ReportOut(BaseModel):
     id: str
     title: str
     filename: str
-    kind: Literal["pdf", "text"]
+    kind: Literal["pdf", "text", "docx", "pptx", "image"]
     uploaded_by: str
     uploaded_at: str
     page_count: int
@@ -84,7 +86,8 @@ async def upload_report(
     title: str | None = None,
     user: User = Depends(require("report:upload")),
     db: Session = Depends(get_db),
-    llm: LlmClient = Depends(get_llm),
+    llm: ModelLlm = Depends(get_llm),
+    index: ReportIndex = Depends(get_report_index),
 ):
     content = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(content) > MAX_UPLOAD_BYTES:
@@ -95,6 +98,7 @@ async def upload_report(
         _ingest_and_render,
         db,
         llm,
+        index,
         title=title or filename,
         filename=filename,
         content=content,
@@ -103,10 +107,10 @@ async def upload_report(
 
 
 def _ingest_and_render(
-    db: Session, llm: LlmClient, *, title: str, filename: str, content: bytes, uploader: Actor
+    db: Session, llm: ModelLlm, index: ReportIndex, *, title: str, filename: str, content: bytes, uploader: Actor
 ) -> ReportOut:
     try:
-        row, _ = reports.ingest(db, llm, title=title, filename=filename, content=content, uploader=uploader)
+        row, _ = extraction.ingest(db, llm, index, title=title, filename=filename, content=content, uploader=uploader)
     except reports.ReportError as e:
         raise HTTPException(422, str(e)) from e
     return _report(db, row)

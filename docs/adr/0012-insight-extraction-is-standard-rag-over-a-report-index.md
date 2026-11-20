@@ -47,3 +47,20 @@ Insight extraction no longer sends every page of a Report in one prompt. It foll
 - **Install weight:** Docling brings PyTorch and model downloads, so setup pre-fetches the models. Tests use Markdown/DOCX fixtures, fake embeddings, `InMemoryVectorStore` and a fake reranker, so they need no network access and no model downloads.
 - **Existing Reports:** existing Reports and Insights stay as they were extracted. A script re-indexes them.
 - **Second key:** `APP_COHERE_API_KEY` is added alongside the OpenRouter key.
+
+## Implementation notes (ticket 01, checked against Context7 and the installed packages)
+
+Deviations from the plan above, each with its reason:
+
+- **Page-less formats are one page.** Docling gives Markdown and DOCX no page provenance (`DoclingDocument.pages` is empty and every item's `prov` is empty). Their Chunks cite page 1 and their page text is the whole document's Markdown. Only PDF and PPTX are paginated. Plain text goes through Docling's Markdown reader, so the old form-feed page breaks of `.txt` uploads no longer make pages (a form feed is read as a paragraph break). Seeded Reports keep their pypdf pages until they are re-indexed (ticket 05).
+- **Page texts from the same conversion** are taken by passing the loader a recording wrapper as its `converter` (the documented `ConversionBackend` seam), which keeps the `DoclingDocument` for `export_to_markdown(page_no=n)`. `DoclingLoader` itself does not expose the document.
+- **Flat metadata** comes from a custom `BaseMetaExtractor` (`page`, `headings` joined by `" > "`), as the loader's default nests `dl_meta`.
+- **Tables as Markdown** needs a `serializer_provider` on `HybridChunker` (`MarkdownTableSerializer`): Docling's default chunk serialisation is triplet notation.
+- **The Chunk text** stored and embedded is the chunker's contextualised text (section headings, then the body), as Docling recommends for embedding. The passage check is a normalised substring test against it.
+- **The tokenizer** is `tiktoken` (via Docling's `OpenAITokenizer`), which fetches its encoding on first use. `chunk_tokenizer` is the one seam, and tests replace it with a word counter; `encoding_name_for_model` is used where only the name is needed, because loading the encoding would hit the network.
+- **Retrieval Provenance before reranking** records chunk ids, pages and ranks only: a vector retriever returns no score. `relevance_score` is recorded when a Document carries one, which is what `CohereRerank` adds (ticket 02).
+- **Embeddings** are the second provider seam: `app/report_index.py` imports `langchain_openai` for `OpenAIEmbeddings`, alongside `chat_model.py`.
+- **`report_chunk`** is the table name the spec uses, and it is created with the other tables. The only migration is the nullable `insights.chunk_id` column (`_add_insight_chunk_id`).
+- **Docling's PDF pipeline** downloads its layout and table models on first use (about 38 s for a two-page PDF here); the Markdown and DOCX pipelines download nothing.
+- **`memory` backend and `ReportIndex`.** `get_vector_store` and `report_filter` stay the only functions that branch on the backend (`chroma` and `memory` so far). `ReportIndex` is a thin holder the app keeps in `app.state`: it builds the store on first use, so the app starts without an embedding key, and a test sets the store. It adds no backend knowledge of its own. The settings `APP_VECTOR_STORE`, `APP_CHROMA_DIR`, `APP_EMBEDDING_MODEL` and `APP_RETRIEVAL_K` are added now; the rerank settings arrive with ticket 02.
+- **Images.** PNG and JPEG uploads go through Docling's image pipeline with the same OCR and table options as a PDF page, and are one page. OCR is RapidOCR (Docling's auto choice here), so the OCR weights are part of the models setup pre-fetches. Small text can be misread: the Insight's passage check holds the model to what OCR actually produced, so a misread quote is dropped, not repaired.

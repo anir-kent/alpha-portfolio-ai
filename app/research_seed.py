@@ -45,9 +45,9 @@ def _scorecard_insights(path: Path) -> list[dict]:
 
 
 def _seed_insight(db: Session, spec: dict, report_event: int, pages: list[str]) -> None:
-    e = reports.ExtractedInsight(**{k: spec[k] for k in reports.ExtractedInsight.model_fields})
+    e = reports.InsightFields(**{k: spec[k] for k in reports.InsightFields.model_fields})
     if not reports.valid_subject(e.subject_kind, e.subject) or not reports.passage_on_page(
-        e.passage, pages[e.page - 1]
+        e.passage, pages[spec["page"] - 1]
     ):
         raise ValueError(f"Seed Insight does not match its Report: {spec}")
     provenance = {"human_verified": True, "source": spec.get("source", "insights.json")}
@@ -59,7 +59,7 @@ def _seed_insight(db: Session, spec: dict, report_event: int, pages: list[str]) 
         parents=[report_event],
         report_id=spec["report_id"],
     )
-    row = reports.add_insight(db, spec["report_id"], e, extract_event_id=event, human_verified=True)
+    row = reports.add_insight(db, spec["report_id"], e, page=spec["page"], extract_event_id=event, human_verified=True)
     reports.decide(db, row, SEED, "approve", "Seed: approved as human-verified")
 
 

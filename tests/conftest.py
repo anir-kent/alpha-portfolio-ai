@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.main import create_app
 from tests.fake_chat import DemoPipeline
+from tests.fake_index import fake_embeddings, word_tokenizer
 from tests.fixtures.demo import SEED_PASSWORD, demo_settings
 
 ROLES = [
@@ -57,6 +58,13 @@ def pipeline_chat_model(monkeypatch):
     """Every app the tests build runs its LLM Graphs on `DemoPipeline`, a fake chat model (ADR-0011), unless a test serves
     its own (`tests.fake_chat.serve_chat`)."""
     monkeypatch.setattr("app.exchanges.get_chat_model", lambda settings: DemoPipeline())
+
+
+@pytest.fixture(autouse=True)
+def offline_index(monkeypatch):
+    """The Report Index runs on fake embeddings and a word-count tokenizer: no provider call, no model download."""
+    monkeypatch.setattr("app.report_index.get_embeddings", fake_embeddings)
+    monkeypatch.setattr("app.report_index.chunk_tokenizer", word_tokenizer)
 
 
 @pytest.fixture

@@ -41,7 +41,7 @@ def test_extraction_is_captured_and_anchored_in_the_audit_event(app, login):
     ex = r.json()
     assert ex["hash"] == payload["exchanges"][0]["exchange_hash"]
     assert (ex["outcome"], ex["task"], ex["graph_node"]) == ("ok", "insight_extraction", "generate")
-    assert (ex["prompt_version"], ex["model"]) == ("insight_extraction@v1", "demo-model")
+    assert (ex["prompt_version"], ex["model"]) == ("insight_extraction@v2", "demo-model")
     assert "We are constructive on technology." in ex["user_prompt"]
     assert ex["system_text"] and ex["reply_schema"]["properties"]["insights"]
     assert {i["subject"] for i in ex["parsed_content"]["insights"]} == {"Information Technology", "Utilities", "equity"}

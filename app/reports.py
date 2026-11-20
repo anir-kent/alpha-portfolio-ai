@@ -1,8 +1,9 @@
 """Report ingestion and the Insight lifecycle.
 
-A Report is split into pages, the LLM proposes structured Insights, and every Insight starts pending. Only an approved
-Insight is retrievable for tilt use (`approved_insights`). An Insight is kept only if its subject is in our taxonomy and
-its passage really appears on the cited page; the full grounding validator (ticket 10) builds on `passage_on_page`.
+A Report is chunked and indexed, the LLM proposes structured Insights from the retrieved Chunks (`app.extraction`), and
+every Insight starts pending. Only an approved Insight is retrievable for tilt use (`approved_insights`). An Insight is
+kept only if its subject is in our taxonomy and its passage really appears in the cited Chunk; the full grounding
+validator builds on `passage_on_page`.
 """
 
 import io
@@ -11,7 +12,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 from sqlalchemy import select
@@ -20,25 +21,25 @@ from sqlalchemy.orm import Session
 from app import audit
 from app.audit import Actor, format_ts
 from app.db import InsightRow, ReportPageRow, ReportRow
-from app.llm import LlmClient, LlmError, LlmRequest, exchange_ref
-from app.prompts import INSIGHT_EXTRACTION
+from app.report_index import ReportError
 from app.universe import GICS_SECTORS
 
 ASSET_CLASSES = ("equity", "bond", "cash")
 MAX_CHARS = 400_000
 
 
-class ReportError(Exception):
-    """The upload cannot be turned into a Report."""
-
-
-class ExtractedInsight(BaseModel):
+class InsightFields(BaseModel):
     subject_kind: Literal["sector", "asset_class"]
     subject: str
     direction: Literal["positive", "neutral", "negative"]
     confidence: Literal["low", "medium", "high"]
-    page: int
     passage: str
+
+
+class ExtractedInsight(InsightFields):
+    """What the model proposes: the Chunk it cites and the quote. Code derives the page from the Chunk."""
+
+    chunk_id: str
 
 
 class Extraction(BaseModel):
@@ -61,6 +62,10 @@ def normalise(text: str) -> str:
 def passage_on_page(passage: str, page_text: str) -> bool:
     p = normalise(passage)
     return bool(p) and p in normalise(page_text)
+
+
+def passage_in_chunk(passage: str, chunk_text: str) -> bool:
+    return passage_on_page(passage, chunk_text)
 
 
 def valid_subject(kind: str, subject: str) -> bool:
@@ -94,17 +99,6 @@ def extract_pages(filename: str, content: bytes) -> tuple[str, list[str]]:
     if sum(len(p) for p in pages) > MAX_CHARS:
         raise ReportError(f"Report is too long (limit {MAX_CHARS} characters)")
     return kind, pages
-
-
-def extraction_request(pages: list[str]) -> LlmRequest:
-    user = "\n\n".join(f"[Page {i}]\n{text.strip()}" for i, text in enumerate(pages, 1))
-    return LlmRequest(
-        task=INSIGHT_EXTRACTION.name,
-        prompt_version=INSIGHT_EXTRACTION.label,
-        system=INSIGHT_EXTRACTION.system,
-        user=user,
-        schema=EXTRACTION_SCHEMA,
-    )
 
 
 def new_report_id() -> str:
@@ -143,8 +137,10 @@ def store_report(
 def add_insight(
     db: Session,
     report_id: str,
-    e: ExtractedInsight,
+    e: InsightFields,
     *,
+    page: int,
+    chunk_id: str | None = None,
     extract_event_id: int,
     human_verified: bool = False,
 ) -> InsightRow:
@@ -154,7 +150,8 @@ def add_insight(
         subject=e.subject,
         direction=e.direction,
         confidence=e.confidence,
-        page=e.page,
+        page=page,
+        chunk_id=chunk_id,
         passage=e.passage,
         status="pending",
         human_verified=human_verified,
@@ -164,79 +161,6 @@ def add_insight(
     db.add(row)
     db.commit()
     return row
-
-
-def ingest(
-    db: Session,
-    llm: LlmClient,
-    *,
-    title: str,
-    filename: str,
-    content: bytes,
-    uploader: Actor,
-) -> tuple[ReportRow, list[InsightRow]]:
-    """Store the Report, ask the LLM for Insights and keep the cited, in-taxonomy ones as pending."""
-    kind, pages = extract_pages(filename, content)
-    report_id = new_report_id()
-    row = store_report(
-        db,
-        report_id=report_id,
-        title=title,
-        filename=filename,
-        kind=kind,
-        pages=pages,
-        uploaded_by=uploader.name,
-        human_verified=False,
-        extraction_status="complete",
-    )
-    ingested = audit.record(
-        db,
-        "report_ingested",
-        uploader,
-        {"title": title, "filename": filename, "kind": kind, "page_count": len(pages)},
-        report_id=report_id,
-    )
-    request = extraction_request(pages)
-    try:
-        response = llm.complete(request)
-        extraction = Extraction.model_validate(response.content)
-    except (LlmError, ValidationError) as e:
-        row.extraction_status, row.extraction_error = "failed", str(e)[:500]
-        db.commit()
-        audit.record(
-            db,
-            "insight_extracted",
-            Actor.system("insight-extractor", prompt_version=request.prompt_version),
-            {
-                "outcome": "failed",
-                "insight_count": 0,
-                "error": str(e)[:500],
-                **exchange_ref(e if isinstance(e, LlmError) else response),
-            },
-            parents=[ingested],
-            report_id=report_id,
-        )
-        return row, []
-    kept, dropped = [], []
-    for ins in extraction.insights:
-        if not valid_subject(ins.subject_kind, ins.subject):
-            dropped.append({"subject": ins.subject, "reason": "subject not in taxonomy"})
-        elif not 1 <= ins.page <= len(pages):
-            dropped.append({"subject": ins.subject, "reason": "cited page does not exist"})
-        elif not passage_on_page(ins.passage, pages[ins.page - 1]):
-            dropped.append({"subject": ins.subject, "reason": "passage not found on cited page"})
-        else:
-            kept.append(ins)
-    system = Actor.system("insight-extractor", model=response.model, prompt_version=response.prompt_version)
-    event = audit.record(
-        db,
-        "insight_extracted",
-        system,
-        {"outcome": "ok", "insight_count": len(kept), "dropped": dropped, **exchange_ref(response)},
-        parents=[ingested],
-        report_id=report_id,
-    )
-    return row, [add_insight(db, report_id, ins, extract_event_id=event) for ins in kept]
 
 
 def decide(

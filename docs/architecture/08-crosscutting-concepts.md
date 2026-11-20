@@ -24,7 +24,7 @@ The rules every component follows. Each subsection states the rule, where it is 
 
 | Prompt | Version | Logged as |
 | --- | --- | --- |
-| `insight_extraction` | `v1` | `insight_extraction@v1` |
+| `insight_extraction` | `v2` | `insight_extraction@v2` |
 | `research_tilt` | `v1` | `research_tilt@v1` |
 | `recommendation_narrative` | `v1` | `recommendation_narrative@v1` |
 | `priority_narrative` | `v1` | `priority_narrative@v1` |
