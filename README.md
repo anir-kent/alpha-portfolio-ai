@@ -36,9 +36,27 @@ source .venv/bin/activate
 cp .env.example .env                    # then set APP_SEED_USER_PASSWORD (and the keys below, if you need them)
 (cd frontend && npm ci && npm run gen:api)   # frontend dependencies and the typed API client
 uv run pre-commit install               # optional: the lint, format and type checks on each commit
+docling-tools models download           # one-off: the Docling layout, table and OCR models (about 0.7 GB, cached in ~/.cache/docling)
 ```
 
-Every setting is an `APP_*` variable, read from the environment or the git-ignored `.env` (`app/settings.py`). A variable exported in your shell outranks `.env`, so check `env | grep ^APP_` when a setting seems ignored. Secrets are never committed. Only two features need a key: `APP_TWELVE_DATA_API_KEY` for the market-data refresh, and `APP_LLM_API_KEY` for every AI step and the Assistant (the engine, the Queue and the approvals work without it).
+**Install size.** Docling brings PyTorch, so `uv sync` is large (about 1.8 GB in `.venv`) and the model download adds about 0.7 GB. Without the download step, the first uploaded PDF fetches the models itself, which is slow. The test suite needs neither the models nor a network: it uses Markdown fixtures, fake embeddings and a fake reranker.
+
+Every setting is an `APP_*` variable, read from the environment or the git-ignored `.env` (`app/settings.py`). A variable exported in your shell outranks `.env`, so check `env | grep ^APP_` when a setting seems ignored. Secrets are never committed. Only three keys matter: `APP_TWELVE_DATA_API_KEY` for the market-data refresh, `APP_LLM_API_KEY` for every AI step, the Assistant and the embeddings, and `APP_COHERE_API_KEY` for reranking (needed whenever `APP_LLM_API_KEY` is set). The engine, the Queue and the approvals work without any of them.
+
+The Report Index settings (all optional; `.env.example` lists the defaults):
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `APP_VECTOR_STORE` | `chroma` | `chroma` or `qdrant` (`memory` is for tests) |
+| `APP_CHROMA_DIR` | `data/chroma` | where embedded Chroma keeps its files |
+| `APP_QDRANT_DIR` / `APP_QDRANT_URL` | `data/qdrant` / unset | embedded Qdrant on disk, or a Qdrant server when the URL is set |
+| `APP_EMBEDDING_MODEL` | `openai/text-embedding-3-small` | embeddings, through the `APP_LLM_BASE_URL` gateway |
+| `APP_RETRIEVAL_K` | `10` | candidate Chunks per Retrieval Query, before reranking |
+| `APP_COHERE_API_KEY` | unset | Cohere key for reranking |
+| `APP_RERANK_MODEL` | `rerank-v3.5` | the Cohere reranker |
+| `APP_RERANK_TOP_N` | `4` | Chunks kept per Retrieval Query after reranking |
+
+The vector store is disposable: the Chunks live in SQLite. Changing `APP_EMBEDDING_MODEL` or `APP_VECTOR_STORE` needs a re-index (below).
 
 ## Seed and run
 
@@ -48,6 +66,7 @@ A fresh seed starts from an empty database:
 rm -f data/app.db                       # fresh start (the database is created on first use)
 uv run python -m app.seeder             # 25 synthetic Clients; --seed N for another deterministic set
 uv run python -m app.research_seed      # 5 Reports and the human-verified Insights; idempotent
+uv run python -m scripts.reindex_reports   # optional: chunk and embed the seeded Reports (needs the keys); --rebuild re-embeds from SQLite
 ```
 
 Then start the API and the UI in two terminals:
@@ -58,6 +77,7 @@ cd frontend && npm run dev              # http://localhost:5173, which proxies /
 ```
 
 - Log in with any role name as the username (`advisor`, `relationship_manager`, `compliance_officer`, `investment_committee`, `auditor`, `research_analyst`, `platform_owner`, `portfolio_manager`). The password for every role is `APP_SEED_USER_PASSWORD`.
+- As `research_analyst`, open Research and upload a PDF, DOCX, PPTX, Markdown or text Report (up to 20 MiB, and 50 pages for a PDF). It shows as pending while the background job runs Docling, indexes the Chunks and makes the one extraction call. The Insights then appear under To review. This needs `APP_LLM_API_KEY` and `APP_COHERE_API_KEY`.
 - As `advisor`, start an Analysis Run from the Queue. You can also start one with `uv run python -m app.analysis` or `POST /api/analysis/runs`. The OpenAPI docs are at <http://localhost:8000/docs>.
 - With `APP_LLM_API_KEY` set, the Analysis Run's AI steps and the Assistant call the model live. Without it each AI step is reported as failed, and the deterministic results still stand.
 

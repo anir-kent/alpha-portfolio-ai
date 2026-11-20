@@ -15,6 +15,7 @@ flowchart LR
         clients["app.seeder (one-off)"]
         research["app.research_seed (one-off)"]
         db[("data/app.db — SQLite")]
+        vec[("data/chroma — vector store, rebuildable from SQLite")]
         inputs["Market snapshot, fund look-through, seed Reports"]
         clients --> db
         research --> db
@@ -24,8 +25,10 @@ flowchart LR
         browser -->|HTTP| vite
         vite -->|"/api proxy; includes SSE"| api
         api --> db
+        api --> vec
     end
-    api -->|"HTTPS"| provider["Configured OpenAI-compatible LLM endpoint"]
+    api -->|"HTTPS"| provider["Configured OpenAI-compatible LLM and embeddings endpoint"]
+    api -->|"HTTPS"| cohere["Cohere rerank API"]
     subgraph ci["GitHub Actions — isolated runners"]
         checkout["Repository checkout"]
         backend["Backend: uv sync, Ruff, mypy, pytest"]
@@ -37,7 +40,7 @@ flowchart LR
     end
 ```
 
-The [README seed and run instructions](../../README.md#seed-and-run) are the executable runbook. After dependency setup and activation of `.venv`, run `uv run python -m app.seeder`, then `uv run python -m app.research_seed` against the same `APP_DATABASE_URL` (default `sqlite:///./data/app.db`). The Client seeder replaces the synthetic Client dataset; it is a setup command, not a service or a safe production refresh. The Research seed is idempotent and inserts human-verified Insights without an LLM call. Use a fresh database for the documented demo.
+The [README seed and run instructions](../../README.md#seed-and-run) are the executable runbook. After dependency setup and activation of `.venv`, run `uv run python -m app.seeder`, then `uv run python -m app.research_seed` against the same `APP_DATABASE_URL` (default `sqlite:///./data/app.db`). The Client seeder replaces the synthetic Client dataset; it is a setup command, not a service or a safe production refresh. The Research seed is idempotent and inserts human-verified Insights without an LLM call. Use a fresh database for the documented demo. Setup also runs `docling-tools models download` once (about 0.7 GB in `~/.cache/docling`), so the first PDF upload does not fetch models; `uv run python -m scripts.reindex_reports` indexes the seeded Reports. The vector store (`data/chroma`, or Qdrant) is disposable: `--rebuild` re-embeds it from the Chunks in SQLite.
 
 Start the API with `uv run uvicorn app.main:create_app --factory --port 8000` and the UI with `cd frontend && npm run dev`. Vite serves the SPA at `http://localhost:5173` and proxies `/api`, `/docs` and `/openapi.json` to port 8000. SSE uses the same API proxy. Startup creates missing tables, runs the idempotent migrations, seeds role users and marks unfinished Analysis Runs interrupted. Run Step progress, the one-in-flight guard and audit write serialization remain in the single API process ([ADR-0008](../adr/0008-one-process-on-sqlite-with-hand-written-migrations.md)). Do not add workers or replicas to this topology.
 
