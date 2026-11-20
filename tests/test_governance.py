@@ -58,7 +58,7 @@ def test_quality_panel_with_no_grounding_data_has_no_pass_rate(login, app):
 
 
 def test_prompt_log_lists_each_prompt_version_used_with_when(ctx, login):  # noqa: F811
-    from tests.test_research import upload  # the extraction call is logged with its prompt version
+    from tests.uploads import upload  # the extraction call is logged with its prompt version
 
     log = {p["prompt_version"]: p for p in governance(login)["prompt_log"]}
     assert "insight_extraction@v2" in log  # ctx uploaded a Report

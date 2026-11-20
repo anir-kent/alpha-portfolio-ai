@@ -20,7 +20,7 @@ from tests.fake_chat import ByTask, DemoPipeline, FakeChatModel, serve_chat
 from tests.runs import run_and_wait
 from tests.test_portfolio import url
 from tests.test_queue import seeded  # noqa: F401  (fixture)
-from tests.test_research import upload
+from tests.uploads import upload
 
 EQUITY_FUNDS = {"SPY", "XLV", "XLP", "XLK", "XLI"}
 

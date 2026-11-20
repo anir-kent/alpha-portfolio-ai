@@ -15,13 +15,9 @@ from app.db import AuditEventRow
 from app.research_seed import seed_research
 from tests.conftest import ROLES
 from tests.fake_chat import FakeChatModel, serve_chat
+from tests.uploads import upload, upload_pending
 
 FIXTURES = Path(__file__).parent / "fixtures"
-
-
-def upload(c, name="house_view_demo.txt", content=None, **params):
-    content = (FIXTURES / name).read_bytes() if content is None else content
-    return c.post("/api/reports", files={"file": (name, content)}, params=params)
 
 
 def events(app, **where):
@@ -164,6 +160,55 @@ def test_unusable_uploads_are_rejected(login, name, content):
     assert upload(login("research_analyst"), name, content).status_code == 422
 
 
+# --- background ingest -------------------------------------------------------------------------------------------
+
+
+def test_upload_returns_pending_at_once_and_the_background_job_completes_it(app, login):
+    c = login("research_analyst")
+    r = upload_pending(c)
+    assert r.status_code == 201, r.text
+    assert r.json()["extraction_status"] == "pending" and r.json()["insights"] == []
+    ingested = events(app, report_id=r.json()["id"], type="report_ingested")
+    assert len(ingested) == 1  # recorded by the request, before the job runs
+    done = c.get(f"/api/reports/{r.json()['id']}").json()
+    assert done["extraction_status"] == "complete" and done["page_count"] == 1 and len(done["insights"]) == 3
+    assert [e.type for e in events(app, report_id=r.json()["id"])] == ["report_ingested", "insight_extracted"]
+
+
+def test_background_failure_marks_the_report_failed_with_a_failed_event(app, login):
+    c = login("research_analyst")
+    r = upload_pending(c, content=b"A report the demo model has no reply for.\n")
+    assert r.json()["extraction_status"] == "pending"
+    done = c.get(f"/api/reports/{r.json()['id']}").json()
+    assert done["extraction_status"] == "failed" and "no reply for this Report" in done["extraction_error"]
+    assert (
+        json.loads(events(app, report_id=r.json()["id"], type="insight_extracted")[0].payload_json)["outcome"]
+        == "failed"
+    )
+
+
+def test_a_report_that_cannot_be_read_fails_in_the_background(login, monkeypatch):
+    def boom(*args, **kwargs):
+        raise RuntimeError("converter exploded")
+
+    monkeypatch.setattr("app.extraction.parse_report", boom)
+    c = login("research_analyst")
+    done = c.get(f"/api/reports/{upload_pending(c).json()['id']}").json()
+    assert done["extraction_status"] == "failed" and "converter exploded" in done["extraction_error"]
+
+
+def test_oversized_uploads_are_rejected_with_413(login, monkeypatch):
+    monkeypatch.setattr("app.routers.reports.MAX_UPLOAD_BYTES", 10)
+    r = upload_pending(login("research_analyst"), content=b"x" * 11)
+    assert r.status_code == 413 and "too large" in r.json()["detail"]
+
+
+def test_a_pdf_over_the_page_limit_is_rejected_with_413(login, monkeypatch):
+    monkeypatch.setattr("app.report_index.MAX_PAGES", 2)
+    r = upload_pending(login("research_analyst"), "long.pdf", minimal_pdf(["a", "b", "c"]))
+    assert r.status_code == 413 and "2 pages" in r.json()["detail"]
+
+
 # --- approval gate ---------------------------------------------------------------------------------------------
 
 
@@ -271,7 +316,7 @@ def test_live_smoke_extraction(tmp_path, allow_network, monkeypatch):
     from app import extraction
     from app.audit import Actor
     from app.chat_model import get_chat_model
-    from app.db import make_session_factory
+    from app.db import InsightRow, make_session_factory
     from app.exchanges import build_llm
     from app.report_index import ReportIndex
     from app.settings import Settings
@@ -281,13 +326,17 @@ def test_live_smoke_extraction(tmp_path, allow_network, monkeypatch):
     store = make_session_factory(f"sqlite:///{tmp_path / 'smoke.db'}")
     llm = build_llm(s, store, chat_model=get_chat_model(s))
     with store() as db:
-        _, insights = extraction.ingest(
-            db,
-            llm,
-            ReportIndex(s),
-            title="v",
-            filename="v.md",
-            content=(FIXTURES / "house_view_demo.md").read_bytes(),
-            uploader=Actor.system("smoke"),
+        content = (FIXTURES / "house_view_demo.md").read_bytes()
+        row, ingested = extraction.receive(
+            db, title="v", filename="v.md", content=content, uploader=Actor.system("smoke")
         )
-    assert insights
+        extraction.process(
+            store, llm, ReportIndex(s), report_id=row.id, filename="v.md", content=content, ingested_event_id=ingested
+        )
+        assert db.scalars(select(InsightRow).where(InsightRow.report_id == row.id)).first()
+
+
+def test_insights_carry_the_section_heading_of_their_cited_chunk(login):
+    report = upload(login("research_analyst"), "house_view_demo.md").json()
+    tech = next(i for i in report["insights"] if i["subject"] == "Information Technology")
+    assert tech["headings"] == "Northwind House View, Q4 2026 > Sectors"

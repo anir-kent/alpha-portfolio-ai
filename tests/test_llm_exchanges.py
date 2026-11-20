@@ -13,14 +13,10 @@ from sqlalchemy import select, text
 from app import audit
 from app.db import AuditEventRow
 from tests.conftest import ROLES
+from tests.uploads import upload
 
 FIXTURES = Path(__file__).parent / "fixtures"
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
-
-
-def upload(c, name="house_view_demo.txt", content=None):
-    content = (FIXTURES / name).read_bytes() if content is None else content
-    return c.post("/api/reports", files={"file": (name, content)})
 
 
 def extraction_event(app, report_id):

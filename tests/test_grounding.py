@@ -13,7 +13,7 @@ from app.research_seed import seed_research
 from tests.runs import run_and_wait
 from tests.test_llm_exchange_api import add_exchange
 from tests.test_queue import seeded  # noqa: F401  (fixture)
-from tests.test_research import upload
+from tests.uploads import upload
 
 QUOTE = "We are constructive on technology."
 

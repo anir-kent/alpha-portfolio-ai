@@ -17,8 +17,9 @@ from tests.chat_completions import completion
 from tests.conftest import SEED_PASSWORD
 from tests.fake_chat import serve_chat
 from tests.test_ai_recommendations import ai  # noqa: F401  (fixture)
-from tests.test_llm_exchanges import extraction_event, upload
+from tests.test_llm_exchanges import extraction_event
 from tests.test_queue import seeded  # noqa: F401  (fixture)
+from tests.uploads import upload
 
 API_KEY = "sk-live-secret-do-not-store"
 

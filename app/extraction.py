@@ -11,7 +11,7 @@ page from the Chunk. Retrieval Provenance is collected with LangChain's retrieve
 `insight_extracted` Audit Event.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, NotRequired, TypedDict
 from uuid import UUID
@@ -29,13 +29,15 @@ from sqlalchemy.orm import Session
 
 from app import audit
 from app.audit import Actor
-from app.db import ReportChunkRow, ReportRow
+from app.db import ReportChunkRow, ReportPageRow, ReportRow
 from app.exchanges import ModelLlm
 from app.llm import LlmError, LlmRequest, LlmResponse, exchange_ref
 from app.llm_graph import GENERATE, PipelineContext, generate
 from app.prompts import INSIGHT_EXTRACTION, RETRIEVAL_QUERIES, RetrievalQuery
 from app.report_index import (
+    ReportError,
     ReportIndex,
+    check_upload,
     chunker_config,
     parse_report,
 )
@@ -236,64 +238,91 @@ def run_extraction(llm: ModelLlm, index: ReportIndex, report_id: str) -> tuple[L
     return response, state["chunks"], record
 
 
-def ingest(
-    db: Session,
+def receive(db: Session, *, title: str, filename: str, content: bytes, uploader: Actor) -> tuple[ReportRow, int]:
+    """Accepts an upload: checks it, stores the Report as pending (its pages and Chunks come with the background job)
+    and records `report_ingested`. Returns the Report and that event's id. Raises `ReportError` for a refused upload."""
+    kind = check_upload(filename, content)
+    row = store_report(
+        db,
+        report_id=new_report_id(),
+        title=title,
+        filename=filename,
+        kind=kind,
+        pages=[],
+        uploaded_by=uploader.name,
+        human_verified=False,
+        extraction_status="pending",
+    )
+    ingested_event_id = audit.record(
+        db,
+        "report_ingested",
+        uploader,
+        {"title": title, "filename": filename, "kind": kind, "size_bytes": len(content)},
+        report_id=row.id,
+    )
+    return row, ingested_event_id
+
+
+def process(
+    session_factory: Callable[[], Session],
     llm: ModelLlm,
     index: ReportIndex,
     *,
-    title: str,
+    report_id: str,
     filename: str,
     content: bytes,
-    uploader: Actor,
-) -> tuple[ReportRow, list]:
-    """Store the Report and its Chunks, index them, retrieve and ask the LLM for Insights, and keep the cited,
-    in-taxonomy ones as pending. Any failure after the Report is stored marks it failed and records the error."""
-    report_id = new_report_id()
-    settings = index.settings
-    parsed = parse_report(filename, content, report_id=report_id, embedding_model=settings.embedding_model)
-    row = store_report(
-        db,
-        report_id=report_id,
-        title=title,
-        filename=filename,
-        kind=parsed.kind,
-        pages=parsed.pages,
-        uploaded_by=uploader.name,
-        human_verified=False,
-        extraction_status="complete",
-    )
+    ingested_event_id: int,
+) -> None:
+    """The background job: reads, chunks and indexes the Report, retrieves, asks the LLM for Insights and keeps the
+    cited, in-taxonomy ones as pending. It owns its DB session (the request's is closed by then). Whatever goes wrong,
+    the Report ends `failed` with the error recorded, never stuck `pending`."""
+    with session_factory() as db:
+        row = db.get(ReportRow, report_id)
+        if row is None:
+            return
+
+        def failed(error: Exception, **extra: Any) -> None:
+            db.rollback()
+            row.extraction_status, row.extraction_error = "failed", str(error)[:500]
+            db.commit()
+            audit.record(
+                db,
+                "insight_extracted",
+                Actor.system("insight-extractor", prompt_version=INSIGHT_EXTRACTION.label),
+                {"outcome": "failed", "insight_count": 0, "error": str(error)[:500], **extra},
+                parents=[ingested_event_id],
+                report_id=report_id,
+            )
+
+        try:
+            _process(db, row, llm, index, filename, content, ingested_event_id, failed)
+        except Exception as e:  # a bug or an unreadable file must not leave the Report pending
+            if row.extraction_status == "pending":  # not already failed by `failed` itself raising on its audit write
+                failed(e)
+
+
+def _process(
+    db: Session,
+    row: ReportRow,
+    llm: ModelLlm,
+    index: ReportIndex,
+    filename: str,
+    content: bytes,
+    ingested_event_id: int,
+    failed: Callable[..., None],
+) -> None:
+    report_id = row.id
+    try:
+        parsed = parse_report(filename, content, report_id=report_id, embedding_model=index.settings.embedding_model)
+    except ReportError as e:
+        return failed(e)
+    row.page_count = len(parsed.pages)
+    db.add_all(ReportPageRow(report_id=report_id, page=n, text=t) for n, t in enumerate(parsed.pages, 1))
     db.add_all(
         ReportChunkRow(id=c.id, report_id=report_id, chunk_index=c.index, page=c.page, headings=c.headings, text=c.text)
         for c in parsed.chunks
     )
     db.commit()
-    ingested = audit.record(
-        db,
-        "report_ingested",
-        uploader,
-        {
-            "title": title,
-            "filename": filename,
-            "kind": parsed.kind,
-            "page_count": len(parsed.pages),
-            "chunk_count": len(parsed.chunks),
-        },
-        report_id=report_id,
-    )
-
-    def failed(error: Exception, **extra: Any) -> tuple[ReportRow, list]:
-        row.extraction_status, row.extraction_error = "failed", str(error)[:500]
-        db.commit()
-        audit.record(
-            db,
-            "insight_extracted",
-            Actor.system("insight-extractor", prompt_version=INSIGHT_EXTRACTION.label),
-            {"outcome": "failed", "insight_count": 0, "error": str(error)[:500], **extra},
-            parents=[ingested],
-            report_id=report_id,
-        )
-        return row, []
-
     try:
         index.add(report_id, parsed.chunks)
     except Exception as e:  # embedding or vector store
@@ -314,13 +343,15 @@ def ingest(
             "outcome": "ok",
             "insight_count": len(kept),
             "dropped": dropped,
+            "page_count": len(parsed.pages),
+            "chunk_count": len(parsed.chunks),
             "retrieval": provenance,
             **exchange_ref(response),
         },
-        parents=[ingested],
+        parents=[ingested_event_id],
         report_id=report_id,
     )
-    return row, [
+    for c in kept:
         add_insight(db, report_id, c.insight, page=c.page, chunk_id=c.insight.chunk_id, extract_event_id=event)
-        for c in kept
-    ]
+    row.extraction_status = "complete"
+    db.commit()

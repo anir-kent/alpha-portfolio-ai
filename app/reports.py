@@ -25,7 +25,6 @@ from app.report_index import ReportError
 from app.universe import GICS_SECTORS
 
 ASSET_CLASSES = ("equity", "bond", "cash")
-MAX_CHARS = 400_000
 
 
 class InsightFields(BaseModel):
@@ -96,8 +95,6 @@ def extract_pages(filename: str, content: bytes) -> tuple[str, list[str]]:
         pages.pop()
     if not pages or not any(p.strip() for p in pages):
         raise ReportError("Report contains no extractable text (scanned PDFs are not supported)")
-    if sum(len(p) for p in pages) > MAX_CHARS:
-        raise ReportError(f"Report is too long (limit {MAX_CHARS} characters)")
     return kind, pages
 
 

@@ -1,6 +1,6 @@
-/** Upload Report: pick or drop a PDF or text file, give it an optional title, and land on the new Report. Extraction
- * runs inside the upload request, so the dialog holds the Analyst in an "Extracting Insights" state until it returns and
- * cannot be dismissed by accident meanwhile. The server stays the only enforcement point; the browser only rejects what
+/** Upload Report: pick or drop a PDF, Word, PowerPoint, Markdown, text or image file, give it an optional title, and
+ * land on the new Report. The upload returns at once with the Report pending; extraction runs in the background and the
+ * Report screens poll until it finishes. The dialog is held only while the file is sent. The server stays the only enforcement point; the browser only rejects what
  * it can already tell the server would refuse. */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState, type DragEvent, type ReactNode, type RefObject } from "react";
@@ -10,11 +10,11 @@ import { api } from "./api/client";
 import { reportPath, type Report, type ReportList } from "./research";
 import { ErrorLine, Icon, trapTab } from "./ui";
 
-/** The server's limit (MAX_UPLOAD_BYTES in app/routers/reports.py). */
+/** The server's limit (MAX_BYTES in app/report_index.py). */
 const MAX_BYTES = 20 * 1024 * 1024;
-/** The extensions the server reads (extract_pages in app/reports.py), which decides by file name, not media type. */
-const EXTENSIONS = [".pdf", ".txt", ".md"];
-const ACCEPT = [...EXTENSIONS, "application/pdf", "text/plain", "text/markdown"].join(",");
+/** The extensions the server reads (KINDS in app/report_index.py), which decides by file name, not media type. */
+const EXTENSIONS = [".pdf", ".docx", ".pptx", ".md", ".txt", ".png", ".jpg", ".jpeg"];
+const ACCEPT = EXTENSIONS.join(",");
 
 const MB = 1024 * 1024;
 const LIMIT = `${MAX_BYTES / MB} MB`;
@@ -26,7 +26,7 @@ const fileSize = (bytes: number) => (bytes < MB ? `${Math.max(1, Math.round(byte
 function rejectReason(file: File): string | null {
   const name = file.name.toLowerCase();
   if (!EXTENSIONS.some((ext) => name.endsWith(ext)))
-    return `${file.name} is not a PDF or text file. Choose a .pdf, .txt or .md file.`;
+    return `${file.name} is not a supported type. Choose a PDF, Word, PowerPoint, Markdown, text or image (.png, .jpg) file.`;
   if (file.size > MAX_BYTES)
     return `${file.name} is ${megabytes(file.size)}, over the ${LIMIT} limit. Choose a smaller file.`;
   return null;
@@ -211,7 +211,7 @@ function UploadReportDialog({ onClose, trigger }: { onClose: () => void; trigger
               {busy ? (
                 <p role="status" className="flex items-center gap-2.5 font-semibold text-info">
                   <span className="run-spin" aria-hidden />
-                  Extracting Insights from your Report…
+                  Uploading your Report…
                 </p>
               ) : file ? (
                 <p className="flex min-w-0 items-center gap-2">
@@ -220,19 +220,20 @@ function UploadReportDialog({ onClose, trigger }: { onClose: () => void; trigger
                   <span className="mono shrink-0 text-ink-3">{fileSize(file.size)}</span>
                 </p>
               ) : (
-                <p className="text-ink-2">Drag a PDF or text file here</p>
+                <p className="text-ink-2">Drag a Report file here</p>
               )}
               {busy ? (
                 <p className="text-ink-3">
-                  The LLM is reading <span className="text-ink-2">{file?.name}</span>. This can take a minute; keep this
-                  open until it finishes.
+                  Sending <span className="text-ink-2">{file?.name}</span>. Insights are extracted in the background.
                 </p>
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
                   <button ref={choose} type="button" className="btn btn-sm" onClick={() => input.current?.click()}>
                     {file ? "Choose another file" : "Choose a file"}
                   </button>
-                  <span className="text-ink-3">PDF, .txt or .md, up to {LIMIT}</span>
+                  <span className="text-ink-3">
+                    PDF, Word, PowerPoint, Markdown, text or image, up to {LIMIT} or 50 pages
+                  </span>
                 </div>
               )}
             </div>
@@ -254,7 +255,7 @@ function UploadReportDialog({ onClose, trigger }: { onClose: () => void; trigger
               Cancel
             </button>
             <button type="submit" className="btn btn-primary" disabled={!file || busy}>
-              {busy ? "Extracting…" : "Upload and extract"}
+              {busy ? "Uploading…" : "Upload and extract"}
             </button>
           </div>
         </form>

@@ -491,7 +491,7 @@ A Research Analyst uploads a Report. The platform splits it into pages and makes
 
 | Failure path | What happens |
 | --- | --- |
-| Unreadable or oversized file | `413` over 20 MiB. `422` for a file that is not a PDF or UTF-8 text, a scanned PDF with no text, or more than 400,000 characters. Nothing is stored and no LLM call is made. |
+| Unusable or oversized upload | `413` over 20 MiB or a PDF over 50 pages. `422` for an unsupported type, a file whose bytes do not match its type, or text that is not UTF-8 or is empty. Nothing is stored and no LLM call is made. A file that passes these checks but cannot be read by Docling is stored and ends `failed` in the background job. |
 | The extraction call fails, or the model is unreachable | The Report is kept with extraction status `failed`. An LLM Exchange with outcome `error` and an `insight_extracted` event with outcome `failed` are written. The Analyst sees the failure on the Report. |
 | The LLM invents a subject, page or passage | That candidate is dropped before it becomes an Insight, and the reason is recorded on `insight_extracted`. |
 | A second Insight Review of the same Insight | `409`. The first review stands. |

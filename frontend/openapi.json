@@ -1584,6 +1584,7 @@
           "research"
         ],
         "summary": "Upload Report",
+        "description": "Accepts the upload and returns the Report as `pending`; reading, indexing and extraction run in the background.",
         "operationId": "uploadReport",
         "parameters": [
           {
@@ -4267,6 +4268,17 @@
             ],
             "title": "Chunk Id"
           },
+          "headings": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headings"
+          },
           "passage": {
             "type": "string",
             "title": "Passage"
@@ -5380,7 +5392,8 @@
               "pdf",
               "text",
               "docx",
-              "pptx"
+              "pptx",
+              "image"
             ],
             "title": "Kind"
           },
@@ -5403,6 +5416,7 @@
           "extraction_status": {
             "type": "string",
             "enum": [
+              "pending",
               "complete",
               "failed",
               "seeded"

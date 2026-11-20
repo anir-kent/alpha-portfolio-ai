@@ -22,7 +22,7 @@ from tests.test_portfolio import url
 from tests.test_queue import seeded  # noqa: F401  (fixture)
 from tests.test_recommendations import decide
 from tests.test_recommendations import rec as rec_of
-from tests.test_research import upload
+from tests.uploads import upload
 
 ASK = "/api/assistant/questions"
 REFUSAL_START = "I can only help with questions about this platform"

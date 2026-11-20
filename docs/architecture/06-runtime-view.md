@@ -176,12 +176,13 @@ sequenceDiagram
   participant G as Grounding validator
 
   RA->>API: POST /api/reports, PDF or text file (report:upload)
-  API->>API: over 20 MiB: 413
-  API->>S: ingest()
-  S->>S: split into pages: pypdf per PDF page, form feeds in text
-  Note over S: Not a PDF or UTF-8 text, no extractable text,<br/>or over 400,000 characters: 422, nothing stored
-  S->>DB: Report and its pages, commit
+  API->>API: over 20 MiB or 50 PDF pages: 413
+  API->>S: receive()
+  Note over S: Unsupported type, bytes that do not match it,<br/>or empty or non-UTF-8 text: 422, nothing stored
+  S->>DB: Report with extraction_status pending, commit
   S->>AU: report_ingested (actor: the Analyst)
+  API-->>RA: 201 Report, pending (extraction continues in a FastAPI background task with its own DB session)
+  S->>S: process(): Docling pages and Chunks, index
   S->>LLM: insight extraction, every page labelled [Page n]
   LLM->>EX: store Exchange (own DB session, commit)
   LLM-->>S: reply with Exchange id and hash, or LlmError

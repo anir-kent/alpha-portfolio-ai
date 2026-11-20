@@ -10,7 +10,8 @@ from app.db import LlmExchangeRow
 from app.exchanges import exchange_digest
 from tests.fake_chat import FakeChatModel, serve_chat
 from tests.test_assistant import unwritable_store
-from tests.test_llm_exchanges import extraction_event, upload
+from tests.test_llm_exchanges import extraction_event
+from tests.uploads import upload
 
 REPLY: dict = {"insights": []}
 

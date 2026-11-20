@@ -77,6 +77,7 @@ export function InsightRow({
           <span className="min-w-0 flex-1 truncate font-semibold">{insight.subject}</span>
           <span className="mono shrink-0 text-ink-3">p. {insight.page}</span>
         </span>
+        {insight.headings && <span className="truncate text-ink-3">{insight.headings}</span>}
         <span className="flex flex-wrap gap-1">
           <ClaimPills insight={insight} />
           {showStatus && <Pill tone={status.tone}>{status.text}</Pill>}
@@ -160,6 +161,7 @@ export function InsightDetail({
             <Pill tone="mute">
               Cited on page <span className="mono">{insight.page}</span>
             </Pill>
+            {insight.headings && <Pill tone="mute">{insight.headings}</Pill>}
             {insight.human_verified && <SeedBadge what="Insight" />}
           </div>
         </div>

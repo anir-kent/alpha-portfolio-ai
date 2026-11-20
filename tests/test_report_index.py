@@ -21,7 +21,7 @@ from app.prompts import RETRIEVAL_QUERIES
 from app.report_index import NoRetryClientV2, get_reranker
 from tests.fake_chat import FakeChatModel, serve_chat
 from tests.fake_index import FakeReranker
-from tests.test_research import upload
+from tests.uploads import upload
 
 DEMO_PASSAGES = {
     "We are constructive on technology.",

@@ -6,6 +6,7 @@ to the reviewer come from the same Docling conversion. `get_vector_store` and `r
 know which vector store backend is configured.
 """
 
+import io
 import tempfile
 import uuid
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ from langchain_docling import DoclingLoader
 from langchain_docling.loader import BaseMetaExtractor, ExportType
 from langchain_openai import OpenAIEmbeddings
 from pydantic import SecretStr
+from pypdf import PdfReader
 from tiktoken.model import encoding_name_for_model
 
 from app.settings import Settings
@@ -58,6 +60,10 @@ CHUNK_NAMESPACE = uuid.UUID("5e0c6a3e-6d3b-4a8e-9c52-3f1d7a3b9a10")
 
 class ReportError(Exception):
     """The upload cannot be turned into a Report."""
+
+
+class ReportTooLarge(ReportError):
+    """The upload is over the size or page limit."""
 
 
 def chunk_id(report_id: str, index: int) -> str:
@@ -184,6 +190,25 @@ def _checked(filename: str, content: bytes) -> tuple[str, str]:
         except UnicodeDecodeError:
             raise ReportError("Text Reports must be UTF-8") from None
     return (".md" if suffix == ".txt" else suffix), KINDS[suffix]
+
+
+def check_upload(filename: str, content: bytes) -> str:
+    """The kind of an acceptable upload, checked cheaply so the request can refuse it before any background work: type,
+    magic bytes, text encoding, and (for a PDF, whose pages are countable without Docling) the page limit. Raises
+    `ReportError`, or `ReportTooLarge` over a limit."""
+    suffix, kind = _checked(filename, content)
+    if len(content) > MAX_BYTES:
+        raise ReportTooLarge(f"Report file is too large (limit {MAX_BYTES // (1024 * 1024)} MB)")
+    if suffix == ".md" and not content.strip():
+        raise ReportError("Report contains no extractable text")
+    if suffix == ".pdf":
+        try:
+            pages = len(PdfReader(io.BytesIO(content)).pages)
+        except Exception as e:  # pypdf raises several error types on a damaged file
+            raise ReportError(f"Could not read PDF: {e}") from e
+        if pages > MAX_PAGES:
+            raise ReportTooLarge(f"Report is too long (limit {MAX_PAGES} pages)")
+    return kind
 
 
 def parse_report(

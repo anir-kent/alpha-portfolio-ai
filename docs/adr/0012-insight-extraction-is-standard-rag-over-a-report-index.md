@@ -14,6 +14,7 @@ Insight extraction no longer sends every page of a Report in one prompt. It foll
 - **Index.** Every Chunk is written to SQLite, the record of truth, and embedded into a vector store. The two together are the Report Index.
   - The vector store is built by one app-owned factory, `get_vector_store()`, and filtered through `report_filter(report_id)`. These are the only places that know the backend: Chroma first, Qdrant later.
   - Chroma is embedded on disk, with one collection, cosine distance and `report_id` filtering.
+- **Ingest is a background task.** `POST /api/reports` checks the upload (type, bytes, size, PDF page count), stores the Report as `pending`, records `report_ingested` and returns. FastAPI `BackgroundTasks` then runs `extraction.process` with its own DB session (the request's closes with the response): Docling, indexing, retrieval and the one LLM call, ending `complete` or `failed`. `insight_extracted` carries the page and Chunk counts, which are unknown at upload. The Report screens poll while a Report is pending.
 - **Retrieve, rerank, generate**, as Insight extraction's own LLM Graph (`extraction`), alongside ADR-0011's shared `PIPELINE`. The `generate` node and `ExchangeCapture` are reused unchanged:
   - **Retrieve:** one fixed Retrieval Query per taxonomy subject, written in `prompts.py` and versioned. Each query takes `k` Chunks from the Report.
   - **Rerank:** Cohere's cross-encoder (`CohereRerank` via `ContextualCompressionRetriever`) keeps `top_n` per query.
