@@ -12,7 +12,7 @@ Blocked by: 01
 
 ## Acceptance criteria
 - [ ] One commit for this ticket
-- [ ] APIs checked via Context7 (`langchain_classic` import path for `ContextualCompressionRetriever`)
-- [ ] One rerank request per query, with no SDK retries. Verify on the wire or with a mocked transport
-- [ ] The provenance shows candidate and reranked sets with scores
-- [ ] The suite is green, offline
+- [x] APIs checked via Context7 (`langchain_classic` import path for `ContextualCompressionRetriever`)
+- [x] One rerank request per query, with no SDK retries. Verify on the wire or with a mocked transport
+- [x] The provenance shows candidate and reranked sets with scores
+- [x] The suite is green, offline

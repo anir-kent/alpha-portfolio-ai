@@ -38,7 +38,9 @@ Note on the worktree: this branch already has the LangGraph layer's code (`app/l
       direction: Literal["positive", "neutral", "negative"]
       confidence: Literal["low", "medium", "high"]
       page: int
-      passage: str            # verbatim quote from that page
+      passage: str  # verbatim quote from that page
+
+
   class Extraction(BaseModel):
       insights: list[ExtractedInsight]
   ```
@@ -80,9 +82,12 @@ from docling.datamodel.base_models import DocumentStream, InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions, TableStructureOptions, TableFormerMode
 from docling.document_converter import DocumentConverter, PdfFormatOption
 
-opts = PdfPipelineOptions(do_ocr=True, do_table_structure=True,
-                          table_structure_options=TableStructureOptions(mode=TableFormerMode.ACCURATE),
-                          document_timeout=120)
+opts = PdfPipelineOptions(
+    do_ocr=True,
+    do_table_structure=True,
+    table_structure_options=TableStructureOptions(mode=TableFormerMode.ACCURATE),
+    document_timeout=120,
+)
 converter = DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)})
 dl_doc = converter.convert(DocumentStream(name=filename, stream=BytesIO(content))).document
 ```
@@ -104,11 +109,13 @@ import tiktoken
 from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
 from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
 from docling_core.transforms.chunker.hierarchical_chunker import ChunkingDocSerializer, ChunkingSerializerProvider
-from docling_core.transforms.serializer.markdown import MarkdownTableSerializer   # import path UNVERIFIED
+from docling_core.transforms.serializer.markdown import MarkdownTableSerializer  # import path UNVERIFIED
+
 
 class MDTables(ChunkingSerializerProvider):
     def get_serializer(self, doc):
         return ChunkingDocSerializer(doc=doc, table_serializer=MarkdownTableSerializer())
+
 
 chunker = HybridChunker(
     tokenizer=OpenAITokenizer(tokenizer=tiktoken.get_encoding("cl100k_base"), max_tokens=512),
@@ -149,14 +156,19 @@ Documented setup (`/websites/langchain_oss_python_langchain`, oss/python/langcha
 
 ```python
 from langchain_chroma import Chroma
-store = Chroma(collection_name="report_chunks", embedding_function=embeddings,
-               persist_directory="./data/chroma",
-               collection_configuration={"hnsw": {"space": "cosine"}})
+
+store = Chroma(
+    collection_name="report_chunks",
+    embedding_function=embeddings,
+    persist_directory="./data/chroma",
+    collection_configuration={"hnsw": {"space": "cosine"}},
+)
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 from langchain_qdrant import QdrantVectorStore
-client = QdrantClient(":memory:")            # or path=..., url=...
+
+client = QdrantClient(":memory:")  # or path=..., url=...
 client.create_collection("report_chunks", vectors_config=VectorParams(size=dim, distance=Distance.COSINE))
 store = QdrantVectorStore(client=client, collection_name="report_chunks", embedding=embeddings)
 
@@ -196,8 +208,10 @@ from langchain_classic.retrievers import ContextualCompressionRetriever
 from langchain_cohere import CohereRerank
 
 reranker = CohereRerank(model="rerank-v3.5", top_n=5)
-retriever = ContextualCompressionRetriever(base_compressor=reranker, base_retriever=store.as_retriever(search_kwargs={"k": 20, "filter": f}))
-docs = retriever.invoke("Energy sector outlook")   # each doc.metadata["relevance_score"]
+retriever = ContextualCompressionRetriever(
+    base_compressor=reranker, base_retriever=store.as_retriever(search_kwargs={"k": 20, "filter": f})
+)
+docs = retriever.invoke("Energy sector outlook")  # each doc.metadata["relevance_score"]
 ```
 
 Models ([Cohere models](https://docs.cohere.com/docs/models)):
@@ -239,10 +253,16 @@ Models ([Cohere models](https://docs.cohere.com/docs/models)):
 
 ```python
 from langchain_openai import OpenAIEmbeddings
+
+
 def get_embeddings(settings) -> Embeddings:
-    return OpenAIEmbeddings(model=settings.embedding_model,            # "openai/text-embedding-3-small"
-                            base_url=settings.llm_base_url, api_key=settings.llm_api_key,
-                            check_embedding_ctx_length=False, max_retries=0)
+    return OpenAIEmbeddings(
+        model=settings.embedding_model,  # "openai/text-embedding-3-small"
+        base_url=settings.llm_base_url,
+        api_key=settings.llm_api_key,
+        check_embedding_ctx_length=False,
+        max_retries=0,
+    )
 ```
 
 ## 7. LangGraph: retrieve → rerank → generate, with provenance
@@ -252,28 +272,39 @@ The LangGraph docs' patterns: typed `StateGraph` state, a node per step, edges S
 ```python
 class InsightState(TypedDict):
     report_id: str
-    queries: list[RetrievalQuery]          # one per taxonomy subject, built by code
-    candidates: NotRequired[list[Document]]   # vector hits, k per query
-    selected: NotRequired[list[Document]]     # reranked, top_n per query, de-duplicated by chunk id
+    queries: list[RetrievalQuery]  # one per taxonomy subject, built by code
+    candidates: NotRequired[list[Document]]  # vector hits, k per query
+    selected: NotRequired[list[Document]]  # reranked, top_n per query, de-duplicated by chunk id
     request: NotRequired[LlmRequest]
     content: NotRequired[dict]
+
 
 def retrieve(state, runtime: Runtime[RagContext]) -> dict:
     f = runtime.context.report_filter(state["report_id"])
     hits = [d for q in state["queries"] for d in runtime.context.store.similarity_search(q.text, k=20, filter=f)]
     return {"candidates": hits}
 
-def rerank(state, runtime) -> dict:               # or one ContextualCompressionRetriever per query in `retrieve`
+
+def rerank(state, runtime) -> dict:  # or one ContextualCompressionRetriever per query in `retrieve`
     ...  # runtime.context.reranker.compress_documents(per_query_hits, q.text) -> relevance_score in metadata
     return {"selected": deduped_top_n}
 
-def generate(state, runtime) -> dict:             # the existing node, unchanged: one structured-output call
+
+def generate(state, runtime) -> dict:  # the existing node, unchanged: one structured-output call
     ...
 
-graph = (StateGraph(InsightState, context_schema=RagContext)
-         .add_node("retrieve", retrieve).add_node("rerank", rerank).add_node("generate", generate)
-         .add_edge(START, "retrieve").add_edge("retrieve", "rerank").add_edge("rerank", "generate")
-         .add_edge("generate", END).compile(name="insight_extraction"))
+
+graph = (
+    StateGraph(InsightState, context_schema=RagContext)
+    .add_node("retrieve", retrieve)
+    .add_node("rerank", rerank)
+    .add_node("generate", generate)
+    .add_edge(START, "retrieve")
+    .add_edge("retrieve", "rerank")
+    .add_edge("rerank", "generate")
+    .add_edge("generate", END)
+    .compile(name="insight_extraction")
+)
 ```
 
 - **What the model sees:** the selected chunks, each labelled `[Chunk <uuid> · pages 3-4 · <headings>]`. The output schema gains `chunk_id`, and the prompt version is bumped (`insight_extraction@v2`). Deterministic code checks four things:

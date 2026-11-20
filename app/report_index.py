@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import cohere
 import tiktoken
 from docling.chunking import HybridChunker
 from docling.datamodel.base_models import InputFormat
@@ -23,7 +24,8 @@ from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
 from docling_core.transforms.serializer.markdown import MarkdownTableSerializer
 from docling_core.types.doc import DoclingDocument
 from langchain_chroma import Chroma
-from langchain_core.documents import Document
+from langchain_cohere import CohereRerank
+from langchain_core.documents import BaseDocumentCompressor, Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import InMemoryVectorStore, VectorStore
 from langchain_docling import DoclingLoader
@@ -261,6 +263,25 @@ def get_embeddings(settings: Settings) -> Embeddings:
     )
 
 
+class NoRetryClientV2(cohere.ClientV2):
+    """The Cohere client with SDK retries off: its default is two retries per request, hidden from the audit trail (the
+    same rule as the chat model's `max_retries=0`, ADR-0011). A failed rerank fails the extraction."""
+
+    def rerank(self, *, request_options: Any = None, **kwargs: Any) -> Any:
+        return super().rerank(request_options={**(request_options or {}), "max_retries": 0}, **kwargs)
+
+
+def get_reranker(settings: Settings) -> BaseDocumentCompressor:
+    """Cohere's cross-encoder, keeping `rerank_top_n` Chunks per query. Raises `RuntimeError` when no key is set."""
+    if not settings.cohere_api_key:
+        raise RuntimeError("APP_COHERE_API_KEY must be set to rerank Chunks")
+    return CohereRerank(
+        model=settings.rerank_model,
+        top_n=settings.rerank_top_n,
+        client=NoRetryClientV2(settings.cohere_api_key, client_name="langchain:partner"),
+    )
+
+
 def get_vector_store(settings: Settings, embeddings: Embeddings | None = None) -> VectorStore:
     """The vector store `settings` configure: the one place that knows the backend."""
     embeddings = embeddings or get_embeddings(settings)
@@ -292,6 +313,7 @@ class ReportIndex:
     def __init__(self, settings: Settings):
         self.settings = settings
         self._store: VectorStore | None = None
+        self._reranker: BaseDocumentCompressor | None = None
 
     @property
     def vector_store(self) -> VectorStore:
@@ -302,6 +324,16 @@ class ReportIndex:
     @vector_store.setter
     def vector_store(self, store: VectorStore) -> None:
         self._store = store
+
+    @property
+    def reranker(self) -> BaseDocumentCompressor:
+        if self._reranker is None:
+            self._reranker = get_reranker(self.settings)
+        return self._reranker
+
+    @reranker.setter
+    def reranker(self, reranker: BaseDocumentCompressor) -> None:
+        self._reranker = reranker
 
     def add(self, report_id: str, chunks: list[ReportChunk]) -> None:
         self.vector_store.add_documents(chunk_documents(report_id, chunks), ids=[c.id for c in chunks])

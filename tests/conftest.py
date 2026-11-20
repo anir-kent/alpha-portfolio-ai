@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.main import create_app
 from tests.fake_chat import DemoPipeline
-from tests.fake_index import fake_embeddings, word_tokenizer
+from tests.fake_index import fake_embeddings, fake_reranker, word_tokenizer
 from tests.fixtures.demo import SEED_PASSWORD, demo_settings
 
 ROLES = [
@@ -65,6 +65,7 @@ def offline_index(monkeypatch):
     """The Report Index runs on fake embeddings and a word-count tokenizer: no provider call, no model download."""
     monkeypatch.setattr("app.report_index.get_embeddings", fake_embeddings)
     monkeypatch.setattr("app.report_index.chunk_tokenizer", word_tokenizer)
+    monkeypatch.setattr("app.report_index.get_reranker", fake_reranker)
 
 
 @pytest.fixture

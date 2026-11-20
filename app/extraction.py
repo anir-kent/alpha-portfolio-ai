@@ -16,8 +16,9 @@ from dataclasses import dataclass
 from typing import Any, NotRequired, TypedDict
 from uuid import UUID
 
+from langchain_classic.retrievers import ContextualCompressionRetriever
 from langchain_core.callbacks import BaseCallbackHandler
-from langchain_core.documents import Document
+from langchain_core.documents import BaseDocumentCompressor, Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.vectorstores import VectorStore
 from langgraph.config import get_config
@@ -67,7 +68,8 @@ class SentChunk:
 class ExtractionContext(PipelineContext):
     vector_store: VectorStore
     report_filter: Any  # the backend's own filter for the Report (`report_filter`)
-    k: int
+    reranker: BaseDocumentCompressor  # keeps the best Chunks of a query's candidates (Cohere's cross-encoder)
+    k: int  # candidates per query, before reranking
 
 
 class ExtractionState(TypedDict):
@@ -96,30 +98,50 @@ def render_chunks(chunks: list[SentChunk]) -> str:
 
 
 class RetrievalProvenance(BaseCallbackHandler):
-    """Records every retriever call of a graph run (query, and the Chunks returned, in rank order) from LangChain's own
-    retriever callbacks. A reranker's `relevance_score` is kept when a Document carries one."""
+    """Records every Retrieval Query of a graph run from LangChain's own retriever callbacks: the `candidates` the vector
+    store returned and the Chunks the reranker kept (`retrieved`), each in rank order. The vector retriever runs as a
+    child of the compression retriever, so its call is told apart by its parent run. A reranker's `relevance_score` is
+    kept when a Document carries one."""
 
     def __init__(self) -> None:
-        self._queries: dict[UUID, str] = {}
+        self._open: dict[UUID, dict[str, Any]] = {}
         self.retrievals: list[dict] = []
 
-    def on_retriever_start(self, serialized: dict[str, Any], query: str, *, run_id: UUID, **kwargs: Any) -> None:
-        self._queries[run_id] = query
+    def on_retriever_start(
+        self, serialized: dict[str, Any], query: str, *, run_id: UUID, parent_run_id: UUID | None = None, **kwargs: Any
+    ) -> None:
+        self._open[run_id] = {"query": query, "parent": parent_run_id}
+
+    def on_retriever_error(self, error: BaseException, *, run_id: UUID, **kwargs: Any) -> None:
+        self._open.pop(run_id, None)
 
     def on_retriever_end(self, documents: Sequence[Document], *, run_id: UUID, **kwargs: Any) -> None:
+        call = self._open.pop(run_id)
         chunks = []
         for rank, doc in enumerate(documents, 1):
             entry: dict[str, Any] = {"chunk_id": doc.metadata["chunk_id"], "page": doc.metadata["page"], "rank": rank}
             if "relevance_score" in doc.metadata:
                 entry["relevance_score"] = doc.metadata["relevance_score"]
             chunks.append(entry)
-        self.retrievals.append({"query": self._queries.pop(run_id, None), "retrieved": chunks})
+        parent = self._open.get(call["parent"])
+        if parent is not None:  # the base retriever inside the compression retriever: the pre-rerank candidates
+            parent["candidates"] = chunks
+        else:
+            record = {"query": call["query"], "retrieved": chunks}
+            if "candidates" in call:
+                record["candidates"] = call["candidates"]
+            self.retrievals.append(record)
 
 
 def retrieve(state: ExtractionState, runtime: Runtime[ExtractionContext]) -> dict:
     """The Chunks for the Report's Retrieval Queries, and the extraction request built from them."""
     context = runtime.context
-    retriever = context.vector_store.as_retriever(search_kwargs={"k": context.k, "filter": context.report_filter})
+    retriever = ContextualCompressionRetriever(
+        base_compressor=context.reranker,
+        base_retriever=context.vector_store.as_retriever(
+            search_kwargs={"k": context.k, "filter": context.report_filter}
+        ),
+    )
     found: dict[str, Document] = {}
     try:
         for query in retrieval_queries():
@@ -127,7 +149,7 @@ def retrieve(state: ExtractionState, runtime: Runtime[ExtractionContext]) -> dic
                 query.text, get_config()
             ):  # the node's config carries the run's callbacks into the retriever
                 found.setdefault(doc.metadata["chunk_id"], doc)
-    except Exception as e:  # embedding or vector store: handled like a failed LLM call
+    except Exception as e:  # embedding, vector store or rerank: handled like a failed LLM call
         raise LlmError(f"Retrieval failed: {type(e).__name__}: {e}") from e
     if not found:
         raise LlmError("Retrieval found no Chunks for the Report")
@@ -180,6 +202,10 @@ def run_extraction(llm: ModelLlm, index: ReportIndex, report_id: str) -> tuple[L
     """(response, Chunks sent, Retrieval Provenance) of one run of the extraction graph on the Report."""
     settings = index.settings
     provenance = RetrievalProvenance()
+    try:
+        reranker = index.reranker
+    except RuntimeError as e:  # no Cohere key
+        raise LlmError(str(e)) from e
 
     def graph(model: BaseChatModel, callbacks: list[BaseCallbackHandler]) -> dict:
         return EXTRACTION.invoke(
@@ -192,6 +218,7 @@ def run_extraction(llm: ModelLlm, index: ReportIndex, report_id: str) -> tuple[L
                 model=model,
                 vector_store=index.vector_store,
                 report_filter=index.report_filter(report_id),
+                reranker=reranker,
                 k=settings.retrieval_k,
             ),
         )
@@ -202,6 +229,8 @@ def run_extraction(llm: ModelLlm, index: ReportIndex, report_id: str) -> tuple[L
         "retrievals": provenance.retrievals,
         "sent_chunk_ids": [c.id for c in state["chunks"]],  # the de-duplicated union the model was actually sent
         "embedding_model": settings.embedding_model,
+        "rerank_model": settings.rerank_model,
+        "rerank_top_n": settings.rerank_top_n,
         "chunker": chunker_config(settings.embedding_model),
     }
     return response, state["chunks"], record

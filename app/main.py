@@ -45,6 +45,8 @@ def create_app(
 ) -> FastAPI:
     """The app. `chat_model` replaces the one `get_chat_model(settings)` builds for every LLM Graph (tests only)."""
     settings = settings or Settings()
+    if settings.llm_api_key and not settings.cohere_api_key:  # live backend: extraction reranks through Cohere
+        raise RuntimeError("APP_COHERE_API_KEY must be set when APP_LLM_API_KEY is (reranking calls Cohere directly)")
     app = FastAPI(title="Alpha Portfolio AI", version="0.1.0")
     app.state.settings = settings
     app.state.session_factory = make_session_factory(settings.database_url)

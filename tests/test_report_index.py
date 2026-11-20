@@ -7,14 +7,20 @@ import json
 import re
 
 import docx
+import httpx
 import pytest
+from langchain_cohere import CohereRerank
+from langchain_core.documents import Document
 from langchain_core.vectorstores import InMemoryVectorStore
 from sqlalchemy import select
 
 from app import audit
 from app.db import AuditEventRow, LlmExchangeRow, ReportChunkRow
+from app.main import create_app
 from app.prompts import RETRIEVAL_QUERIES
+from app.report_index import NoRetryClientV2, get_reranker
 from tests.fake_chat import FakeChatModel, serve_chat
+from tests.fake_index import FakeReranker
 from tests.test_research import upload
 
 DEMO_PASSAGES = {
@@ -206,3 +212,55 @@ def test_unsupported_upload_types_are_rejected(login):
 @pytest.mark.parametrize("name,content", [("scan.png", b"not a png"), ("photo.jpg", b"not a jpeg")])
 def test_a_file_that_is_not_the_image_it_claims_to_be_is_rejected(login, name, content):
     assert upload(login("research_analyst"), name, content).status_code == 422
+
+
+def test_provenance_shows_the_candidates_and_the_reranked_chunks_with_scores(app, login):
+    app.state.settings.retrieval_k = 3
+    app.state.settings.rerank_top_n = 2
+    app.state.report_index.reranker = None  # rebuilt from the (fake) factory with the new top_n
+    report = upload(login("research_analyst"), "house_view_demo.docx", demo_docx()).json()
+    retrieval = json.loads(extracted_event(app, report["id"]).payload_json)["retrieval"]
+    assert retrieval["rerank_model"] == "rerank-v3.5" and retrieval["rerank_top_n"] == 2
+    runs = retrieval["retrievals"]
+    assert len(runs) == 14  # the candidate retrieval is not a second run
+    for run in runs:
+        candidates = {c["chunk_id"] for c in run["candidates"]}
+        assert len(run["candidates"]) <= 3 and len(run["retrieved"]) == min(2, len(candidates))
+        assert {c["chunk_id"] for c in run["retrieved"]} <= candidates
+        assert [c["rank"] for c in run["retrieved"]] == list(range(1, len(run["retrieved"]) + 1))
+        scores = [c["relevance_score"] for c in run["retrieved"]]
+        assert scores == sorted(scores, reverse=True)
+    assert set(retrieval["sent_chunk_ids"]) == {c["chunk_id"] for r in runs for c in r["retrieved"]}
+
+
+def test_a_rerank_failure_fails_the_extraction(app, login):
+    app.state.report_index.reranker = FakeReranker(fail=True, calls=[])
+    r = upload(login("research_analyst"), "house_view_demo.md")
+    assert r.status_code == 201 and r.json()["extraction_status"] == "failed" and r.json()["insights"] == []
+    payload = json.loads(extracted_event(app, r.json()["id"]).payload_json)
+    assert payload["outcome"] == "failed" and "Retrieval failed: ConnectionError" in payload["error"]
+
+
+def test_cohere_gets_one_request_per_query_and_is_never_retried():
+    requests = []
+
+    def overloaded(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(503, json={"message": "overloaded"})
+
+    client = NoRetryClientV2("key", httpx_client=httpx.Client(transport=httpx.MockTransport(overloaded)))
+    reranker = CohereRerank(model="rerank-v3.5", top_n=4, client=client)
+    with pytest.raises(Exception, match="503|overloaded"):
+        reranker.compress_documents([Document("a passage", metadata={})], "a query")
+    assert len(requests) == 1  # the SDK's own default is two retries
+
+
+def test_cohere_key_is_required_for_a_live_backend(settings):
+    with pytest.raises(RuntimeError, match="APP_COHERE_API_KEY"):
+        get_reranker(settings)
+    settings.llm_api_key = "sk-live"
+    with pytest.raises(RuntimeError, match="APP_COHERE_API_KEY"):
+        create_app(settings)
+    settings.cohere_api_key = "co-live"
+    assert isinstance(get_reranker(settings), CohereRerank)
+    create_app(settings)

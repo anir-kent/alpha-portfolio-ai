@@ -26,7 +26,11 @@ class Settings(BaseSettings):
     vector_store: Literal["chroma", "memory"] = "chroma"  # `memory` is for tests; Qdrant arrives with its adapter
     chroma_dir: str = "data/chroma"
     embedding_model: str = "openai/text-embedding-3-small"  # in the gateway's naming
-    retrieval_k: PositiveInt = 10  # Chunks each Retrieval Query takes from a Report
+    retrieval_k: PositiveInt = 10  # candidate Chunks each Retrieval Query takes from a Report, before reranking
+    # Reranking calls Cohere directly (ADR-0012), with its own key; embeddings and chat go through the gateway above.
+    cohere_api_key: str = ""
+    rerank_model: str = "rerank-v3.5"
+    rerank_top_n: PositiveInt = 4  # Chunks each Retrieval Query keeps after reranking
     llm_stream_poll_seconds: float = 1.0  # how often the Exchange stream looks for new rows
     llm_stream_max_seconds: float = 300.0  # a stream closes after this; the browser reconnects with its last event id
     # The Assistant's limits. Each description is the "Effect" column of the generated table in the architecture
