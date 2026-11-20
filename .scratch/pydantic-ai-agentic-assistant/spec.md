@@ -2,7 +2,7 @@ Status: ready-for-agent
 
 # pydantic-ai LLM layer, and an agentic Assistant with an auditable LLM Trajectory
 
-Vocabulary follows `GLOSSARY.md` (new term: **LLM Trajectory**). Decisions respect `docs/adr/0001`, `0002`, `0004` (as amended), `0006`, `0008`, `0009` and the new `0010-assistant-is-a-bounded-read-only-agent-on-pydantic-ai`, which supersedes `0007`.
+Vocabulary follows `GLOSSARY.md` (new term: **LLM Trajectory**). Decisions respect `docs/adr/0001`, `0002`, `0004` (as amended), `0006`, `0008`, `0009` and the new `0010-assistant-is-a-bounded-read-only-agent`, which supersedes `0007`.
 
 ## Problem Statement
 

@@ -13,4 +13,4 @@ The domain vocabulary is defined once, in [`GLOSSARY.md`](../../GLOSSARY.md) at 
 | LLM Exchange | [Transparency](../../GLOSSARY.md#transparency) |
 | Assistant, Conversation, Question, Answer, Screen Context, Suggested Question and Out-of-Scope Refusal | [Assistant](../../GLOSSARY.md#assistant) |
 
-Technical terms that are not domain terms keep their usual meaning: C4 container and component, Server-Sent Events (SSE), schema-bound call, recorded and live LLM modes. [8. Crosscutting Concepts](08-crosscutting-concepts.md) explains how this platform uses them.
+Technical terms that are not domain terms keep their usual meaning: C4 container and component, Server-Sent Events (SSE), schema-bound call, LLM Graph. [8. Crosscutting Concepts](08-crosscutting-concepts.md) explains how this platform uses them.

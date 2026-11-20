@@ -107,12 +107,20 @@ A Claim whose Report citations quote a real Report page verbatim, whose engine c
 ### Transparency
 
 **LLM Exchange**:
-One request and reply through the single LLM interface: the full prompt, reply schema, raw reply, model, prompt version, timing, token counts and outcome, labelled live or recorded. An Audit Event can point to the Exchange that produced it.
+One model call and its reply: the messages sent, reply schema, raw reply, model, prompt version, timing, token counts, outcome and the Graph Node that made the call. Every Exchange is a live call; rows written before recorded mode was removed keep the label they were written with. An Audit Event can point to the Exchange that produced it.
 _Avoid_: Log entry, trace, transcript
 
 **LLM Trajectory**:
 The ordered LLM Exchanges, with the lookups the model asked for between them, that together produce one outcome such as one Answer; a single-call step is a Trajectory of one Exchange.
 _Avoid_: Trace, run, session, chain
+
+**LLM Graph**:
+The compiled LangGraph graph of named nodes and edges that is one LLM step's control flow, such as the pipeline graph every Analysis Run and Report step calls through. Its topology is code, versioned with the step's prompt.
+_Avoid_: Chain, agent
+
+**Graph Node**:
+One named node of an LLM Graph, such as `generate` in the pipeline graph. Each LLM Exchange records the Graph Node that made its call.
+_Avoid_: Step (a Run Step is something else), stage
 
 **Request budget**:
 The most model requests one Answer's LLM Trajectory may make, lookups and Self-correction included (a setting, default 6). A Trajectory that would go over it fails the turn with reason `budget_exhausted`; every Exchange it made stays anchored.
@@ -145,7 +153,7 @@ The data and metadata behind the screen the user is on, rebuilt by the server fr
 _Avoid_: Page data, context window
 
 **Suggested Question**:
-A predefined Question offered on a screen, whose Answer is recorded so it also works when the platform replays recordings.
+A predefined Question offered on a screen. A shortcut: asking one is asking an ordinary Question, and the Assistant answers it live like any other.
 _Avoid_: Canned question, FAQ
 
 **Out-of-Scope Refusal**:

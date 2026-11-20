@@ -1,18 +1,11 @@
-"""Hand-authored LLM replies for the fixture Reports. Regenerate the committed recordings with
-`uv run python -m tests.fixtures.llm_cases`, or every committed recording with `uv run python -m tests.fixtures.regenerate`
-(needed only if a fixture Report or the extraction prompt changes)."""
+"""Hand-authored LLM replies for the fixture Reports: what the demo's fake chat model (`tests.fake_chat.DemoPipeline`)
+answers each Report's Insight extraction request with."""
 
-import tempfile
 from pathlib import Path
 
-from app.db import make_session_factory
-from app.exchanges import ModelLlm
-from app.pydantic_llm import RecordingModel
 from app.reports import extract_pages, extraction_request
-from tests.scripted import ScriptedModel
 
 HERE = Path(__file__).parent
-MODEL = "claude-sonnet-5-5"
 
 CASES = {
     "house_view_demo.txt": {
@@ -83,19 +76,13 @@ CASES = {
 }
 
 
-def regenerate() -> None:
-    """Records each fixture Report's extraction request, answered with its hand-authored reply, through the same
-    pydantic-ai path recorded mode replays, and removes extraction recordings no fixture makes any more."""
-    recordings = HERE / "llm"
-    for path in recordings.glob("insight_extraction-*.request.json"):  # every one is remade from CASES
-        path.unlink()
-    with tempfile.TemporaryDirectory() as tmp:
-        store = make_session_factory(f"sqlite:///{Path(tmp) / 'exchanges.db'}")
-        for name, content in CASES.items():
-            _, pages = extract_pages(name, (HERE / name).read_bytes())
-            model = RecordingModel(ScriptedModel(content, model_name=MODEL), recordings)
-            ModelLlm(model, store, mode="live").complete(extraction_request(pages))
+def _extraction_replies() -> dict[str, dict]:
+    """Each fixture Report's extraction request text, mapped to its hand-authored reply."""
+    replies = {}
+    for name, content in CASES.items():
+        _, pages = extract_pages(name, (HERE / name).read_bytes())
+        replies[extraction_request(pages).user] = content
+    return replies
 
 
-if __name__ == "__main__":
-    regenerate()
+EXTRACTION_REPLIES = _extraction_replies()  # what the demo's fake chat model answers an extraction request with

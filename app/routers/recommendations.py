@@ -90,9 +90,7 @@ class AiStepOut(BaseModel):
     """How far to rely on one AI step. No prompt or reply text; the Exchange id only for roles holding `llm:read`."""
 
     step: Literal["tilt", "memo"]
-    mode: Literal["live", "recorded"]
-    latency_ms: int | None  # absent for a replay: there was no real call to time
-    telemetry: Literal["measured", "not_available_replayed"]
+    latency_ms: int | None
     outcome: Literal["ok", "failed"]
     reason: str | None  # a failed step's transport outcome, cut short
     grounded: int | None  # Claims the validator accepted; null for a step that makes no Claims

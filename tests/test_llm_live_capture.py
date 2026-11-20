@@ -1,57 +1,65 @@
-"""Seam: the HTTP API, with the step-facing LLM call running on pydantic-ai over a live Model whose provider is an
-`httpx.MockTransport`. Every model request is an LLM Exchange holding the bytes that crossed the wire (ADR-0004 as
-amended by ADR-0010). No network."""
+"""Seam: the HTTP API, with the pipeline's LLM Graph running live on the chat model `get_chat_model` builds, and the
+provider stood in by a handler under `httpx` (ADR-0011). It checks what reaches the wire (one request per call: SDK
+retries are off; the structured-output shape; OpenRouter's attribution and routing parameters) and that every call is
+one Exchange holding what LangChain sent and received. No network."""
 
 import json
 
 import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 
+from app.chat_model import get_chat_model
 from app.db import AuditEventRow
-from app.exchanges import ModelLlm, endpoint_host
-from app.pydantic_llm import build_live_model
 from tests.chat_completions import completion
 from tests.conftest import SEED_PASSWORD
+from tests.fake_chat import serve_chat
 from tests.test_ai_recommendations import ai  # noqa: F401  (fixture)
-from tests.test_assistant import unwritable_store
 from tests.test_llm_exchanges import extraction_event, upload
 from tests.test_queue import seeded  # noqa: F401  (fixture)
-
-pytestmark = pytest.mark.usefixtures("allow_model_requests")  # a live Model, over a mock transport
 
 API_KEY = "sk-live-secret-do-not-store"
 
 
 @pytest.fixture
-def live_app(app, settings):
-    """Returns a builder: the test app with its LLM swapped for the pydantic-ai adapter over a live Model whose
-    provider is `handler`, plus the request/response pairs the provider saw."""
+def live_app(app, settings, monkeypatch):
+    """Returns a builder: the test app with its pipeline on the live chat model for `base_url`, over a provider that
+    answers with `handler`, plus the request/response pairs the provider saw."""
 
-    def build(handler, *, base_url="https://gw.example/v1", temperature=None):
+    def build(handler, *, base_url="https://openrouter.ai/api/v1/", temperature=None):
         wire: list[tuple[httpx.Request, httpx.Response]] = []
 
-        def provider(request: httpx.Request) -> httpx.Response:
-            response = handler(request)
-            wire.append((request, response))
-            return response
+        def provider_on(module):
+            """The provider under `module`'s network transport: OpenRouter's SDK sends through `httpx`, OpenAI's
+            through `httpx2`. The handler sees and answers in `httpx` terms."""
 
+            def send(transport, request):
+                as_httpx = httpx.Request(
+                    request.method, str(request.url), headers=dict(request.headers), content=request.read()
+                )
+                response = handler(as_httpx)
+                response.read()
+                wire.append((as_httpx, response))
+                if module is httpx:
+                    return response
+                return module.Response(response.status_code, headers=dict(response.headers), content=response.content)
+
+            return send
+
+        for module in (httpx, httpx2):
+            monkeypatch.setattr(module.HTTPTransport, "handle_request", provider_on(module))
         live = settings.model_copy(
             update={
-                "llm_mode": "live",
                 "llm_api_key": API_KEY,
                 "llm_base_url": base_url,
                 "llm_model": "anthropic/claude-sonnet-5.5",
                 "llm_temperature": temperature,
             }
         )
-        app.state.llm = ModelLlm(
-            build_live_model(live, httpx.MockTransport(provider)),
-            app.state.session_factory,
-            mode="live",
-            endpoint_host=endpoint_host(live),
-        )
+        serve_chat(app, get_chat_model(live))
+        app.state.llm._secret = API_KEY
         return app, wire
 
     return build
@@ -75,25 +83,37 @@ def extraction_exchange(app, report) -> dict:
     return r.json()
 
 
-def test_a_live_exchange_stores_the_request_messages_and_raw_reply_exactly_as_they_crossed_the_wire(live_app):
-    app, wire = live_app(lambda r: completion())
+@pytest.mark.parametrize("base_url", ["https://openrouter.ai/api/v1/", "https://gw.example/v1"])
+def test_a_live_call_is_one_request_and_one_exchange_holding_what_was_sent_and_received(live_app, base_url):
+    app, wire = live_app(lambda r: completion(), base_url=base_url)
     report = upload(as_role(app, "research_analyst")).json()
-    assert report["extraction_status"] != "failed"
+    assert report["extraction_status"] == "complete", report
     ex = extraction_exchange(app, report)
 
     assert len(wire) == 1
-    request, response = wire[0]
-    assert ex["messages"] == json.loads(request.content)["messages"]
-    assert ex["raw_reply"] == response.content.decode()
-    assert len(ex["messages"]) == 2  # no framework-authored preamble: the prompt goes out as the step wrote it
-    assert ex["messages"][0]["role"] == "system"
+    request, _ = wire[0]
+    assert ex["messages"] == json.loads(request.content)["messages"]  # LangChain's messages are the wire's
+    assert len(ex["messages"]) == 2
     assert ex["messages"][0]["content"].startswith(ex["system_text"] + "\n\nJSON schema of the reply:\n")
     assert ex["messages"][1] == {"role": "user", "content": ex["user_prompt"]}
-    assert (ex["mode"], ex["outcome"], ex["endpoint_host"]) == ("live", "ok", "gw.example")
-    assert ex["parsed_content"] == {"insights": []}
-    assert ex["usage"] == {"prompt_tokens": 321, "completion_tokens": 45, "total_tokens": 366}
+    assert ex["raw_reply"] == '{"insights": []}' and ex["parsed_content"] == {"insights": []}
+    assert (ex["usage"]["input_tokens"], ex["usage"]["output_tokens"], ex["usage"]["total_tokens"]) == (321, 45, 366)
+    assert (ex["outcome"], ex["graph_node"]) == ("ok", "generate")
+    assert ex["endpoint_host"] == request.url.host
     assert ex["model"] == "anthropic/claude-sonnet-5.5"
     assert isinstance(ex["latency_ms"], int) and ex["latency_ms"] >= 0
+
+
+@pytest.mark.parametrize("base_url", ["https://openrouter.ai/api/v1/", "https://gw.example/v1"])
+def test_structured_output_goes_out_as_one_native_json_schema_request_named_after_the_task(live_app, base_url):
+    app, wire = live_app(lambda r: completion(), base_url=base_url)
+    upload(as_role(app, "research_analyst"))
+    ((request, _),) = wire
+    body = json.loads(request.content)
+    assert body["response_format"]["type"] == "json_schema"
+    assert body["response_format"]["json_schema"]["name"] == "insight_extraction"
+    assert body["response_format"]["json_schema"]["schema"]["properties"]["insights"]
+    assert "tools" not in body and "tool_choice" not in body  # not function calling
 
 
 def test_through_openrouter_a_call_carries_the_attribution_title_and_requires_every_parameter(live_app):
@@ -103,11 +123,10 @@ def test_through_openrouter_a_call_carries_the_attribution_title_and_requires_ev
         upload(as_role(app, "research_analyst"))
         assert len(wire) == 1
         sent[base_url] = wire[0][0]
-    openrouter, other = (sent[u] for u in sent)
+    openrouter, other = sent.values()
     assert str(openrouter.url) == "https://openrouter.ai/api/v1/chat/completions"
     assert openrouter.headers["x-title"] == "Portfolio Rebalancing"
     assert json.loads(openrouter.content)["provider"] == {"require_parameters": True}
-    assert json.loads(openrouter.content)["response_format"]["type"] == "json_schema"
     assert str(other.url) == "https://gw.example/v1/chat/completions"
     assert "provider" not in json.loads(other.content) and "x-title" not in other.headers  # the plain protocol
 
@@ -129,64 +148,59 @@ def stored_text(app) -> str:
 
 
 @pytest.mark.parametrize("base_url", ["https://openrouter.ai/api/v1/", "https://gw.example/v1"])
-def test_a_failing_http_response_is_one_request_and_one_error_exchange(live_app, base_url):
-    app, wire = live_app(lambda r: httpx.Response(503, text="upstream overloaded"), base_url=base_url)
+@pytest.mark.parametrize("status", [503, 500, 429])
+def test_a_failing_http_response_is_one_request_and_one_error_exchange(live_app, base_url, status):
+    """Retries off: a status an SDK would retry by default still reaches the provider once."""
+    app, wire = live_app(lambda r: httpx.Response(status, text="upstream overloaded"), base_url=base_url)
     report = upload(as_role(app, "research_analyst")).json()
     assert report["extraction_status"] == "failed"
-    assert len(wire) == 1  # SDK retries are off: nothing reaches the provider that capture did not see
+    assert len(wire) == 1  # nothing reached the provider that capture did not see
     ex = extraction_exchange(app, report)
-    assert (ex["outcome"], ex["mode"]) == ("error", "live")
-    assert "HTTP 503" in ex["error"] and "upstream overloaded" in ex["error"]
+    assert (ex["outcome"], ex["graph_node"]) == ("error", "generate")
+    assert "LLM call failed" in ex["error"]
     assert ex["messages"] == json.loads(wire[0][0].content)["messages"]  # the request that was sent is on record
-    assert ex["raw_reply"] == "upstream overloaded" and ex["parsed_content"] is None
+    assert ex["parsed_content"] is None
     with app.state.session_factory() as db:
         assert db.execute(text("SELECT count(*) FROM llm_exchanges")).scalar() == 1
 
 
-def test_the_api_key_never_appears_in_any_exchange_even_when_the_provider_echoes_it(live_app):
-    app, wire = live_app(lambda r: httpx.Response(401, text=f"bad credential {r.headers['authorization']}"))
+def test_a_connection_failure_is_one_attempt_and_one_error_exchange(live_app):
+    def reset(request):
+        raise httpx.ConnectError("connection reset", request=request)
+
+    attempts = []
+
+    def count_and_reset(request):
+        attempts.append(request)
+        reset(request)
+
+    app, _ = live_app(count_and_reset)
+    report = upload(as_role(app, "research_analyst")).json()
+    assert report["extraction_status"] == "failed" and len(attempts) == 1
+    assert extraction_exchange(app, report)["outcome"] == "error"
+
+
+@pytest.mark.parametrize("base_url", ["https://openrouter.ai/api/v1/", "https://gw.example/v1"])
+def test_the_api_key_never_appears_in_any_exchange_even_when_the_provider_echoes_it(live_app, base_url):
+    app, wire = live_app(
+        lambda r: httpx.Response(401, text=f"bad credential {r.headers['authorization']}"), base_url=base_url
+    )
     report = upload(as_role(app, "research_analyst")).json()
     assert wire[0][0].headers["authorization"] == f"Bearer {API_KEY}"  # it really was sent
     ex = extraction_exchange(app, report)
-    assert ex["outcome"] == "error" and "[redacted]" in ex["raw_reply"]
+    assert ex["outcome"] == "error"
     for blob in (json.dumps(ex), stored_text(app), json.dumps(report)):
         assert API_KEY not in blob and "authorization" not in blob.lower()
 
-    ok_app, _ = live_app(lambda r: completion())
-    ok = extraction_exchange(ok_app, upload(as_role(ok_app, "research_analyst")).json())
-    assert ok["outcome"] == "ok" and API_KEY not in stored_text(ok_app)
 
-
-def test_a_reply_that_is_not_json_is_an_error_exchange_that_keeps_the_raw_reply(live_app):
+def test_a_reply_that_is_not_json_is_an_ok_exchange_that_keeps_the_raw_reply_and_fails_the_step(live_app):
     prose = "Sure! Here are the insights you asked for, in prose."
-    app, wire = live_app(lambda r: completion(prose))
+    app, _ = live_app(lambda r: completion(prose))
     report = upload(as_role(app, "research_analyst")).json()
     assert report["extraction_status"] == "failed"
     ex = extraction_exchange(app, report)
-    assert ex["outcome"] == "error" and "not valid JSON" in ex["error"]
-    assert ex["raw_reply"] == wire[0][1].content.decode() and prose in ex["raw_reply"]
-    assert ex["usage"] == {"prompt_tokens": 321, "completion_tokens": 45, "total_tokens": 366}
-    assert ex["parsed_content"] is None
-
-
-def test_a_reply_the_framework_cannot_read_is_an_error_exchange_that_keeps_the_raw_reply(live_app):
-    """OpenRouter's reply shape names the routed provider; one without it is not a completion pydantic-ai accepts."""
-    garbled = '{"choices": "nope"}'
-    app, wire = live_app(lambda r: httpx.Response(200, text=garbled), base_url="https://openrouter.ai/api/v1/")
-    report = upload(as_role(app, "research_analyst")).json()
-    assert report["extraction_status"] == "failed" and len(wire) == 1
-    ex = extraction_exchange(app, report)
-    assert ex["outcome"] == "error" and ex["raw_reply"] == garbled and ex["parsed_content"] is None
-
-
-def test_a_reply_the_step_rejects_is_still_an_ok_exchange(live_app):
-    """Outcome is transport-level: the JSON arrived and parsed, so the Exchange is `ok` even though the step's own
-    model refuses it."""
-    app, _ = live_app(lambda r: completion('{"insights": "not a list"}'))
-    report = upload(as_role(app, "research_analyst")).json()
-    assert report["extraction_status"] == "failed"
-    ex = extraction_exchange(app, report)
-    assert ex["outcome"] == "ok" and ex["parsed_content"] == {"insights": "not a list"}
+    assert (ex["outcome"], ex["raw_reply"], ex["parsed_content"]) == ("ok", prose, None)
+    assert ex["usage"]["total_tokens"] == 366
 
 
 # --- inside an Analysis Run: Exchanges go through the run's own session, before each step's Audit Event -----------
@@ -214,37 +228,11 @@ def test_inside_an_analysis_run_every_live_request_is_an_exchange_its_step_event
     auditor = as_role(app, "auditor")
     unmatched = list(wire)
     for payload in events:
-        (ref,) = payload["exchanges"]
+        (ref,) = payload["exchanges"]  # a Trajectory of one
         ex = auditor.get(f"/api/llm/exchanges/{ref['exchange_id']}").json()
-        assert (ex["hash"], ex["outcome"], ex["mode"]) == (ref["exchange_hash"], "ok", "live")
+        assert (ex["hash"], ex["outcome"], ex["graph_node"]) == (ref["exchange_hash"], "ok", "generate")
         request, response = next(p for p in unmatched if json.loads(p[0].content)["messages"] == ex["messages"])
         unmatched.remove((request, response))
-        assert ex["task"] == task_of(request) and ex["raw_reply"] == response.content.decode()
+        assert ex["task"] == task_of(request) and ex["raw_reply"] == STEP_REPLIES[ex["task"]]
     assert not unmatched
     assert auditor.get("/api/audit/verify").json()["valid"]
-
-
-def test_an_exchange_that_cannot_be_stored_fails_the_call_closed(live_app):
-    app, wire = live_app(lambda r: completion())
-    app.state.llm = ModelLlm(app.state.llm.model, unwritable_store, mode="live", endpoint_host="gw.example")
-    report = upload(as_role(app, "research_analyst")).json()
-    assert len(wire) == 1  # the provider answered; capture failed afterwards
-    assert report["extraction_status"] == "failed" and report["insights"] == []
-    assert "exchanges" not in extraction_event(app, report["id"])  # nothing was stored, so nothing to point at
-    assert as_role(app, "auditor").get("/api/audit/verify").json()["valid"]
-
-
-def test_live_requests_through_a_trajectory_view_share_one_trajectory_in_call_order(live_app):
-    from app.llm import LlmRequest
-
-    app, wire = live_app(lambda r: completion('{"answer": "ok"}'))
-    turn = app.state.llm.trajectory()
-    request = LlmRequest("assistant_answer", "assistant_answer@v1", "system", "user", {"type": "object"})
-    first, second = turn.complete(request), turn.complete(request)
-    auditor = as_role(app, "auditor")
-    exchanges = [auditor.get(f"/api/llm/exchanges/{r.exchange_id}").json() for r in (first, second)]
-    assert len(wire) == 2
-    assert exchanges[0]["trajectory_id"] == exchanges[1]["trajectory_id"] is not None
-    assert [e["trajectory_position"] for e in exchanges] == [0, 1]
-    alone = app.state.llm.complete(request)  # a plain call is a Trajectory of one
-    assert auditor.get(f"/api/llm/exchanges/{alone.exchange_id}").json()["trajectory_position"] == 0

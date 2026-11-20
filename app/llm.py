@@ -1,8 +1,8 @@
 """The single LLM interface (spec: OpenAI-compatible, gateway-ready; OpenRouter in front of an Anthropic model).
 
 Callers only ever see `LlmClient.complete`, its request and response, and its errors. What the app serves behind it is
-`app.exchanges.build_llm`: pydantic-ai over the live or replay Model, wrapped in capture (ADR-0010). Every response
-carries the model and prompt version so the caller can log both to the audit chain.
+`app.exchanges.build_llm`: the pipeline's LLM Graph on the chat model from `get_chat_model`, captured by a callback
+(ADR-0011). Every response carries the model and prompt version so the caller can log both to the audit chain.
 """
 
 import json
@@ -38,10 +38,6 @@ class LlmError(Exception):
         self.latency_ms = latency_ms
 
 
-class RecordingMissing(LlmError):
-    """Replay found no recording for the request: in recorded mode only recorded calls can be answered."""
-
-
 @dataclass(frozen=True)
 class LlmRequest:
     task: str
@@ -59,7 +55,7 @@ class LlmResponse:
     # Set by the capture wrapper once the Exchange is stored (ADR-0004).
     exchange_id: int | None = None
     exchange_hash: str | None = None
-    # Transport detail an adapter may know; absent for a replay.
+    # Transport detail the capture knows.
     messages: list[dict] | None = None
     raw_reply: str | None = None
     usage: dict | None = None

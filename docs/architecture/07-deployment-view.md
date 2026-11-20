@@ -16,7 +16,6 @@ flowchart LR
         research["app.research_seed (one-off)"]
         db[("data/app.db — SQLite")]
         inputs["Market snapshot, fund look-through, seed Reports"]
-        recordings["tests/fixtures/llm"]
         clients --> db
         research --> db
         inputs --> clients
@@ -25,9 +24,8 @@ flowchart LR
         browser -->|HTTP| vite
         vite -->|"/api proxy; includes SSE"| api
         api --> db
-        api -->|"Recorded mode: local replay"| recordings
     end
-    api -->|"Live mode only: HTTPS"| provider["Configured OpenAI-compatible LLM endpoint"]
+    api -->|"HTTPS"| provider["Configured OpenAI-compatible LLM endpoint"]
     subgraph ci["GitHub Actions — isolated runners"]
         checkout["Repository checkout"]
         backend["Backend: uv sync, Ruff, mypy, pytest"]
@@ -39,11 +37,11 @@ flowchart LR
     end
 ```
 
-The [README seed and run instructions](../../README.md#seed-and-run) are the executable runbook. After dependency setup and activation of `.venv`, run `uv run python -m app.seeder`, then `uv run python -m app.research_seed` against the same `APP_DATABASE_URL` (default `sqlite:///./data/app.db`). The Client seeder replaces the synthetic Client dataset; it is a setup command, not a service or a safe production refresh. The Research seed is idempotent and inserts human-verified Insights without an LLM call. Use a fresh database for the documented demo replay.
+The [README seed and run instructions](../../README.md#seed-and-run) are the executable runbook. After dependency setup and activation of `.venv`, run `uv run python -m app.seeder`, then `uv run python -m app.research_seed` against the same `APP_DATABASE_URL` (default `sqlite:///./data/app.db`). The Client seeder replaces the synthetic Client dataset; it is a setup command, not a service or a safe production refresh. The Research seed is idempotent and inserts human-verified Insights without an LLM call. Use a fresh database for the documented demo.
 
-Start the API with `APP_LLM_MODE=recorded APP_LLM_RECORDINGS_DIR=tests/fixtures/llm uv run uvicorn app.main:create_app --factory --port 8000` and the UI with `cd frontend && npm run dev`. Vite serves the SPA at `http://localhost:5173` and proxies `/api`, `/docs` and `/openapi.json` to port 8000. SSE uses the same API proxy. Startup creates missing tables, runs the idempotent migrations, seeds role users and marks unfinished Analysis Runs interrupted. Run Step progress, the one-in-flight guard and audit write serialization remain in the single API process ([ADR-0008](../adr/0008-one-process-on-sqlite-with-hand-written-migrations.md)). Do not add workers or replicas to this topology.
+Start the API with `uv run uvicorn app.main:create_app --factory --port 8000` and the UI with `cd frontend && npm run dev`. Vite serves the SPA at `http://localhost:5173` and proxies `/api`, `/docs` and `/openapi.json` to port 8000. SSE uses the same API proxy. Startup creates missing tables, runs the idempotent migrations, seeds role users and marks unfinished Analysis Runs interrupted. Run Step progress, the one-in-flight guard and audit write serialization remain in the single API process ([ADR-0008](../adr/0008-one-process-on-sqlite-with-hand-written-migrations.md)). Do not add workers or replicas to this topology.
 
-The API reads the committed market snapshot and fund look-through files; it does not fetch market prices. Recorded mode reads matching local LLM recordings without contacting a provider; live mode sends prompts to the configured endpoint. Settings and credentials come from `APP_*` environment variables or the git-ignored `.env`. SQLite holds application state, extracted Report pages, Audit Events and LLM Exchanges. There is no separate queue, progress service, identity provider or database server.
+The API reads the committed market snapshot and fund look-through files; it does not fetch market prices. Every LLM call sends its prompt to the configured endpoint, so the AI steps and the Assistant need `APP_LLM_API_KEY`; the tests use fake chat models and contact no provider. Settings and credentials come from `APP_*` environment variables or the git-ignored `.env`. SQLite holds application state, extracted Report pages, Audit Events and LLM Exchanges. There is no separate queue, progress service, identity provider or database server.
 
 ### CI topology (as-is)
 

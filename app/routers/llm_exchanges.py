@@ -26,7 +26,6 @@ class ExchangeOut(BaseModel):
     task: str
     prompt_version: str
     model: str | None
-    mode: Literal["live", "recorded"]
     endpoint_host: str | None
     system_text: str
     user_prompt: str
@@ -36,14 +35,14 @@ class ExchangeOut(BaseModel):
     parsed_content: dict | None
     usage: dict | None
     latency_ms: int | None
-    # "measured" for a live call; a replay has no real tokens or latency, so they are absent, not zero.
-    telemetry: Literal["measured", "not_available_replayed"]
     outcome: Literal["ok", "error"]
     error: str | None
     # The LLM Trajectory this request belongs to and its 0-based place in it (ADR-0010). A row written before
     # Trajectories existed has neither and is a Trajectory of one.
     trajectory_id: str | None
     trajectory_position: int | None
+    # The Graph Node of the LLM Graph that made the call (ADR-0011); None for a call made before LLM Graphs.
+    graph_node: str | None
     hash: str
 
 
@@ -79,7 +78,6 @@ def exchange_out(r: LlmExchangeRow) -> ExchangeOut:
         task=r.task,
         prompt_version=r.prompt_version,
         model=r.model,
-        mode=r.mode,
         endpoint_host=r.endpoint_host,
         system_text=r.system_text,
         user_prompt=r.user_prompt,
@@ -89,11 +87,11 @@ def exchange_out(r: LlmExchangeRow) -> ExchangeOut:
         parsed_content=_loads(r.parsed_content_json),
         usage=_loads(r.usage_json),
         latency_ms=r.latency_ms,
-        telemetry="measured" if r.mode == "live" else "not_available_replayed",
         outcome=r.outcome,
         error=r.error,
         trajectory_id=r.trajectory_id,
         trajectory_position=r.trajectory_position,
+        graph_node=r.graph_node,
         hash=r.hash,
     )
 
@@ -106,11 +104,9 @@ class ExchangeSummary(BaseModel):
     task: str
     prompt_version: str
     model: str | None
-    mode: Literal["live", "recorded"]
     outcome: Literal["ok", "error"]
     latency_ms: int | None
     usage: dict | None
-    telemetry: Literal["measured", "not_available_replayed"]
     error: str | None  # a failed call's message, cut short: a summary for the row, the full text is in the detail
     trajectory_id: str | None  # None for a row written before Trajectories, which is a Trajectory of one
     trajectory_position: int | None
@@ -184,7 +180,6 @@ def exchange_summary(r: LlmExchangeRow, events: list[AuditEventRow], length: int
         task=r.task,
         prompt_version=r.prompt_version,
         model=r.model,
-        mode=r.mode,
         outcome=r.outcome,
         latency_ms=r.latency_ms,
         usage=_loads(r.usage_json),
@@ -192,7 +187,6 @@ def exchange_summary(r: LlmExchangeRow, events: list[AuditEventRow], length: int
         trajectory_position=r.trajectory_position,
         trajectory_length=length,
         hash=r.hash,
-        telemetry="measured" if r.mode == "live" else "not_available_replayed",
         recommendation_id=next((e.recommendation_id for e in events if e.recommendation_id), None),
         portfolio_id=next((e.portfolio_id for e in events if e.portfolio_id), None),
     )
@@ -207,7 +201,6 @@ def exchange_summary(r: LlmExchangeRow, events: list[AuditEventRow], length: int
 def list_exchanges(
     task: str | None = None,
     prompt_version: str | None = None,
-    mode: Literal["live", "recorded"] | None = None,
     outcome: Literal["ok", "error"] | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
@@ -225,7 +218,6 @@ def list_exchanges(
     for column, value in (
         (LlmExchangeRow.task, task),
         (LlmExchangeRow.prompt_version, prompt_version),
-        (LlmExchangeRow.mode, mode),
         (LlmExchangeRow.outcome, outcome),
         (LlmExchangeRow.trajectory_id, trajectory_id),
     ):

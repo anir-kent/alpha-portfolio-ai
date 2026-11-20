@@ -136,7 +136,7 @@ export function HealthPage() {
     {
       name: "LLM",
       status: h.llm.status,
-      detail: h.llm.mode === "recorded" ? "recorded mode: replays committed responses" : `${h.llm.mode} mode`,
+      detail: h.llm.status === "ok" ? "API key configured" : "no API key configured",
     },
   ];
   return (

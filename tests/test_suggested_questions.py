@@ -1,14 +1,12 @@
-"""Seam: Suggested Questions and replay mode through the HTTP API (sme-assistant spec: Replay mode, API contract).
-
-Replay tests run in the default recorded mode against the committed recordings in `tests/fixtures/llm`, made by
-`uv run python -m tests.fixtures.suggested_questions` against the same seeded data `seed_demo` builds."""
+"""Seam: Suggested Questions through the HTTP API (sme-assistant spec: API contract). They are plain shortcuts: the
+drawer offers three per screen kind and asking one is asking an ordinary Question."""
 
 import pytest
 
 from app.main import create_app
 from tests.conftest import ROLES
-from tests.fixtures.suggested_questions import demo_screens, lift_question_limits, replay_settings, seed_demo
-from tests.fixtures.suggested_questions import login as demo_login
+from tests.fixtures.demo import demo_screens, demo_settings, lift_question_limits, seed_demo
+from tests.fixtures.demo import login as demo_login
 from tests.scripted import serve
 from tests.test_assistant import AnsweringModel, answer, ask, events, model, portfolio_screen  # noqa: F401  (fixture)
 from tests.test_queue import seeded  # noqa: F401  (fixture)
@@ -66,24 +64,11 @@ def test_a_suggested_question_from_another_screen_kind_still_carries_the_convers
     assert "CONVERSATION SO FAR" in model.requests[1].user_prompt
 
 
-REPLAY_MESSAGE = "Only Suggested Questions work in replay mode."
-
-
-def test_a_free_form_question_in_replay_mode_fails_with_the_replay_mode_message(app, login, seeded):  # noqa: F811
-    advisor = login("advisor")
-    turn = ask(advisor, "What colour is the sky?", portfolio_screen("C001")).json()
-    assert turn["outcome"] == "failed" and turn["answer"] is None
-    assert turn["message"] == REPLAY_MESSAGE
-    (event,) = events(app, "assistant.failed")
-    assert event["reason"] == "replay_miss" and event["exchanges"][0]["exchange_id"] == turn["exchange_id"]
-    (stored,) = advisor.get("/api/assistant/conversation").json()["turns"]
-    assert stored["message"] == REPLAY_MESSAGE
-
-
-def test_a_failure_in_live_mode_keeps_the_ordinary_failure_message(login, model):
+def test_a_failed_suggested_question_gives_the_ordinary_failure_message(login, model):
     model.error = "upstream unavailable"
     advisor = login("advisor")
-    turn = ask(advisor, "Why?", portfolio_screen("C001")).json()
+    (question, *_) = suggested(advisor, "portfolio")
+    turn = ask(advisor, question, portfolio_screen("C001")).json()
     assert turn["message"] == "The Assistant couldn't answer, try again."
     assert advisor.get("/api/assistant/conversation").json()["turns"][0]["message"] == turn["message"]
 
@@ -91,7 +76,7 @@ def test_a_failure_in_live_mode_keeps_the_ordinary_failure_message(login, model)
 def _seeded_demo_prompts(directory) -> list[tuple[str, str, str]]:
     """(role, screen kind, prompt) for every Suggested Question on every demo screen, on a freshly seeded app."""
     directory.mkdir()
-    app = create_app(lift_question_limits(replay_settings(directory)))
+    app = create_app(lift_question_limits(demo_settings(directory)))
     seed_demo(app)
     fake = serve(app, AnsweringModel(answer()))
     asked = []
@@ -121,34 +106,18 @@ def demo(app):
     return app
 
 
-def test_in_replay_mode_every_suggested_question_on_every_demo_screen_replays_its_answer(app, demo):
+def test_every_suggested_question_on_every_demo_screen_is_answered_like_any_other_question(app, demo):
+    fake = serve(app, AnsweringModel(answer()))
     for role in ROLES:
-        c = demo_login(app, role)  # one Conversation per role: replays do not depend on what was asked before
+        c = demo_login(app, role)
         for screen in demo_screens(app):
             for question in suggested(c, screen["kind"]):
+                before = len(fake.requests)
                 turn = ask(c, question, screen).json()
                 assert turn["outcome"] in ("answered", "refused"), (role, screen, question, turn["message"])
                 # The only refusals are of roles that cannot read the screen, made before any model call.
-                assert turn["outcome"] == "answered" or turn["exchange_id"] is None, (role, screen, question)
+                assert turn["outcome"] == "answered" or len(fake.requests) == before, (role, screen, question)
                 if turn["outcome"] == "answered":
                     assert turn["answer"]["markdown"] and turn["exchange_id"] is not None
     assert not events(app, "assistant.failed")
     assert events(app, "assistant.answered")
-
-
-def test_a_replayed_answer_offers_its_follow_up_questions_and_they_replay_only_if_suggested(app, demo):
-    advisor = demo_login(app, "advisor")
-    screen = {"kind": "portfolio", "entity_ids": {"portfolio_id": "C004"}, "selected_item": None}
-    questions = suggested(advisor, "portfolio")
-    question = questions[0]
-    turn = ask(advisor, question, screen).json()
-    assert turn["outcome"] == "answered" and turn["answer"]["follow_up_questions"]
-    follow_up = next(q for q in turn["answer"]["follow_up_questions"] if q not in questions)
-    assert ask(advisor, follow_up, screen).json()["message"] == REPLAY_MESSAGE
-
-
-def test_audit_suggested_questions_cannot_replay_and_say_so(app, demo):
-    auditor = demo_login(app, "auditor")
-    screen: dict = {"kind": "audit", "entity_ids": {}, "selected_item": None}
-    for question in suggested(auditor, "audit"):
-        assert ask(auditor, question, screen).json()["message"] == REPLAY_MESSAGE

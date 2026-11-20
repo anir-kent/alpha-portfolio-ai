@@ -25,7 +25,7 @@ flowchart TB
   analyst -->|"Uploads Reports, approves / rejects Insights<br/>[HTTPS, browser]"| platform
   approvers -->|"Approve exceptions, block, decide<br/>[HTTPS, browser]"| platform
   oversight -->|"Audit search, chain verification, governance, config, health<br/>[HTTPS, browser]"| platform
-  platform -->|"One schema-bound request per pipeline LLM step;<br/>up to the request budget per Assistant Answer<br/>(live mode only; recorded mode replays offline)<br/>[HTTPS, JSON]"| llm
+  platform -->|"One schema-bound request per pipeline LLM step;<br/>up to the request budget per Assistant Answer<br/><br/>[HTTPS, JSON]"| llm
   twelve -.->|"Daily closes into the committed snapshot,<br/>by a manual refresh script, never at run time<br/>[HTTPS, JSON]"| platform
 
   classDef person fill:#08427b,stroke:#052e56,color:#ffffff

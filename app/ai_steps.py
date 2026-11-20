@@ -1,7 +1,7 @@
 """Advisor-facing summary of the AI steps behind a Recommendation (ADR-0004).
 
 Derived from the Exchange each step's Audit Event references. It carries only what lets a reader judge how far to rely on
-a step: mode, latency, grounded counts and the transport outcome. No system text, prompt or reply text ever leaves here;
+a step: latency, grounded counts and the transport outcome. No system text, prompt or reply text ever leaves here;
 the Exchange id is included only when the caller may open the Exchange (`llm:read`).
 """
 
@@ -21,9 +21,7 @@ REASON_CHARS = 200
 @dataclass
 class AiStep:
     step: str  # tilt | memo
-    mode: str  # live | recorded
     latency_ms: int | None
-    telemetry: str  # measured | not_available_replayed
     outcome: str  # ok | failed
     reason: str | None  # why a failed step failed, cut short
     grounded: int | None  # Claims the validator accepted; None for a step that makes no Claims
@@ -55,9 +53,7 @@ def summaries(db: Session, recommendation_id: int, *, include_exchange_id: bool)
         out.append(
             AiStep(
                 step=step,
-                mode=exchange.mode,
                 latency_ms=exchange.latency_ms,
-                telemetry="measured" if exchange.mode == "live" else "not_available_replayed",
                 outcome="failed" if failed else "ok",
                 reason=reason or None,
                 grounded=counts.get("grounded") if not failed else None,

@@ -16,9 +16,9 @@ Goals are ranked. When two conflict, the higher one wins. For example, an LLM Ex
 | Explainability | The model supplies an unsupported Claim; Grounding flags it and excludes it from the memo | Zero ungrounded Claims in the memo. Assistant free-form prose is not universally fact-checked. |
 | Human control / safety | A Recommendation needs approval tiers; the policy enforces Advisor, then Compliance on breach, then Committee at threshold | No route to Approved without every required human Decision; out-of-order Decisions receive 409 and wrong-role endpoint calls 403. Approved executes nothing. |
 | Data protection | Build Client identity from application records for a prompt or Screen Context | Representative fixture prompts contain zero stored Client names/emails, even for `client:pii` roles. Arbitrary Questions/history and Reports are not sanitized (§8.9). A stored Client full name/email in an Assistant reply fails the turn. |
-| Reproducibility | Repeat a seeded run offline, or change a prompt/tool result | Same seed yields identical Clients/Holdings; committed recordings replay offline. Changed requests miss rather than reuse stale results. Model identity is not in the recording key (TD-06). |
+| Reproducibility | Repeat a seeded run offline, or change a prompt/tool result | Same seed yields identical Clients/Holdings, and the tests run offline on scripted fake chat models. Live replies are not repeatable, so every figure in them is grounded against the engine. |
 
-[Detailed quality scenario and test catalog](appendices.md#e14-quality-scenario-and-test-catalog). This preserves all scenario ids, stimuli, responses, measures and exact CI test references, including bounded Research Tilts and approved-Insights-only checks. Tests run at API and engine seams; recorded fixtures keep normal CI offline. Live model evidence is separate in Appendix B.
+[Detailed quality scenario and test catalog](appendices.md#e14-quality-scenario-and-test-catalog). This preserves all scenario ids, stimuli, responses, measures and exact CI test references, including bounded Research Tilts and approved-Insights-only checks. Tests run at API and engine seams; fake chat models keep normal CI offline. Live model evidence is separate in Appendix B.
 
 ## 10.3 Non-goals
 

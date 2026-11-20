@@ -1,7 +1,8 @@
 """Seam: AI-assisted Recommendations through the HTTP API (ADR-0001). The LLM proposes a Research Tilt from approved
 Insights and look-through exposure; the engine clips it to the configured bound before it moves any Trade Line, and
-writes rationale + memo that the grounding validator holds to citations. The LLM is a stub Model behind capture (Insight
-extraction replays, the other steps are scripted); the engine is real.
+writes rationale + memo that the grounding validator holds to citations. The LLM is a fake chat model under the
+pipeline's LLM Graph (Insight extraction answers from the recordings, the other steps are scripted); the engine is
+real.
 
 Planted C003 (conservative, ~$ millions): equity 20% (SPY 10, XLV 5, XLP 5) vs 20% target; cash 40% vs 15%; bonds 40% vs 65%.
 Without a tilt there are no equity Trade Lines. Bound defaults to 2.0 pp (spec), so an equity tilt of +5 must trade ~2%.
@@ -10,15 +11,13 @@ Without a tilt there are no equity Trade Lines. Bound defaults to 2.0 pp (spec),
 import json
 from collections.abc import Callable
 
-import httpx
 import pytest
-from pydantic_ai.models import Model
 from sqlalchemy import select
 
 from app import research_tilt
 from app.db import AuditEventRow
+from tests.fake_chat import ByTask, DemoPipeline, FakeChatModel, serve_chat
 from tests.runs import run_and_wait
-from tests.scripted import ByTask, ScriptedModel, serve
 from tests.test_portfolio import url
 from tests.test_queue import seeded  # noqa: F401  (fixture)
 from tests.test_research import upload
@@ -34,26 +33,20 @@ SCRIPTED_STEPS = {
 
 
 class StubModel(ByTask):
-    """Replays Insight extraction from the committed recordings; the tilt and narratives are scripted by the test as a
+    """Answers Insight extraction from the committed recordings; the tilt and narratives are scripted by the test as a
     handler from the request payload to the reply. A step with no handler fails as an unreachable provider does."""
 
-    def __init__(
-        self,
-        replay: Model,
-        tilt: Callable[[dict], dict] | None = None,
-        narrative: Callable[[dict], dict] | None = None,
-        priority_narrative: Callable[[dict], dict] | None = None,
-    ) -> None:
-        super().__init__(replay)
-        self.tilt, self.narrative, self.priority_narrative = tilt, narrative, priority_narrative
+    tilt: Callable[[dict], dict] | None = None
+    narrative: Callable[[dict], dict] | None = None
+    priority_narrative: Callable[[dict], dict] | None = None
 
-    def script_for(self, task: str) -> Model | None:
+    def script_for(self, task: str) -> FakeChatModel | None:
         if task not in SCRIPTED_STEPS:
             return None
         handler = getattr(self, SCRIPTED_STEPS[task])
         if handler is None:
-            return ScriptedModel(httpx.ConnectError(f"no stub for {task}"), model_name="stub-model-1")
-        return ScriptedModel(lambda request: handler(json.loads(request.user_prompt)), model_name="stub-model-1")
+            return FakeChatModel(ConnectionError(f"no stub for {task}"), model_name="stub-model-1")
+        return FakeChatModel(lambda request: handler(request.payload), model_name="stub-model-1")
 
 
 @pytest.fixture
@@ -64,8 +57,7 @@ def ai(app, login, seeded):  # noqa: F811
     ids = {i["subject"]: i["id"] for i in report["insights"]}
     state = type("State", (), {})()
     state.ids, state.report_id, state.analyst, state.advisor = ids, report["id"], analyst, login("advisor")
-    state.replay = app.state.llm.model
-    state.stub = serve(app, StubModel(state.replay))
+    state.stub = serve_chat(app, StubModel(fallback=DemoPipeline()))
 
     def approve(*subjects):
         for s in subjects:

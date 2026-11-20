@@ -25,7 +25,6 @@ class MarketDataHealth(BaseModel):
 
 class LlmHealth(BaseModel):
     status: Literal["ok", "unavailable"]
-    mode: str
 
 
 class Health(BaseModel):
@@ -61,9 +60,8 @@ def health(request: Request, db: Session = Depends(get_db)):
         database = DatabaseHealth(status="ok")
     except Exception:
         database = DatabaseHealth(status="error")
-    llm_ok = s.llm_mode == "recorded" or bool(s.llm_api_key)
     return Health(
         database=database,
         market_data=_market_data(s.market_data_snapshot_path),
-        llm=LlmHealth(status="ok" if llm_ok else "unavailable", mode=s.llm_mode),
+        llm=LlmHealth(status="ok" if s.llm_api_key else "unavailable"),
     )

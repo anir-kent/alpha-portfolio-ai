@@ -31,7 +31,7 @@ def start_and_wait(c: TestClient, timeout: float = 60) -> dict:
 
 def run_and_wait(c: TestClient, timeout: float = 60) -> int:
     """Start an Analysis Run as `c` and return its id once it has finished with its results recorded. Live LLM steps
-    (when recording) need a far longer `timeout` than replay."""
+    need a far longer `timeout` than a fake chat model."""
     snap = start_and_wait(c, timeout)
     assert snap["outcome"] in ("completed", "completed_with_warnings"), snap
     return snap["run_id"]

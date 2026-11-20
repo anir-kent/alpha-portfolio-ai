@@ -75,8 +75,6 @@ def quality(db: Session) -> Quality:
 
 class CaptureHealth(BaseModel):
     total: int  # LLM Exchanges stored
-    live: int
-    recorded: int  # replayed from recordings
     errors: int  # Exchanges whose call failed at the transport level
     unreferenced: int  # Exchanges no Audit Event points at: a step failed to anchor its call, or an event was removed
     trajectories: int  # LLM Trajectories stored; a row written before Trajectories counts as a Trajectory of one
@@ -86,11 +84,9 @@ class CaptureHealth(BaseModel):
 
 
 def capture_health(db: Session) -> CaptureHealth:
-    total, live, recorded, errors = db.execute(
+    total, errors = db.execute(
         select(
             func.count(),
-            func.count().filter(LlmExchangeRow.mode == "live"),
-            func.count().filter(LlmExchangeRow.mode == "recorded"),
             func.count().filter(LlmExchangeRow.outcome == "error"),
         )
     ).one()
@@ -114,8 +110,6 @@ def capture_health(db: Session) -> CaptureHealth:
         with_lookups += summary is not None and Trajectory.model_validate_json(summary).made_lookups()
     return CaptureHealth(
         total=total,
-        live=live,
-        recorded=recorded,
         errors=errors,
         unreferenced=len(stored - referenced),
         trajectories=trajectories + legacy,
@@ -281,7 +275,6 @@ def _assistant_card(settings: Settings) -> AssistantCard:
 
 class ModelCard(BaseModel):
     model: str
-    llm_mode: str
     llm_endpoint: str
     temperature: float | None  # None: not sent, the provider's default
     tilt_bound_pp: float
@@ -293,7 +286,6 @@ class ModelCard(BaseModel):
 def model_card(db: Session, settings: Settings) -> ModelCard:
     return ModelCard(
         model=settings.llm_model,
-        llm_mode=settings.llm_mode,
         llm_endpoint=urlsplit(settings.llm_base_url).hostname or "",
         temperature=settings.llm_temperature,
         tilt_bound_pp=config_service.get_config(db).tilt_bound_pp,

@@ -7,7 +7,12 @@ def test_health_reports_database_snapshot_and_llm(login):
     assert h["database"]["status"] == "ok"
     assert h["market_data"]["status"] == "missing"
     assert h["market_data"]["snapshot_age_hours"] is None
-    assert h["llm"] == {"status": "ok", "mode": "recorded"}
+    assert h["llm"] == {"status": "unavailable"}
+
+
+def test_health_reports_the_llm_available_once_a_key_is_configured(settings, login):
+    settings.llm_api_key = "sk-test"
+    assert login("platform_owner").get("/api/health").json()["llm"] == {"status": "ok"}
 
 
 def test_health_reports_snapshot_age(settings, login):

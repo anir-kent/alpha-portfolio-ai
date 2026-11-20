@@ -1,21 +1,21 @@
 # Manual E2E checklist (one page)
 
-Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go. For a quick pass over the pydantic-ai Assistant work only, use `docs/sanity-test-pack.md`.
+Detail for each step: `docs/manual-e2e-guide.md`. Tick as you go. For a quick pass over the LLM Graphs and the Assistant only, use `docs/sanity-test-pack.md`.
 
 ## Setup
 
 - [x] `source .venv/bin/activate`
 - [ ] `uv run python -m scripts.walkthrough` passes (the same story through the API, on a fresh throwaway seed)
 - [ ] `rm -f data/app.db`, then `uv run python -m app.seeder` and `uv run python -m app.research_seed`
-- [ ] `APP_LLM_MODE=recorded APP_LLM_RECORDINGS_DIR=tests/fixtures/llm uv run uvicorn app.main:create_app --factory --port 8000`
+- [ ] `uv run uvicorn app.main:create_app --factory --port 8000` (with `APP_LLM_API_KEY` set in `.env`)
 - [x] `cd frontend && npm run dev` -> <http://localhost:5173>
 - [x] Log in with username = role name (`advisor`, `compliance_officer`, ...) and the `APP_SEED_USER_PASSWORD` password
-- [ ] LLM mode known: recorded replays the first Analysis Run's AI steps on a fresh seed (anything else shows "failed", the rest still works); live calls OpenRouter
+- [ ] The model is known: every AI step and the Assistant call the provider live (OpenRouter by default); without a key an AI step shows "failed" and the rest still works
 
 
 ## Interviewer demo script: the bounded agent (ADR-0010), about 10 minutes
 
-One story, four beats: the Assistant gathers its own context, shows how it answered, the Auditor sees the same Trajectory raw, and the chain proves nothing was changed. Beats 1 to 3 work in recorded mode; the self-correction and budget beats need live mode (`APP_LLM_MODE=live`, OpenRouter). Talking points are in italics.
+One story, four beats: the Assistant gathers its own context, shows how it answered, the Auditor sees the same Trajectory raw, and the chain proves nothing was changed. The graph behind it is `agent` → `tools` → `agent` → `validate`, with a reflection edge back to `agent` and a budget edge. The self-correction and budget beats depend on the model. Talking points are in italics.
 
 1. **A cross-screen Question from the Queue** (advisor, after Run analysis)
    - [ ] On `/queue`, open the Assistant and ask the Suggested Question "What are the holdings and drift of Portfolio C001?". C001's Holdings are not on the Queue screen. The Answer lists them, and its Claims cite `portfolio.C001.*` figures, marked grounded. _The model chose the lookup; the server built the result through the same permission-checked, PII-free builder the Portfolio screen uses, so it sees no more than the advisor could open._
@@ -27,7 +27,7 @@ One story, four beats: the Assistant gathers its own context, shows how it answe
    - [ ] Budget, optional, live with `APP_ASSISTANT_REQUEST_LIMIT=2`: "Compare the holdings and drift of Portfolios C001, C002 and C003." fails with "That Question needed more lookups than one Answer may make…" and "Requests: 2 / 2". _The request beyond the budget is never sent._
 3. **The same Trajectory on the LLM Exchanges page** (log in as auditor; advisors never see raw Exchanges)
    - [ ] `/llm-exchanges` shows the Answer as one row, "▸ 2 steps", with summed tokens and latency; expand it to "step 1/2" and "step 2/2"
-   - [ ] Open step 2: the drawer reads "Step 2 of 2 in this Trajectory". Prompt's "Request messages" shows step 1's tool call and the tool result verbatim; Previous goes to step 1. _In live mode these are the bytes that crossed the wire, captured at the `httpx` transport; replays are labelled as replays._
+   - [ ] Open step 2: the drawer reads "Step 2 of 2 in this Trajectory". Prompt's "Request messages" shows step 1's tool call and the tool result verbatim; Previous goes to step 1. _Each Exchange is one model call, as LangChain sent and received it, and tagged with the Graph Node that made it._
    - [ ] On `/audit`, the turn's `assistant.answered` event lists both Exchanges in `exchanges`, by id and hash, in position order
 4. **Chain verification**
    - [ ] "Verify chain" reports OK, recomputing every Audit Event and every Exchange of every Trajectory. _Editing, deleting, reordering or orphaning any step would name the first broken record (QS-A1, QS-A2)._
@@ -48,7 +48,7 @@ One story, four beats: the Assistant gathers its own context, shows how it answe
 - [ ] Stream refused (any non-200 on `events`): the modal shows "Live updates unavailable; checking every 1s" and keeps updating by polling the snapshot; if polling fails too (e.g. session cookie cleared) it shows "Could not load the run's progress. Retrying…"
 - [ ] Without an LLM configured, both narrative steps show skipped and the run ends Completed
 - [ ] On Completed the Queue behind refreshes (new run number in the subtitle); View updated queue closes the modal on it
-- [ ] Completed with warnings, recorded LLM mode: with approved research in place (`uv run python -m app.research_seed`), move every `data/llm_recordings/priority_narrative-*.request.json` aside, then Run analysis. Priority narratives shows failed with "Narrative unavailable (AI step failed; scores are unaffected).", Recommendation narratives still runs and shows done, the header reads "Completed with warnings", the Queue refreshes to the new run and View updated queue is offered. Put the recordings back
+- [ ] Completed with warnings: with approved research in place (`uv run python -m app.research_seed`) and the model unreachable (start the API without `APP_LLM_API_KEY`), Run analysis. Priority narratives and Recommendation narratives show failed with "Narrative unavailable (AI step failed; scores are unaffected).", the header reads "Completed with warnings", the Queue refreshes to the new run and View updated queue is offered. Restart the API with the key
 - [ ] Interrupted: with approved research in place and a live LLM (so the run is slow), Run analysis, then stop the API (Ctrl-C) during Score Portfolios and start it again. Reload the Queue: no pill, Run analysis is enabled and the Queue still shows the previous run number. Open `/api/analysis/runs/<id>` for the stopped run: `"outcome": "interrupted"`, every step `skipped`. A modal left open on the stopped run (stale tab) ends on "Interrupted" with "Run interrupted. The Queue still shows the previous run" and the Queue does not refresh. Run analysis again: a new run starts at once. (If the stop lands after Record run, the stopped run shows Load inputs, Score Portfolios and Record run done, the narratives skipped, and the Queue shows that run)
 - [ ] The modal header reads "Started by advisor at <time>" for your own run
 - [ ] Close and reopen (use a live LLM, or approved research in place, so the run is slow): Close (or Escape) mid-run; the header shows "Analysis running… View progress" and Run analysis reads "Analysis Run in progress". Either one reopens the modal on the same run, which has kept going (the steps moved on while it was hidden). Close it again and let the run finish: the pill goes, the button reads Run analysis again, and the Queue refreshes to the new run number without the modal open
@@ -85,7 +85,7 @@ One story, four beats: the Assistant gathers its own context, shows how it answe
 - [ ] Switch role (logout) and log back in: the drawer is empty, and the first Question is turn 1 of a new Conversation
 - [ ] Ask "How far has C001 drifted?" on C001: the Answer lists its Claims with engine figure chips (e.g. `portfolio_drift_pp`); clicking one goes to `/portfolios/C001`. Report citation chips (`<report id> p.<page>`) open the quoted passage under the chip when clicked; a live model cites one from the Recommendation context (below)
 - [ ] A Claim that failed grounding (e.g. a number the Screen Context doesn't hold) shows a red "ungrounded" marker in place with its reason below it, and the Claim stays in the Answer; as auditor, the turn's LLM Exchange shows the grounding verdict and a `claim_ungrounded` Audit Event names the `assistant_turn` subject
-- [ ] Retry works: with the model unreachable (e.g. `APP_LLM_MODE=live` and a bad `APP_LLM_BASE_URL`, or a non-Suggested Question in recorded mode), ask on C001: the turn shows "The Assistant couldn't answer, try again." with no error detail and a Retry button. Fix the model, move to `/portfolios/C002` and click Retry: a new turn asks the same Question against C001 (a divider marks the context change back), the failed turn stays above it, and whatever is typed in the Question box is kept. As auditor, the failed turn has an `assistant.failed` Audit Event with `reason` `llm_error` that references the error LLM Exchange, and Verify chain passes
+- [ ] Retry works: with the model unreachable (e.g. a bad `APP_LLM_BASE_URL`), ask on C001: the turn shows "The Assistant couldn't answer, try again." with no error detail and a Retry button. Fix the model, move to `/portfolios/C002` and click Retry: a new turn asks the same Question against C001 (a divider marks the context change back), the failed turn stays above it, and whatever is typed in the Question box is kept. As auditor, the failed turn has an `assistant.failed` Audit Event with `reason` `llm_error` that references the error LLM Exchange, and Verify chain passes
 
 ## Assistant (Queue and Recommendation screens)
 
@@ -112,17 +112,17 @@ One story, four beats: the Assistant gathers its own context, shows how it answe
 - [ ] As auditor on `/llm-exchanges`, open an Exchange: the header reads "LLM Exchange N"; ask "What did the model see?": the new turn's Exchange prompt holds the opened Exchange's system text, prompt and reply fenced between `<<<LLM_EXCHANGE ...>>>` and `<<<END_LLM_EXCHANGE>>>`. Closing the Exchange returns the header to "LLM Exchanges", and the prompt then carries no Exchange body
 - [ ] As platform_owner on `/governance`, ask "Which model and prompt versions are in use?": the Answer matches the model card
 - [ ] As platform_owner on `/config` and `/health`, ask "How does an Analysis Run work?": the Answer explains it from the platform brief, and the turn's Exchange prompt holds no config values or health figures, and the Answer has no Claims
-- [ ] As auditor on `/governance`, the Assistant panel shows `assistant_answer@v5`, the scope policy, the five limits, and the latest live eval (refusal rate, false refusals, ungrounded-Claim rate, failed turns, injection leaks) with a "run against" warning when the latest live eval used an earlier prompt; scripted replay fixtures do not replace a live eval
+- [ ] As auditor on `/governance`, the Assistant panel shows `assistant_answer@v5`, the scope policy, the five limits, and the latest live eval (refusal rate, false refusals, ungrounded-Claim rate, failed turns, injection leaks) with a "run against" warning when the latest live eval used an earlier prompt; scripted fake-model runs do not replace a live eval
 
-## Assistant (Suggested Questions and replay mode)
+## Assistant (Suggested Questions)
 
-Setup: `APP_LLM_MODE=recorded`, `APP_LLM_RECORDINGS_DIR=tests/fixtures/llm`, the default `APP_LLM_MODEL`, `APP_LLM_BASE_URL` and `APP_ASSISTANT_CONTEXT_ROWS` (the Governance context names the model and endpoint), and a fresh database seeded with `uv run python -m app.seeder`, `uv run python -m app.research_seed` and one Analysis Run as advisor. This is the seeded data the recordings were made against (`tests/fixtures/suggested_questions.py`).
+Setup: `APP_LLM_API_KEY` set, and a fresh database seeded with `uv run python -m app.seeder`, `uv run python -m app.research_seed` and one Analysis Run as advisor.
 
 - [ ] Every screen shows three Suggested Questions under the turns, and they change with the screen (Queue, Portfolio, Recommendation, Approvals, Audit, LLM Exchanges, Governance, Config, Health)
-- [ ] As advisor on `/portfolios/C004`, click each Suggested Question in any order: each one replays an Answer (no "Thinking…" stall, no failure), even after a free-form Question in the same Conversation
-- [ ] The replay-mode message shows: type a free-form Question (e.g. "What colour is the sky?") and Send. The turn reads "Only Suggested Questions work in replay mode." with a Retry button, and it still reads so after a reload. As auditor, its `assistant.failed` Audit Event has `reason` `replay_miss`
-- [ ] Clicking a follow-up suggestion under an Answer asks it straight away about the current screen, leaving the Question box untouched; in replay mode a follow-up that isn't a Suggested Question gets the replay-mode message
-- [ ] On `/audit`, a Suggested Question gets the replay-mode message: Audit Events carry wall-clock timestamps, so the Audit context never matches a recording (expected)
+- [ ] As advisor on `/portfolios/C004`, click each Suggested Question in any order: each one is asked like a typed Question and gets an Answer, even after a free-form Question in the same Conversation
+- [ ] A failed Question reads "The Assistant couldn't answer, try again." with a Retry button, and still reads so after a reload (with the model unreachable, e.g. a bad `APP_LLM_BASE_URL`). As auditor, its `assistant.failed` Audit Event has `reason` `llm_error`
+- [ ] Clicking a follow-up suggestion under an Answer asks it straight away about the current screen, leaving the Question box untouched
+- [ ] On `/audit`, a Suggested Question is answered like any other
 
 ## Assistant (usage limits)
 
@@ -162,9 +162,9 @@ Setup: `APP_ASSISTANT_QUESTION_MAX_CHARS=40`, `APP_ASSISTANT_QUESTIONS_PER_CONVE
 ## LLM Exchanges
 
 - [x] `auditor`, `compliance_officer`, `platform_owner` see "LLM Exchanges" under GATEWAY; `advisor` and `relationship_manager` do not, and `/llm-exchanges` shows no page for them
-- [ ] Feed lists newest first: time, task, prompt version, model, live/recorded pill, outcome, latency, tokens, linked Recommendation or Portfolio; figures right-aligned in monospace
-- [ ] Filters work alone and combined: task, prompt version, mode, outcome, date range
-- [ ] Recorded (replayed) rows show tokens and latency as "n/a (replayed)"; failed rows are marked and show the error summary
+- [ ] Feed lists newest first: time, task, prompt version, model, outcome, latency, tokens, linked Recommendation or Portfolio; figures right-aligned in monospace
+- [ ] Filters work alone and combined: task, prompt version, outcome, date range
+- [ ] Failed rows are marked and show the error summary
 - [ ] Empty database shows the empty state; a filter with no hits shows "No Exchanges match"; stopping the API shows the error line
 - [ ] Live tail on, then Run analysis (Queue page, another tab): new Exchanges appear without reloading, each once
 - [ ] Live tail off: rows already shown stay; the list catches up on anything missed
@@ -178,7 +178,7 @@ Setup: `APP_ASSISTANT_QUESTION_MAX_CHARS=40`, `APP_ASSISTANT_QUESTIONS_PER_CONVE
 - [ ] Click a feed row (or its # button): a drawer opens with Prompt, Schema, Reply, Metadata and Used by tabs; Escape and a click on the scrim both close it
 - [ ] Prompt shows system text and user prompt; long content scrolls inside the drawer and the page behind does not clip it
 - [ ] Reply shows the raw text and the parsed view; a reply with ungrounded Claims shows them flagged in red, with the tab marked
-- [ ] Metadata shows hash, tokens, latency, model, endpoint host and mode; a recorded Exchange shows "n/a (replayed)" for tokens and latency
+- [ ] Metadata shows hash, tokens, latency, model, endpoint host and the Graph Node that made the call
 - [ ] Used by lists the referencing Audit Events and the grounding verdict, and links to the Recommendation's lineage
 - [ ] "Download JSON" saves `llm-exchange-<id>.json` containing the Exchange and its `hash`
 - [ ] A failed Exchange shows the error text and any raw reply that was captured
@@ -188,8 +188,8 @@ Setup: `APP_ASSISTANT_QUESTION_MAX_CHARS=40`, `APP_ASSISTANT_QUESTIONS_PER_CONVE
 
 ### Advisor AI-step summary
 
-- [ ] `advisor`: a Recommendation's AI contribution lists each AI step (Research Tilt, Rationale and memo) with a live or recorded pill, ok or failed, latency and grounded/ungrounded counts in monospace; no prompt or reply text and no "Open exchange" button
-- [ ] Recorded mode: latency reads "n/a (replayed)"; steps with no recording show `failed` with a short reason, and the plain rule-based Recommendation is unaffected
+- [ ] `advisor`: a Recommendation's AI contribution lists each AI step (Research Tilt, Rationale and memo) with ok or failed, latency and grounded/ungrounded counts in monospace; no prompt or reply text and no "Open exchange" button
+- [ ] With the model unreachable, steps show `failed` with a short reason, and the plain rule-based Recommendation is unaffected
 - [ ] `relationship_manager`: same summary, client name and email still masked
 - [ ] `compliance_officer` (Portfolio page): steps also show "Open exchange", which opens the Exchange drawer
 
@@ -200,7 +200,7 @@ Guide: Act 11. Four uploads of the demo house view (`tests/fixtures/house_view_d
 ### Setup
 
 - [ ] Fresh database: `uv run python -m app.seeder` and `uv run python -m app.research_seed`, nothing uploaded yet
-- [ ] Start the API with `APP_LLM_MODE=recorded APP_LLM_RECORDINGS_DIR=tests/fixtures/llm`, where the committed extraction recordings live (`data/llm_recordings/` is gitignored, and a stale local recording there can replay an empty extraction)
+- [ ] Start the API with `APP_LLM_API_KEY` set: extraction calls the model live
 
 ### Landing and access
 
@@ -232,7 +232,7 @@ Guide: Act 11. Four uploads of the demo house view (`tests/fixtures/house_view_d
 - [ ] Unsupported type (e.g. a `.docx` or `.png`): rejected in the dialog with "… is not a PDF or text file", and DevTools Network shows no `POST /api/reports`
 - [ ] Over 20 MB (`head -c 21000000 /dev/zero > big.txt`): rejected in the dialog with "big.txt is 20.03 MB, over the 20 MB limit", no request sent
 - [ ] Server refusals stay inline: an empty or non-UTF-8 `.txt`, or a `.pdf` that is not a PDF, shows the server's 422 message in the dialog; picking another file clears it and the upload can be retried without reopening
-- [ ] Failed extraction: upload a `.txt` with no recording (any new text): lands on its detail with "Extraction failed: No recorded response for insight_extraction …" and an Upload again button, which reopens the dialog and returns focus to it on close
+- [ ] Failed extraction: with the model unreachable (no `APP_LLM_API_KEY`), upload any `.txt`: lands on its detail with "Extraction failed: …" and an Upload again button, which reopens the dialog and returns focus to it on close
 - [ ] That Report shows the stored error in red and "No Insights, because extraction failed", and its pages can still be read; on the Reports tab it has a red "Extraction failed" pill with an alert icon and text (hover shows the stored error), and its row is marked
 - [ ] A Report that succeeded with no Insights shows the neutral "No Insights were extracted from this Report" with its page count, and its pages can still be read (no fixture ships one; check in code review or with a DevTools response override of `GET /api/reports`)
 
@@ -285,6 +285,6 @@ Guide: Act 11. Four uploads of the demo house view (`tests/fixtures/house_view_d
 
 ## Notes
 
-- Live mode costs money and the first run is slower (one LLM call per portfolio narrative)
+- Every LLM call is live, so it costs money and the first run is slower (one LLM call per portfolio narrative)
 - Config and Health are read-only screens; changes go through `PATCH /api/config`
-- Live mode defaults to OpenRouter (`anthropic/claude-sonnet-5.5`); another model or endpoint stops the recordings replaying
+- The default is OpenRouter (`anthropic/claude-sonnet-5.5`); `APP_LLM_MODEL` and `APP_LLM_BASE_URL` change it

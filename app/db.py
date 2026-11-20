@@ -65,7 +65,9 @@ class LlmExchangeRow(Base):
     task: Mapped[str] = mapped_column(String, index=True)
     prompt_version: Mapped[str] = mapped_column(String, index=True)
     model: Mapped[str | None] = mapped_column(String, nullable=True)
-    mode: Mapped[str] = mapped_column(String, index=True)  # live | recorded
+    mode: Mapped[str] = mapped_column(
+        String, index=True
+    )  # "live" for every Exchange now; rows from before recorded mode was removed say "recorded" and keep their hash
     endpoint_host: Mapped[str | None] = mapped_column(String, nullable=True)
     system_text: Mapped[str] = mapped_column(Text)
     user_prompt: Mapped[str] = mapped_column(Text)
@@ -79,6 +81,8 @@ class LlmExchangeRow(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     trajectory_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     trajectory_position: Mapped[int | None] = mapped_column(nullable=True)  # 0-based within the Trajectory
+    # The Graph Node of the LLM Graph that made the call (ADR-0011); None on rows written before LLM Graphs.
+    graph_node: Mapped[str | None] = mapped_column(String, nullable=True)
     hash: Mapped[str] = mapped_column(String)
 
 
@@ -386,6 +390,7 @@ def make_session_factory(url: str) -> sessionmaker:
     _generalise_grounding_results(engine)
     _add_turn_columns(engine)
     _add_exchange_trajectory(engine)
+    _add_exchange_graph_node(engine)
     return sessionmaker(engine, expire_on_commit=False)
 
 
@@ -419,6 +424,14 @@ def _add_exchange_trajectory(engine: Engine) -> None:
             if name not in existing:
                 conn.execute(text(f"ALTER TABLE llm_exchanges ADD COLUMN {name} {kind}"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_llm_exchanges_trajectory_id ON llm_exchanges (trajectory_id)"))
+
+
+def _add_exchange_graph_node(engine: Engine) -> None:
+    """An existing database predates LLM Graphs (ADR-0011): afterwards every Exchange has a `graph_node` column, empty
+    for older rows, whose stored hashes stay valid because the digest leaves an empty one out."""
+    with engine.begin() as conn:
+        if "graph_node" not in {c["name"] for c in inspect(conn).get_columns("llm_exchanges")}:
+            conn.execute(text("ALTER TABLE llm_exchanges ADD COLUMN graph_node VARCHAR"))
 
 
 def _generalise_grounding_results(engine: Engine) -> None:

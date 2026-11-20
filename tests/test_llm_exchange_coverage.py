@@ -1,7 +1,6 @@
 """Seam: the HTTP API. Every AI step (Research Tilt, Recommendation memo, prioritisation narrative) is captured as an
 LLM Exchange that its Audit Event references by id and hash, on success and on failure (ADR-0004). Prompts never carry
-a client name or email, which is what lets `llm:read` stand apart from `client:pii`. Recordings and scripted Models; no
-network."""
+a client name or email, which is what lets `llm:read` stand apart from `client:pii`. Fake chat models; no network."""
 
 import json
 import re
@@ -11,8 +10,8 @@ import pytest
 from sqlalchemy import select, text
 
 from app.db import AuditEventRow, ClientRow
+from tests.fake_chat import FakeChatModel, serve_chat
 from tests.runs import run_and_wait
-from tests.scripted import serve
 from tests.test_ai_recommendations import ai, tilt_for  # noqa: F401  (fixture)
 from tests.test_portfolio import url
 from tests.test_priority_narrative import narrative_reply
@@ -35,7 +34,7 @@ def step_events(app, *types):
 
 @pytest.fixture
 def captured(app, ai):  # noqa: F811
-    """The stub Model, behind the same capture the app serves."""
+    """The stub chat model, behind the same capture the app serves."""
     ai.approve("Information Technology", "equity")
     tilt_for(ai, equity=5.0)
     ai.stub.narrative = lambda payload: {"claims": []}
@@ -68,8 +67,8 @@ def test_every_ai_step_is_captured_and_referenced_by_its_audit_event(app, login,
     assert auditor.get("/api/audit/verify").json()["valid"]
 
 
-def test_a_step_with_no_recording_is_captured_as_an_error_exchange_and_the_event_says_so(app, login, captured):
-    serve(app, captured.replay)  # the app's own replay Model: it has no recording for these steps
+def test_a_step_whose_provider_fails_is_captured_as_an_error_exchange_and_the_event_says_so(app, login, captured):
+    serve_chat(app, FakeChatModel(then=ConnectionError("provider unavailable")))
     captured.run()
     auditor = login("auditor")
     events = step_events(app, *STEPS)
@@ -82,7 +81,7 @@ def test_a_step_with_no_recording_is_captured_as_an_error_exchange_and_the_event
             "error",
             payload["exchanges"][0]["exchange_hash"],
         )
-        assert "No recorded response" in ex["error"]
+        assert "provider unavailable" in ex["error"] and ex["graph_node"] == "generate"
     assert auditor.get("/api/audit/verify").json()["valid"]
 
 

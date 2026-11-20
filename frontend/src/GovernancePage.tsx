@@ -56,16 +56,10 @@ export function GovernancePage({ canRunFixtures }: { canRunFixtures: boolean }) 
       />
 
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <Panel
-          title="Model card"
-          label="Model card"
-          aside={<Pill tone={card.llm_mode === "live" ? "pos" : "warn"}>{card.llm_mode}</Pill>}
-        >
+        <Panel title="Model card" label="Model card">
           <dl className="grid grid-cols-[11rem_1fr] gap-y-1">
             <dt className="text-ink-3">Model</dt>
             <dd className="mono">{card.model}</dd>
-            <dt className="text-ink-3">Mode</dt>
-            <dd>{card.llm_mode}</dd>
             <dt className="text-ink-3">Endpoint</dt>
             <dd className="mono">{card.llm_endpoint}</dd>
             <dt className="text-ink-3">Temperature</dt>
@@ -171,10 +165,8 @@ export function GovernancePage({ canRunFixtures }: { canRunFixtures: boolean }) 
           </Pill>
         }
       >
-        <div className="grid grid-cols-2 divide-x divide-line sm:grid-cols-5">
+        <div className="grid grid-cols-2 divide-x divide-line sm:grid-cols-3">
           <Kpi label="Exchanges" value={String(ch.total)} sub="stored, append-only" />
-          <Kpi label="Live" value={String(ch.live)} sub="crossed the wire" />
-          <Kpi label="Recorded" value={String(ch.recorded)} sub="replayed" />
           <Kpi
             label="Errors"
             value={String(ch.errors)}
@@ -221,8 +213,8 @@ export function GovernancePage({ canRunFixtures }: { canRunFixtures: boolean }) 
         )}
         {fx === null ? (
           <Empty>
-            No run yet. Fixtures replay a fabricated quote, a wrong number and an uncited asset call through the
-            validator.
+            No run yet. Fixtures feed the validator a fabricated quote, a wrong number and an uncited asset call, and
+            check that it catches each one.
           </Empty>
         ) : (
           <>

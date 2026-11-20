@@ -14,9 +14,8 @@ Run it live by hand before bumping the prompt version, and commit the results it
 
     uv run python -m tests.fixtures.assistant_eval
 
-It needs `APP_LLM_API_KEY` (and the live endpoint and model settings) in the environment or `.env`. Only the Assistant
-calls go live; the Analysis Run's AI steps replay from the committed recordings, as when recording Suggested Questions.
-Nothing is recorded. The cases follow ADR-0006 (the Assistant's scope and Screen Contexts) and ADR-0004 (no Client
+It needs `APP_LLM_API_KEY` (and the live endpoint and model settings) in the environment or `.env`. Everything goes
+live, the seeded Analysis Run's AI steps included. The cases follow ADR-0006 (the Assistant's scope and Screen Contexts) and ADR-0004 (no Client
 name or email reaches the model; every call is an LLM Exchange).
 """
 
@@ -37,14 +36,7 @@ from app.governance import AssistantEval, EvalCaseResult, EvalCategory, EvalExpe
 from app.main import create_app
 from app.prompts import ASSISTANT_ANSWER
 from app.settings import Settings
-from tests.fixtures.suggested_questions import (
-    ReplayOrRecord,
-    lift_question_limits,
-    live_model,
-    login,
-    replay_settings,
-    seed_demo,
-)
+from tests.fixtures.demo import demo_settings, lift_question_limits, login, seed_demo
 from tests.scripted import ScriptedModel, ScriptedRequest, call
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -257,12 +249,13 @@ class ScriptedEvalModel(ScriptedModel):
     answer; `obey_injections` writes what each injected passage asks for; `skip_lookups` answers without looking up.
     `requests` keeps every request received."""
 
+    cases: dict = {}
+    leak: str | None = None
+    obey_injections: bool = False
+    skip_lookups: bool = False
+
     def __init__(self, cases: tuple[EvalCase, ...]) -> None:
-        self.cases = {c.question: c for c in cases}
-        self.leak: str | None = None
-        self.obey_injections = False
-        self.skip_lookups = False
-        super().__init__(then=self._reply_to, model_name="scripted-eval-model")
+        super().__init__(then=self._reply_to, model_name="scripted-eval-model", cases={c.question: c for c in cases})
 
     def _reply_to(self, request: ScriptedRequest) -> object:
         prompt = request.prompts[0]  # a retry repeats the misbehaviour: the guard must still catch it
@@ -457,15 +450,22 @@ def _pct(rate: float | None) -> str:
 def main() -> int:
     import tempfile
 
-    live = live_model()
-    if live is None:
+    env = Settings()
+    if not env.llm_api_key:
+        print("APP_LLM_API_KEY must be set to run the eval live", file=sys.stderr)
         return 1
     with tempfile.TemporaryDirectory() as tmp:
-        app = create_app(lift_question_limits(replay_settings(Path(tmp))))
-        # The Analysis Run's AI steps replay; the eval's own Questions go live, and nothing is recorded.
-        app.state.llm.model = ReplayOrRecord(live, record=False)
-        seed_demo(app)
-        report = run_eval(app, EVAL_SET, model=live.model_name)
+        settings = lift_question_limits(demo_settings(Path(tmp))).model_copy(
+            update={
+                "llm_api_key": env.llm_api_key,
+                "llm_base_url": env.llm_base_url,
+                "llm_model": env.llm_model,
+                "llm_temperature": env.llm_temperature,
+            }
+        )
+        app = create_app(settings)
+        seed_demo(app, 1800)  # a live Analysis Run makes ~40 LLM calls in turn
+        report = run_eval(app, EVAL_SET, model=env.llm_model)
     for r in report.results:
         status = "pass" if r.passed else "FAIL"
         print(f"{status} {r.id:24} {r.category:12} {r.outcome:9} {'; '.join(r.problems)}")

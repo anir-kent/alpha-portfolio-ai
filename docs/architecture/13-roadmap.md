@@ -42,7 +42,7 @@ Addresses TD-02: component and browser tests for permissions, Decisions, researc
 
 ### RM-09 Model-aware reproducible recordings
 
-Addresses TD-06/08: model-aware recording keys and controlled re-recording with credentials and spend ceilings. Gate: substantive model, prompt and tool-result changes miss stale recordings. See the [detailed gate](appendices.md#e34-production-deployment-boundaries-and-rollout-gates) for risk links, owner and acceptance evidence.
+Retired: TD-06/08 are closed because recorded mode was removed, so there is no recording key to make model-aware. A model change is covered by rerunning the live eval ([RM-06](#rm-06-governed-llm-gateway)). See the [detailed gate](appendices.md#e34-production-deployment-boundaries-and-rollout-gates) for risk links, owner and acceptance evidence.
 
 ### RM-10 Controlled data pilot and capacity gate
 

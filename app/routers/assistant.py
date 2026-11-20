@@ -80,5 +80,5 @@ class SuggestedQuestions(BaseModel):
 
 @router.get("/suggested-questions", response_model=SuggestedQuestions, operation_id="getSuggestedQuestions")
 def suggested_questions(kind: ScreenKind, _: User = Depends(require("assistant:use"))):
-    """The screen kind's three Suggested Questions. In recorded mode only these replay (from committed recordings)."""
+    """The screen kind's three Suggested Questions: shortcuts, each asked as an ordinary Question."""
     return SuggestedQuestions(kind=kind, questions=list(screen_context.SUGGESTED_QUESTIONS[kind]))
