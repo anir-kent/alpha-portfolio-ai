@@ -72,6 +72,22 @@ _Avoid_: Insight Decision, validation
 **Research Tilt**:
 A bounded, configurable adjustment to target weights derived from an Insight and validated by the engine.
 
+**Chunk**:
+One retrievable piece of a Report produced by Docling's HybridChunker, with a stable uuid5 id, its page and its section headings. An Insight cites exactly one Chunk.
+_Avoid_: Segment, passage (a passage is the quoted text inside a Chunk), document
+
+**Report Index**:
+A Report's Chunks: stored in SQLite as the record of truth and embedded in the vector store for retrieval. The vector store can always be rebuilt from SQLite.
+_Avoid_: Vector DB, embeddings, collection (on their own)
+
+**Retrieval Query**:
+One fixed, versioned query per taxonomy subject used to retrieve candidate Chunks from a Report during Insight extraction.
+_Avoid_: Prompt, search, question (a Question is asked of the Assistant)
+
+**Retrieval Provenance**:
+What retrieval did for one Insight extraction, recorded on its `insight_extracted` Audit Event: the Retrieval Queries, the retrieved and reranked Chunk ids with pages, scores and ranks, and the embedding, rerank and chunker versions.
+_Avoid_: Trace, retrieval log
+
 ### Recommendation and decision
 
 **Recommendation**:
@@ -102,7 +118,7 @@ _Avoid_: Log entry
 One statement an LLM makes about a Portfolio, Recommendation or asset, with its citations.
 
 **Grounded**:
-A Claim whose Report citations quote a real Report page verbatim, whose engine citations name real engine figures, and whose numbers all match those figures. Anything else is flagged ungrounded: kept out of memos but still shown to the Advisor.
+A Claim whose Report citations quote a real Report page (or, for an Insight, its cited Chunk) verbatim, whose engine citations name real engine figures, and whose numbers all match those figures. Anything else is flagged ungrounded: kept out of memos but still shown to the Advisor.
 
 ### Transparency
 
