@@ -6,7 +6,7 @@ import pytest
 from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.vectorstores import VectorStore
 
-from app.report_index import ReportChunk, chunk_documents, chunk_id, get_vector_store, report_filter
+from app.report_index import ReportChunk, chunk_documents, chunk_id, drop_vector_store, get_vector_store, report_filter
 from app.settings import Settings
 
 
@@ -82,3 +82,15 @@ def test_a_deleted_chunk_is_no_longer_found(backend):
     found = store.similarity_search("text", k=10, filter=report_filter(settings, "RPT-a"))
     assert gone not in {d.metadata["chunk_id"] for d in found}
     assert len(found) == 2
+
+
+def test_a_dropped_collection_comes_back_empty_and_usable(backend):
+    settings, store = backend
+    load(store)
+
+    drop_vector_store(settings, store)
+
+    fresh = get_vector_store(settings, DeterministicFakeEmbedding(size=16))
+    assert fresh.get_by_ids([c.id for c in chunks("RPT-a")]) == []
+    load(fresh)
+    assert len(fresh.get_by_ids([c.id for c in chunks("RPT-a")])) == 3

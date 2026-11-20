@@ -12,7 +12,7 @@ Blocked by: 01
 - It does not touch existing Insights or Audit Events.
 
 ## Acceptance criteria
-- [ ] One commit for this ticket
-- [ ] Running it twice gives the same Chunks and ids
-- [ ] `--rebuild` restores retrieval results identical to before
-- [ ] A test runs on the seeded Reports offline (fake embeddings)
+- [x] One commit for this ticket
+- [x] Running it twice gives the same Chunks and ids
+- [x] `--rebuild` restores retrieval results identical to before
+- [x] A test runs on the seeded Reports offline (fake embeddings)

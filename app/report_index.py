@@ -258,6 +258,31 @@ def parse_report(
     return ParsedReport(kind=kind, pages=pages, chunks=chunks)
 
 
+def chunk_pages(
+    pages: list[str], *, report_id: str, embedding_model: str, converter: DocumentConverter | None = None
+) -> list[ReportChunk]:
+    """Chunks a stored Report from its page texts, which are Markdown, through the same Docling Markdown path as an
+    upload (`parse_report`). Each page is chunked on its own, so every Chunk keeps its page number; ids run on across
+    pages. A page with no text gives no Chunks. Raises `ReportError` when the Report has none at all."""
+    converter = converter or build_converter()
+    chunks: list[ReportChunk] = []
+    for page, text in enumerate(pages, 1):
+        try:
+            parsed = parse_report(
+                "page.md", text.encode(), report_id=report_id, embedding_model=embedding_model, converter=converter
+            )
+        except ReportError:  # a blank page
+            continue
+        for c in parsed.chunks:
+            index = len(chunks)
+            chunks.append(
+                ReportChunk(id=chunk_id(report_id, index), index=index, page=page, headings=c.headings, text=c.text)
+            )
+    if not chunks:
+        raise ReportError("Report contains no extractable text")
+    return chunks
+
+
 def chunk_documents(report_id: str, chunks: list[ReportChunk]) -> list[Document]:
     """The Chunks as the vector store holds them: flat metadata, the Chunk id as the document id."""
     return [
@@ -340,6 +365,15 @@ def get_vector_store(settings: Settings, embeddings: Embeddings | None = None) -
     )
 
 
+def drop_vector_store(settings: Settings, store: VectorStore) -> None:
+    """Deletes the collection `get_vector_store` made; it is created again, empty, the next time it is asked for."""
+    if settings.vector_store == "chroma":
+        store.delete_collection()  # type: ignore[attr-defined]
+    elif settings.vector_store == "qdrant":
+        store.client.delete_collection(COLLECTION)  # type: ignore[attr-defined]
+    # memory: dropping the object is enough
+
+
 def report_filter(settings: Settings, report_id: str) -> Any:
     """The backend's own filter for one Report's Chunks."""
     if settings.vector_store == "memory":
@@ -382,6 +416,12 @@ class ReportIndex:
     @reranker.setter
     def reranker(self, reranker: BaseDocumentCompressor) -> None:
         self._reranker = reranker
+
+    def drop(self) -> None:
+        """Deletes the whole collection; the next use creates it empty, so the vector store can be rebuilt from the
+        Chunks in SQLite."""
+        drop_vector_store(self.settings, self.vector_store)
+        self._store = None
 
     def add(self, report_id: str, chunks: list[ReportChunk]) -> None:
         self.vector_store.add_documents(chunk_documents(report_id, chunks), ids=[c.id for c in chunks])
