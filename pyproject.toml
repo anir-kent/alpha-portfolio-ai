@@ -24,6 +24,11 @@ dependencies = [
     "uvicorn[standard]>=0.54.0",
 ]
 
+[project.optional-dependencies]
+eval = [
+    "ragas>=0.4.4",
+]
+
 [dependency-groups]
 dev = [
     "jsonschema>=4.26.0",
@@ -46,6 +51,10 @@ check_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 strict_equality = true
+
+[[tool.mypy.overrides]]
+module = ["ragas", "ragas.*"]
+ignore_missing_imports = true  # the optional `eval` extra; not installed for the main checks
 
 [tool.ruff]
 line-length = 120

@@ -111,6 +111,8 @@ Every LLM call is live. `get_chat_model(settings)` in `app/chat_model.py` is the
 - **Tests** never touch a network: the suite refuses real provider transports, and `tests/fake_chat.py` has the fakes (`FakeChatModel`, scripted per request; `DemoPipeline`, deterministic replies for the seeded demo run).
 - **Live evals.** `uv run python -m tests.fixtures.assistant_eval` runs the Assistant guardrail eval live and writes `data/assistant_eval.json`, which the model card shows. Live smoke test: `LLM_LIVE=1 APP_LLM_API_KEY=... uv run pytest tests/test_research.py -k live`.
 
+- **Optional RAGAS eval.** `uv run --extra eval python -m scripts.eval_ragas` runs the extraction graph on the labelled Reports and scores faithfulness, context precision and context recall with RAGAS, judged by the app's chat model and embeddings, into `.scratch/rag-insight-extraction/ragas.md`. `ragas` is the optional `eval` extra (`uv sync --extra eval`); the main install and the test suite do not need it. Its judge calls are not Exchanges and are not audited: they bypass the LLM layer, and the extraction runs against a throwaway database.
+
 ## Tests and checks
 
 ```bash
