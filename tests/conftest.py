@@ -1,3 +1,5 @@
+import re
+
 import httpx
 import httpx2
 import pytest
@@ -95,3 +97,13 @@ def login(app):
         return c
 
     return _login
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """A `live_eval` test costs provider calls, so it is skipped unless selected with `-m live_eval`."""
+    if re.search(r"(?<!not )\blive_eval\b", config.getoption("-m") or ""):  # `-m "not live_eval"` stays skipped
+        return
+    skip = pytest.mark.skip(reason="live eval: opt in with -m live_eval")
+    for item in items:
+        if "live_eval" in item.keywords:
+            item.add_marker(skip)

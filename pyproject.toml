@@ -35,6 +35,9 @@ dev = [
     "types-jsonschema>=4.26.0.20261006",
 ]
 
+[tool.pytest.ini_options]
+markers = ["live_eval: runs against the real embedding model and Cohere; skipped unless selected with -m live_eval"]
+
 [tool.mypy]
 python_version = "3.13"
 files = ["app", "tests", "scripts"]

@@ -135,15 +135,21 @@ class RetrievalProvenance(BaseCallbackHandler):
             self.retrievals.append(record)
 
 
+def report_retriever(
+    vector_store: VectorStore, report_filter: Any, reranker: BaseDocumentCompressor, k: int
+) -> ContextualCompressionRetriever:
+    """The retriever of one Report's Chunks: the vector store's top `k`, filtered to the Report, kept to the best by the
+    reranker. The extraction graph and the retrieval eval both use it."""
+    return ContextualCompressionRetriever(
+        base_compressor=reranker,
+        base_retriever=vector_store.as_retriever(search_kwargs={"k": k, "filter": report_filter}),
+    )
+
+
 def retrieve(state: ExtractionState, runtime: Runtime[ExtractionContext]) -> dict:
     """The Chunks for the Report's Retrieval Queries, and the extraction request built from them."""
     context = runtime.context
-    retriever = ContextualCompressionRetriever(
-        base_compressor=context.reranker,
-        base_retriever=context.vector_store.as_retriever(
-            search_kwargs={"k": context.k, "filter": context.report_filter}
-        ),
-    )
+    retriever = report_retriever(context.vector_store, context.report_filter, context.reranker, context.k)
     found: dict[str, Document] = {}
     try:
         for query in retrieval_queries():
