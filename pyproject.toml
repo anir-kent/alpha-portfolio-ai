@@ -15,6 +15,7 @@ dependencies = [
     "langchain-docling>=3.0.0",
     "langchain-openai>=1.8.3",
     "langchain-openrouter>=0.3.0",
+    "langchain-qdrant>=1.1.0",
     "langgraph>=1.2.23",
     "pydantic-settings>=2.16.2",
     "pypdf>=6.21.4",

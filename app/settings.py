@@ -23,8 +23,10 @@ class Settings(BaseSettings):
     # endpoint, so the default leaves it to the provider. Reported on the governance model card.
     llm_temperature: float | None = None
     # The Report Index (ADR-0012): Chunk embeddings go through the same OpenAI-compatible endpoint and key as the chat model.
-    vector_store: Literal["chroma", "memory"] = "chroma"  # `memory` is for tests; Qdrant arrives with its adapter
+    vector_store: Literal["chroma", "qdrant", "memory"] = "chroma"  # `memory` is for tests
     chroma_dir: str = "data/chroma"
+    qdrant_dir: str = "data/qdrant"  # embedded Qdrant on disk (":memory:" for tests)
+    qdrant_url: str = ""  # a Qdrant server; when set, `qdrant_dir` is unused
     embedding_model: str = "openai/text-embedding-3-small"  # in the gateway's naming
     retrieval_k: PositiveInt = 10  # candidate Chunks each Retrieval Query takes from a Report, before reranking
     # Reranking calls Cohere directly (ADR-0012), with its own key; embeddings and chat go through the gateway above.

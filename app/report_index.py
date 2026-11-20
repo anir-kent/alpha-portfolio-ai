@@ -24,7 +24,6 @@ from docling_core.transforms.chunker.tokenizer.base import BaseTokenizer
 from docling_core.transforms.chunker.tokenizer.openai import OpenAITokenizer
 from docling_core.transforms.serializer.markdown import MarkdownTableSerializer
 from docling_core.types.doc import DoclingDocument
-from langchain_chroma import Chroma
 from langchain_cohere import CohereRerank
 from langchain_core.documents import BaseDocumentCompressor, Document
 from langchain_core.embeddings import Embeddings
@@ -308,11 +307,28 @@ def get_reranker(settings: Settings) -> BaseDocumentCompressor:
 
 
 def get_vector_store(settings: Settings, embeddings: Embeddings | None = None) -> VectorStore:
-    """The vector store `settings` configure: the one place that knows the backend."""
+    """The vector store `settings` configure: the one place that knows the backend. Every backend is cosine."""
     embeddings = embeddings or get_embeddings(settings)
     if settings.vector_store == "memory":
         return InMemoryVectorStore(embeddings)
+    if settings.vector_store == "qdrant":
+        from langchain_qdrant import QdrantVectorStore
+        from qdrant_client import QdrantClient, models
+
+        # A server when `qdrant_url` is set, else embedded on disk (or in memory for ":memory:").
+        client = (
+            QdrantClient(url=settings.qdrant_url) if settings.qdrant_url else QdrantClient(path=settings.qdrant_dir)
+        )
+        if not client.collection_exists(COLLECTION):
+            size = len(embeddings.embed_query("dimension probe"))
+            client.create_collection(
+                COLLECTION, vectors_config=models.VectorParams(size=size, distance=models.Distance.COSINE)
+            )
+        return QdrantVectorStore(
+            client=client, collection_name=COLLECTION, embedding=embeddings, distance=models.Distance.COSINE
+        )
     import chromadb
+    from langchain_chroma import Chroma
 
     return Chroma(
         collection_name=COLLECTION,
@@ -328,6 +344,13 @@ def report_filter(settings: Settings, report_id: str) -> Any:
     """The backend's own filter for one Report's Chunks."""
     if settings.vector_store == "memory":
         return lambda doc: doc.metadata.get("report_id") == report_id
+    if settings.vector_store == "qdrant":
+        from qdrant_client import models
+
+        # langchain-qdrant keeps a Document's metadata under the payload key `metadata`.
+        return models.Filter(
+            must=[models.FieldCondition(key="metadata.report_id", match=models.MatchValue(value=report_id))]
+        )
     return {"report_id": report_id}
 
 

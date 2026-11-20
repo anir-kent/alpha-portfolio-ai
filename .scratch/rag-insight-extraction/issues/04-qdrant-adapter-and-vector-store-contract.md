@@ -8,7 +8,7 @@ Blocked by: 01
 - Write one parametrised contract test suite (add, search with `report_filter`, delete by id, uuid5 ids, flat metadata round-trip). Run it against `memory`, `chroma` (temp dir) and `qdrant` (`QdrantClient(":memory:")`).
 
 ## Acceptance criteria
-- [ ] One commit for this ticket
-- [ ] APIs checked via Context7
-- [ ] The same contract passes on all three backends, offline
-- [ ] No code outside `get_vector_store`/`report_filter` names a backend
+- [x] One commit for this ticket
+- [x] APIs checked via Context7
+- [x] The same contract passes on all three backends, offline
+- [x] No code outside `get_vector_store`/`report_filter` names a backend
